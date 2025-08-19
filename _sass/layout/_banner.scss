@@ -15,6 +15,7 @@
 		background-position: center;
 		background-repeat: no-repeat;
 		background-size: cover;
+		filter: _theme-var(image-filter);
 		border-bottom: 0 !important;
 		cursor: default;
 		height: 60vh;
@@ -54,6 +55,26 @@
 			padding: 0 !important;
 			position: relative;
 			z-index: 2;
+			color: #ffffff !important;
+			text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+			
+			h1, h2, h3, h4, h5, h6 {
+				color: #ffffff !important;
+			}
+			
+			p {
+				color: #ffffff !important;
+			}
+
+			.button {
+				color: #ffffff !important;
+				box-shadow: inset 0 0 0 2px #ffffff !important;
+				
+				&:hover, &:active {
+					color: #ffffff !important;
+					box-shadow: inset 0 0 0 2px #ffffff !important;
+				}
+			}
 
 			.image {
 				display: none;
@@ -104,12 +125,12 @@
 			}
 		}
 
-		&.style1 { &:after { background-color: _palette(accent1); } }
-		&.style2 { &:after { background-color: _palette(accent2); } }
-		&.style3 { &:after { background-color: _palette(accent3); } }
-		&.style4 { &:after { background-color: _palette(accent4); } }
-		&.style5 { &:after { background-color: _palette(accent5); } }
-		&.style6 { &:after { background-color: _palette(accent6); } }
+		&.style1 { &:after { background-color: _theme-var(accent1); } }
+		&.style2 { &:after { background-color: _theme-var(accent2); } }
+		&.style3 { &:after { background-color: _theme-var(accent3); } }
+		&.style4 { &:after { background-color: _theme-var(accent4); } }
+		&.style5 { &:after { background-color: _theme-var(accent5); } }
+		&.style6 { &:after { background-color: _theme-var(accent6); } }
 
 		body.is-loading & {
 			&:after {
