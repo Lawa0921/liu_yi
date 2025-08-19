@@ -133,17 +133,17 @@
 						vertical-align: middle;
 						width: 24px;
 						background: 
-							linear-gradient(90deg, _theme-var(fg-bold) 0%, _theme-var(fg-bold) 100%) 0 11px / 24px 2px no-repeat,
-							linear-gradient(90deg, _theme-var(fg-bold) 0%, _theme-var(fg-bold) 100%) 0 16px / 24px 2px no-repeat,
-							linear-gradient(90deg, _theme-var(fg-bold) 0%, _theme-var(fg-bold) 100%) 0 21px / 24px 2px no-repeat;
+							linear-gradient(90deg, _theme-var(fg-bold) 0%, _theme-var(fg-bold) 100%) 0 calc(50% - 5px) / 24px 2px no-repeat,
+							linear-gradient(90deg, _theme-var(fg-bold) 0%, _theme-var(fg-bold) 100%) 0 50% / 24px 2px no-repeat,
+							linear-gradient(90deg, _theme-var(fg-bold) 0%, _theme-var(fg-bold) 100%) 0 calc(50% + 5px) / 24px 2px no-repeat;
 					}
 
 					&:after {
 						@include vendor('transition', 'opacity #{_duration(transition)} ease-in-out');
 						background: 
-							linear-gradient(90deg, _theme-var(highlight) 0%, _theme-var(highlight) 100%) 0 11px / 24px 2px no-repeat,
-							linear-gradient(90deg, _theme-var(highlight) 0%, _theme-var(highlight) 100%) 0 16px / 24px 2px no-repeat,
-							linear-gradient(90deg, _theme-var(highlight) 0%, _theme-var(highlight) 100%) 0 21px / 24px 2px no-repeat;
+							linear-gradient(90deg, _theme-var(highlight) 0%, _theme-var(highlight) 100%) 0 calc(50% - 5px) / 24px 2px no-repeat,
+							linear-gradient(90deg, _theme-var(highlight) 0%, _theme-var(highlight) 100%) 0 50% / 24px 2px no-repeat,
+							linear-gradient(90deg, _theme-var(highlight) 0%, _theme-var(highlight) 100%) 0 calc(50% + 5px) / 24px 2px no-repeat;
 						opacity: 0;
 						z-index: 1;
 					}
@@ -178,16 +178,16 @@
 				&[href="#menu"] {
 					&:before, &:after {
 						background: 
-							linear-gradient(90deg, _theme-var(fg-bold) 0%, _theme-var(fg-bold) 100%) 0 11px / 24px 2px no-repeat,
-							linear-gradient(90deg, _theme-var(fg-bold) 0%, _theme-var(fg-bold) 100%) 0 16px / 24px 2px no-repeat,
-							linear-gradient(90deg, _theme-var(fg-bold) 0%, _theme-var(fg-bold) 100%) 0 21px / 24px 2px no-repeat;
+							linear-gradient(90deg, _theme-var(fg-bold) 0%, _theme-var(fg-bold) 100%) 0 calc(50% - 5px) / 24px 2px no-repeat,
+							linear-gradient(90deg, _theme-var(fg-bold) 0%, _theme-var(fg-bold) 100%) 0 50% / 24px 2px no-repeat,
+							linear-gradient(90deg, _theme-var(fg-bold) 0%, _theme-var(fg-bold) 100%) 0 calc(50% + 5px) / 24px 2px no-repeat;
 					}
 
 					&:after {
 						background: 
-							linear-gradient(90deg, _theme-var(highlight) 0%, _theme-var(highlight) 100%) 0 11px / 24px 2px no-repeat,
-							linear-gradient(90deg, _theme-var(highlight) 0%, _theme-var(highlight) 100%) 0 16px / 24px 2px no-repeat,
-							linear-gradient(90deg, _theme-var(highlight) 0%, _theme-var(highlight) 100%) 0 21px / 24px 2px no-repeat;
+							linear-gradient(90deg, _theme-var(highlight) 0%, _theme-var(highlight) 100%) 0 calc(50% - 5px) / 24px 2px no-repeat,
+							linear-gradient(90deg, _theme-var(highlight) 0%, _theme-var(highlight) 100%) 0 50% / 24px 2px no-repeat,
+							linear-gradient(90deg, _theme-var(highlight) 0%, _theme-var(highlight) 100%) 0 calc(50% + 5px) / 24px 2px no-repeat;
 					}
 				}
 			}
@@ -219,16 +219,16 @@
 				&[href="#menu"] {
 					&:before, &:after {
 						background: 
-							linear-gradient(90deg, #ffffff 0%, #ffffff 100%) 0 11px / 24px 2px no-repeat,
-							linear-gradient(90deg, #ffffff 0%, #ffffff 100%) 0 16px / 24px 2px no-repeat,
-							linear-gradient(90deg, #ffffff 0%, #ffffff 100%) 0 21px / 24px 2px no-repeat;
+							linear-gradient(90deg, #ffffff 0%, #ffffff 100%) 0 calc(50% - 5px) / 24px 2px no-repeat,
+							linear-gradient(90deg, #ffffff 0%, #ffffff 100%) 0 50% / 24px 2px no-repeat,
+							linear-gradient(90deg, #ffffff 0%, #ffffff 100%) 0 calc(50% + 5px) / 24px 2px no-repeat;
 					}
 
 					&:after {
 						background: 
-							linear-gradient(90deg, _theme-var(highlight) 0%, _theme-var(highlight) 100%) 0 11px / 24px 2px no-repeat,
-							linear-gradient(90deg, _theme-var(highlight) 0%, _theme-var(highlight) 100%) 0 16px / 24px 2px no-repeat,
-							linear-gradient(90deg, _theme-var(highlight) 0%, _theme-var(highlight) 100%) 0 21px / 24px 2px no-repeat;
+							linear-gradient(90deg, _theme-var(highlight) 0%, _theme-var(highlight) 100%) 0 calc(50% - 5px) / 24px 2px no-repeat,
+							linear-gradient(90deg, _theme-var(highlight) 0%, _theme-var(highlight) 100%) 0 50% / 24px 2px no-repeat,
+							linear-gradient(90deg, _theme-var(highlight) 0%, _theme-var(highlight) 100%) 0 calc(50% + 5px) / 24px 2px no-repeat;
 					}
 				}
 			}
