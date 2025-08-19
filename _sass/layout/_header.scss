@@ -72,6 +72,7 @@
 			.theme-toggle {
 				background: none;
 				border: 0;
+				box-shadow: none;
 				color: _theme-var(fg);
 				cursor: pointer;
 				display: block;
@@ -87,12 +88,13 @@
 				outline: none;
 				
 				&:hover {
+					box-shadow: none;
 					color: _theme-var(highlight);
 				}
 				
 				&:focus {
-					outline: 2px solid _theme-var(highlight);
-					outline-offset: 2px;
+					box-shadow: none;
+					outline: none;
 				}
 				
 				i {
@@ -202,9 +204,11 @@
 			position: absolute;
 			
 			.theme-toggle {
+				box-shadow: none;
 				color: #ffffff;
 				
 				&:hover {
+					box-shadow: none;
 					color: _theme-var(highlight);
 				}
 			}
