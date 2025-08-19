@@ -13,7 +13,7 @@
 
 	#header {
 		@include vendor('display', 'flex');
-		background-color: _palette(bg-alt);
+		background-color: _theme-var(bg-alt);
 		box-shadow: 0 0 0.25em 0 rgba(0,0,0,0.15);
 		cursor: default;
 		font-weight: _font(weight-bold);
@@ -41,8 +41,8 @@
 					'background-color #{_duration(transition)} ease-in-out',
 					'color #{_duration(transition)} ease-in-out'
 				));
-				background-color: _palette(fg-bold);
-				color: _palette(bg);
+				background-color: _theme-var(fg-bold);
+				color: _theme-var(bg);
 				display: inline-block;
 				line-height: 1.65em;
 				margin-right: 0.325em;
@@ -51,13 +51,13 @@
 
 			&:hover {
 				strong {
-					background-color: _palette(highlight);
+					background-color: _theme-var(highlight);
 				}
 			}
 
 			&:active {
 				strong {
-					background-color: desaturate(darken(_palette(highlight), 15), 5);
+					background-color: _theme-var(highlight);
 				}
 			}
 		}
@@ -68,6 +68,38 @@
 			@include vendor('flex-grow', '1');
 			height: inherit;
 			line-height: inherit;
+
+			.theme-toggle {
+				background: none;
+				border: 0;
+				color: _theme-var(fg);
+				cursor: pointer;
+				display: block;
+				font-size: 0.8em;
+				height: inherit;
+				line-height: inherit;
+				padding: 0 0.75em;
+				position: relative;
+				vertical-align: middle;
+				-webkit-appearance: none;
+				-moz-appearance: none;
+				appearance: none;
+				outline: none;
+				
+				&:hover {
+					color: _theme-var(highlight);
+				}
+				
+				&:focus {
+					outline: 2px solid _theme-var(highlight);
+					outline-offset: 2px;
+				}
+				
+				i {
+					font-size: 1.1em;
+					pointer-events: none;
+				}
+			}
 
 			a {
 				border: 0;
@@ -136,18 +168,27 @@
 			background-color: transparent;
 			box-shadow: none;
 			position: absolute;
+			
+			.theme-toggle {
+				color: #ffffff;
+				
+				&:hover {
+					color: _theme-var(highlight);
+				}
+			}
 
-			&.style1 { .logo { strong { color: _palette(accent1); } } }
-			&.style2 { .logo { strong { color: _palette(accent2); } } }
-			&.style3 { .logo { strong { color: _palette(accent3); } } }
-			&.style4 { .logo { strong { color: _palette(accent4); } } }
-			&.style5 { .logo { strong { color: _palette(accent5); } } }
-			&.style6 { .logo { strong { color: _palette(accent6); } } }
+			&.style1 { .logo { strong { color: _theme-var(accent1); } } }
+			&.style2 { .logo { strong { color: _theme-var(accent2); } } }
+			&.style3 { .logo { strong { color: _theme-var(accent3); } } }
+			&.style4 { .logo { strong { color: _theme-var(accent4); } } }
+			&.style5 { .logo { strong { color: _theme-var(accent5); } } }
+			&.style6 { .logo { strong { color: _theme-var(accent6); } } }
 		}
 
 		body.is-loading & {
 			&.alt {
-				opacity: 0;
+				// Keep header visible on homepage
+				// opacity: 0;
 			}
 		}
 

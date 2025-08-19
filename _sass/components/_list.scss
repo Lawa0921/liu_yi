@@ -30,7 +30,7 @@
 			padding-left: 0;
 
 			li {
-				border-top: solid 1px _palette(border);
+				border-top: solid 1px _theme-var(border);
 				padding: 0.5em 0;
 
 				&:first-child {
@@ -137,6 +137,7 @@
 		margin: 0 0 _size(element-margin) 0;
 
 		dt {
+			color: _theme-var(fg-bold);
 			display: block;
 			font-weight: _font(weight-bold);
 			margin: 0 0 (_size(element-margin) * 0.5) 0;
