@@ -7,7 +7,7 @@
 /* Type */
 
 	body, input, select, textarea {
-		color: _palette(fg);
+		color: _theme-var(fg);
 		font-family: _font(family);
 		font-size: 17pt;
 		font-weight: _font(weight);
@@ -38,16 +38,16 @@
 
 		&:hover {
 			border-bottom-color: transparent;
-			color: _palette(highlight) !important;
+			color: _theme-var(highlight) !important;
 		}
 
 		&:active {
-			color: desaturate(darken(_palette(highlight), 15), 5) !important;
+			color: _theme-var(highlight) !important;
 		}
 	}
 
 	strong, b {
-		color: _palette(fg-bold);
+		color: _theme-var(fg-bold);
 		font-weight: _font(weight-bold);
 	}
 
@@ -64,7 +64,7 @@
 	}
 
 	h1, h2, h3, h4, h5, h6 {
-		color: _palette(fg-bold);
+		color: _theme-var(fg-bold);
 		font-weight: _font(weight-bold);
 		line-height: 1.65;
 		margin: 0 0 (_size(element-margin) * 0.5) 0;
@@ -126,14 +126,15 @@
 	}
 
 	blockquote {
-		border-left: solid 4px _palette(border);
+		border-left: solid 4px _theme-var(border);
 		font-style: italic;
 		margin: 0 0 _size(element-margin) 0;
-		padding: (_size(element-margin) / 4) 0 (_size(element-margin) / 4) _size(element-margin);
+		padding: calc(_size(element-margin) / 4) 0 calc(_size(element-margin) / 4) _size(element-margin);
 	}
 
 	code {
-		background: _palette(border-bg);
+		background: _theme-var(border-bg);
+		color: _theme-var(fg);
 		font-family: _font(family-fixed);
 		font-size: 0.9em;
 		margin: 0 0.25em;
@@ -156,7 +157,7 @@
 
 	hr {
 		border: 0;
-		border-bottom: solid 1px _palette(border);
+		border-bottom: solid 1px _theme-var(border);
 		margin: _size(element-margin) 0;
 
 		&.major {
