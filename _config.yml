@@ -23,6 +23,7 @@ tiles-count: 6
 # You need to restart jekyll for changes to have an effect
 socials:
   Facebook: https://www.facebook.com/ourLucal
+  Line: "#line"
 
 # build settings
 markdown: kramdown
