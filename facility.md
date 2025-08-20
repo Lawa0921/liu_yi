@@ -2,7 +2,7 @@
 title: 場地資訊
 layout: landing
 description: '寬敞舒適的練習環境，專業的武術訓練場地'
-image: assets/images/coach_4.png
+image: assets/images/coach_4.jpg
 nav-menu: true
 show_tile: true
 ---
@@ -24,7 +24,7 @@ show_tile: true
 <section id="two" class="spotlights">
 	<section>
 		<a href="#" class="image">
-			<img src="{% link assets/images/coach_4.png %}" alt="場地租借" data-position="center center" />
+			<img src="{% link assets/images/coach_4.jpg %}" alt="場地租借" data-position="center center" />
 		</a>
 		<div class="content">
 			<div class="inner">
@@ -40,7 +40,7 @@ show_tile: true
 	</section>
 	<section>
 		<a href="#" class="image">
-			<img src="{% link assets/images/coach_5.png %}" alt="器材租借" data-position="top center" />
+			<img src="{% link assets/images/coach_5.jpg %}" alt="器材租借" data-position="top center" />
 		</a>
 		<div class="content">
 			<div class="inner">
@@ -56,7 +56,7 @@ show_tile: true
 	</section>
 	<section>
 		<a href="#" class="image">
-			<img src="{% link assets/images/logo_large.png %}" alt="空間使用規範" data-position="25% 25%" />
+			<img src="{% link assets/images/logo_large.jpg %}" alt="空間使用規範" data-position="25% 25%" />
 		</a>
 		<div class="content">
 			<div class="inner">

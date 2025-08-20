@@ -2,7 +2,7 @@
 title: 師資簡介
 layout: landing
 description: '專業師資團隊，傳承正宗武術精神'
-image: assets/images/coach_1.png
+image: assets/images/coach_1.jpg
 nav-menu: true
 show_tile: true
 ---
@@ -24,7 +24,7 @@ show_tile: true
 <section id="two" class="spotlights">
 	<section>
 		<a href="#" class="image">
-			<img src="{% link assets/images/coach_1.png %}" alt="太極老師" data-position="center center" />
+			<img src="{% link assets/images/coach_1.jpg %}" alt="太極老師" data-position="center center" />
 		</a>
 		<div class="content">
 			<div class="inner">
@@ -37,7 +37,7 @@ show_tile: true
 	</section>
 	<section>
 		<a href="#" class="image">
-			<img src="{% link assets/images/coach_2.png %}" alt="詠春老師" data-position="top center" />
+			<img src="{% link assets/images/coach_2.jpg %}" alt="詠春老師" data-position="top center" />
 		</a>
 		<div class="content">
 			<div class="inner">
@@ -50,7 +50,7 @@ show_tile: true
 	</section>
 	<section>
 		<a href="#" class="image">
-			<img src="{% link assets/images/coach_3.png %}" alt="養生功夫老師" data-position="25% 25%" />
+			<img src="{% link assets/images/coach_3.jpg %}" alt="養生功夫老師" data-position="25% 25%" />
 		</a>
 		<div class="content">
 			<div class="inner">

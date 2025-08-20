@@ -2,7 +2,7 @@
 title: 課程資訊
 layout: landing
 description: '多元化武術課程，適合不同年齡層與程度的學員'
-image: assets/images/logo_large.png
+image: assets/images/logo_large.jpg
 nav-menu: true
 show_tile: true
 ---
@@ -24,7 +24,7 @@ show_tile: true
 <section id="two" class="spotlights">
 	<section>
 		<a href="#" class="image">
-			<img src="{% link assets/images/coach_1.png %}" alt="課表" data-position="center center" />
+			<img src="{% link assets/images/coach_1.jpg %}" alt="課表" data-position="center center" />
 		</a>
 		<div class="content">
 			<div class="inner">
@@ -40,7 +40,7 @@ show_tile: true
 	</section>
 	<section>
 		<a href="#" class="image">
-			<img src="{% link assets/images/coach_2.png %}" alt="收費方式" data-position="top center" />
+			<img src="{% link assets/images/coach_2.jpg %}" alt="收費方式" data-position="top center" />
 		</a>
 		<div class="content">
 			<div class="inner">
@@ -56,7 +56,7 @@ show_tile: true
 	</section>
 	<section>
 		<a href="#" class="image">
-			<img src="{% link assets/images/coach_3.png %}" alt="課程適合對象" data-position="25% 25%" />
+			<img src="{% link assets/images/coach_3.jpg %}" alt="課程適合對象" data-position="25% 25%" />
 		</a>
 		<div class="content">
 			<div class="inner">

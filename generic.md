@@ -2,7 +2,7 @@
 layout: post
 title: Generic
 description: Lorem ipsum dolor est
-image: assets/images/coach_5.png
+image: assets/images/coach_5.jpg
 nav-menu: false
 show_tile: false
 ---

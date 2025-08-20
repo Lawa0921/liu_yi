@@ -2,7 +2,7 @@
 title: Landing
 layout: landing
 description: 'Lorem ipsum dolor sit amet nullam consequa<br />sed veroeros. tempus adipiscing nulla.'
-image: assets/images/logo_large.png
+image: assets/images/logo_large.jpg
 nav-menu: false
 show_tile: false
 ---
@@ -24,7 +24,7 @@ show_tile: false
 <section id="two" class="spotlights">
 	<section>
 		<a href="generic.html" class="image">
-			<img src="assets/images/coach_2.png" alt="" data-position="center center" />
+			<img src="assets/images/coach_2.jpg" alt="" data-position="center center" />
 		</a>
 		<div class="content">
 			<div class="inner">
@@ -40,7 +40,7 @@ show_tile: false
 	</section>
 	<section>
 		<a href="generic.html" class="image">
-			<img src="assets/images/coach_3.png" alt="" data-position="top center" />
+			<img src="assets/images/coach_3.jpg" alt="" data-position="top center" />
 		</a>
 		<div class="content">
 			<div class="inner">
@@ -56,7 +56,7 @@ show_tile: false
 	</section>
 	<section>
 		<a href="generic.html" class="image">
-			<img src="assets/images/coach_4.png" alt="" data-position="25% 25%" />
+			<img src="assets/images/coach_4.jpg" alt="" data-position="25% 25%" />
 		</a>
 		<div class="content">
 			<div class="inner">
