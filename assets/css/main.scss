@@ -79,3 +79,126 @@
 	@import 'layout/footer';
 	@import 'layout/wrapper';
 	@import 'layout/menu';
+
+// Line Modal
+#line-modal {
+	@include vendor('transition', (
+		'transform #{_duration(menu)} ease',
+		'opacity #{_duration(menu)} ease',
+		'visibility #{_duration(menu)}'
+	));
+	@include vendor('align-items', 'center');
+	@include vendor('display', 'flex');
+	@include vendor('justify-content', 'center');
+	@include vendor('pointer-events', 'none');
+	background: rgba(0, 0, 0, 0.85);
+	height: 100%;
+	left: 0;
+	opacity: 0;
+	overflow: hidden;
+	padding: 3em 2em;
+	position: fixed;
+	top: 0;
+	visibility: hidden;
+	width: 100%;
+	z-index: _misc(z-index-base) + 3;
+
+	.inner {
+		@include vendor('transition', (
+			'transform #{_duration(menu)} ease-out',
+			'opacity #{_duration(menu)} ease',
+			'visibility #{_duration(menu)}'
+		));
+		@include vendor('transform', 'rotateX(20deg)');
+		max-width: 90%;
+		max-height: 90vh;
+		opacity: 0;
+		text-align: center;
+		visibility: hidden;
+		position: relative;
+	}
+
+	.line-content {
+		img {
+			max-width: 100%;
+			max-height: 70vh;
+			height: auto;
+			border-radius: 8px;
+			box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+		}
+	}
+
+	.close {
+		@include vendor('transition', 'color #{_duration(transition)} ease-in-out');
+		-webkit-tap-highlight-color: rgba(0,0,0,0);
+		border: 0;
+		cursor: pointer;
+		display: block;
+		height: 4em;
+		line-height: 4em;
+		overflow: hidden;
+		padding-right: 1.25em;
+		position: absolute;
+		right: -1em;
+		text-align: right;
+		text-indent: 8em;
+		top: -1em;
+		vertical-align: middle;
+		white-space: nowrap;
+		width: 8em;
+		color: white;
+
+		&:before, &:after {
+			@include vendor('transition', 'opacity #{_duration(transition)} ease-in-out');
+			background-position: center;
+			background-repeat: no-repeat;
+			content: '';
+			display: block;
+			height: 4em;
+			position: absolute;
+			right: 0;
+			top: 0;
+			width: 4em;
+		}
+
+		&:before {
+			background-image: svg-url('<svg xmlns="http://www.w3.org/2000/svg" width="20px" height="20px" viewBox="0 0 20 20"><style>line { stroke: white; stroke-width: 2; }</style><line x1="0" y1="0" x2="20" y2="20" /><line x1="20" y1="0" x2="0" y2="20" /></svg>');
+		}
+
+		&:after {
+			background-image: svg-url('<svg xmlns="http://www.w3.org/2000/svg" width="20px" height="20px" viewBox="0 0 20 20"><style>line { stroke: #{_theme-var(highlight)}; stroke-width: 2; }</style><line x1="0" y1="0" x2="20" y2="20" /><line x1="20" y1="0" x2="0" y2="20" /></svg>');
+			opacity: 0;
+		}
+
+		&:hover, &:active {
+			&:after {
+				opacity: 1;
+			}
+		}
+	}
+}
+
+body.is-line-visible {
+	#wrapper {
+		-webkit-backface-visibility: hidden;
+		-webkit-perspective: 1000;
+		-webkit-transform: translate3d(0,0,0);
+		-webkit-transform: translateZ(0);
+		backface-visibility: hidden;
+		perspective: 1000;
+		transform: translate3d(0,0,0);
+		transform: translateZ(0);
+	}
+
+	#line-modal {
+		@include vendor('pointer-events', 'auto');
+		opacity: 1;
+		visibility: visible;
+
+		.inner {
+			@include vendor('transform', 'none');
+			opacity: 1;
+			visibility: visible;
+		}
+	}
+}

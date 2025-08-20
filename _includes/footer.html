@@ -11,12 +11,27 @@
 						</li>
 					{% endif %}
 				{% endfor %}
+				<li>
+					<a href="#line" class="icon alt fa-line" aria-label="Line">
+						<span class="label">Line</span>
+					</a>
+				</li>
 			</ul>
 			<ul class="copyright">
 				<li>&copy; {{ site.title }} {{ site.subtitle }}</li>
 			</ul>
 		</div>
 	</footer>
+
+<!-- Line Modal -->
+<div id="line-modal">
+	<div class="inner">
+		<div class="line-content">
+			<img src="{{ 'assets/images/line.png' | absolute_url }}" alt="Line QR Code" />
+		</div>
+		<a class="close" href="#line">Close</a>
+	</div>
+</div>
 
 </div>
 

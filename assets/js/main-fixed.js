@@ -295,6 +295,65 @@
 				});
 		}
 
+		// Line Modal
+		var $lineModal = $('#line-modal'),
+			$lineInner;
+
+		if ($lineModal.length > 0) {
+			$lineInner = $lineModal.children('.inner');
+			$lineModal._locked = false;
+
+			$lineModal._lock = function() {
+				if ($lineModal._locked) return false;
+				$lineModal._locked = true;
+				window.setTimeout(function() {
+					$lineModal._locked = false;
+				}, 350);
+				return true;
+			};
+
+			$lineModal._show = function() {
+				if ($lineModal._lock())
+					$body.addClass('is-line-visible');
+			};
+
+			$lineModal._hide = function() {
+				if ($lineModal._lock())
+					$body.removeClass('is-line-visible');
+			};
+
+			$lineModal._toggle = function() {
+				if ($lineModal._lock())
+					$body.toggleClass('is-line-visible');
+			};
+
+			$lineInner
+				.on('click', function(event) {
+					event.stopPropagation();
+				});
+
+			$lineModal
+				.appendTo($body)
+				.on('click', function(event) {
+					event.stopPropagation();
+					event.preventDefault();
+					$body.removeClass('is-line-visible');
+				});
+
+			$body
+				.on('click', 'a[href="#line"]', function(event) {
+					event.stopPropagation();
+					event.preventDefault();
+					// Toggle.
+					$lineModal._toggle();
+				})
+				.on('keydown', function(event) {
+					// Hide on escape.
+					if (event.keyCode == 27)
+						$lineModal._hide();
+				});
+		}
+
 		// Responsive handling
 		$window.on('resize', function() {
 			// Update parallax on resize
