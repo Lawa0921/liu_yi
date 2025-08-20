@@ -1,8 +1,8 @@
 # site settings
-title: Forty
-subtitle: by HTML5 UP
-email: youremailaddress@gmail.com
-description: A responsive site template designed by HTML5 Up<br /> and released under the Creative Commons.
+title: 六藝武術工作室
+subtitle: 傳承武術精神
+email: info@liuyiwushu.com
+description: 專業武術教學，傳承中華武術精神<br />師資優良，環境優美，歡迎各界人士前來學習
 baseurl: "" # the subpath of your site, e.g. /blog
 url: # the base hostname & protocol for your site
 author:
