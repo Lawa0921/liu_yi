@@ -3,8 +3,8 @@
 
 <!-- Header -->
 <header id="header"{% if page.layout == "landing" %} class="alt style2"{% endif %}{% if page.layout == "home" %} class="alt"{% endif %}>
-	<a href="{{ "" | absolute_url }}/" class="logo">
-		<img src="{{ "" | absolute_url }}/assets/images/logo_transparent.png" alt="{{ site.title }}">
+	<a href="{{ "/" | absolute_url }}" class="logo">
+		<img src="{{ "assets/images/logo_transparent.png" | absolute_url }}" alt="{{ site.title }}">
 		<span>{{ site.subtitle }}</span>
 	</a>
 	<nav>
@@ -18,7 +18,7 @@
 <!-- Menu -->
 <nav id="menu">
 	<ul class="links">
-		<li><a href="{{ "" | absolute_url }}/">首頁</a></li>
+		<li><a href="{{ "/" | absolute_url }}">首頁</a></li>
 		{% for page in site.html_pages %}
 		    {% if page.layout != "home" and page.nav-menu == true and page.title != "All Posts" %}
 		        <li><a href="{{ page.url | absolute_url }}">{{ page.title }}</a></li>
