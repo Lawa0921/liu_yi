@@ -183,6 +183,28 @@
 		&.reveal {
 			@include vendor('animation', 'reveal-header 0.35s ease');
 			
+			// When header has background, use theme colors
+			.logo {
+				color: _theme-var(fg);
+				
+				span {
+					color: _theme-var(fg);
+				}
+				
+				strong {
+					background-color: _theme-var(fg-bold);
+					color: _theme-var(bg);
+				}
+			}
+			
+			.theme-toggle {
+				color: _theme-var(fg);
+				
+				&:hover {
+					color: _theme-var(highlight);
+				}
+			}
+			
 			nav a {
 				color: _theme-var(fg);
 				
@@ -216,21 +238,41 @@
 			box-shadow: none;
 			position: absolute;
 			
+			// Force white text when header is transparent (alt state)
+			.logo {
+				color: #ffffff !important;
+				
+				span {
+					color: #ffffff !important;
+				}
+				
+				strong {
+					background-color: #ffffff !important;
+					color: #242943 !important;
+				}
+				
+				&:hover {
+					strong {
+						background-color: _theme-var(highlight) !important;
+					}
+				}
+			}
+			
 			.theme-toggle {
 				box-shadow: none;
-				color: #ffffff;
+				color: #ffffff !important;
 				
 				&:hover {
 					box-shadow: none;
-					color: _theme-var(highlight);
+					color: _theme-var(highlight) !important;
 				}
 			}
 			
 			nav a {
-				color: #ffffff;
+				color: #ffffff !important;
 				
 				&:hover {
-					color: _theme-var(highlight);
+					color: _theme-var(highlight) !important;
 				}
 				
 				&[href="#menu"] {
@@ -238,24 +280,24 @@
 						background: 
 							linear-gradient(90deg, #ffffff 0%, #ffffff 100%) 0 calc(50% - 5px) / 24px 2px no-repeat,
 							linear-gradient(90deg, #ffffff 0%, #ffffff 100%) 0 50% / 24px 2px no-repeat,
-							linear-gradient(90deg, #ffffff 0%, #ffffff 100%) 0 calc(50% + 5px) / 24px 2px no-repeat;
+							linear-gradient(90deg, #ffffff 0%, #ffffff 100%) 0 calc(50% + 5px) / 24px 2px no-repeat !important;
 					}
 
 					&:after {
 						background: 
 							linear-gradient(90deg, _theme-var(highlight) 0%, _theme-var(highlight) 100%) 0 calc(50% - 5px) / 24px 2px no-repeat,
 							linear-gradient(90deg, _theme-var(highlight) 0%, _theme-var(highlight) 100%) 0 50% / 24px 2px no-repeat,
-							linear-gradient(90deg, _theme-var(highlight) 0%, _theme-var(highlight) 100%) 0 calc(50% + 5px) / 24px 2px no-repeat;
+							linear-gradient(90deg, _theme-var(highlight) 0%, _theme-var(highlight) 100%) 0 calc(50% + 5px) / 24px 2px no-repeat !important;
 					}
 				}
 			}
 
-			&.style1 { .logo { strong { color: _theme-var(accent1); } } }
-			&.style2 { .logo { strong { color: _theme-var(accent2); } } }
-			&.style3 { .logo { strong { color: _theme-var(accent3); } } }
-			&.style4 { .logo { strong { color: _theme-var(accent4); } } }
-			&.style5 { .logo { strong { color: _theme-var(accent5); } } }
-			&.style6 { .logo { strong { color: _theme-var(accent6); } } }
+			&.style1 { .logo { strong { color: _theme-var(accent1) !important; } } }
+			&.style2 { .logo { strong { color: _theme-var(accent2) !important; } } }
+			&.style3 { .logo { strong { color: _theme-var(accent3) !important; } } }
+			&.style4 { .logo { strong { color: _theme-var(accent4) !important; } } }
+			&.style5 { .logo { strong { color: _theme-var(accent5) !important; } } }
+			&.style6 { .logo { strong { color: _theme-var(accent6) !important; } } }
 		}
 
 		body.is-loading & {
