@@ -36,7 +36,6 @@ sass:
     - global-builtin
 
 exclude:
-- "*.gemspec"
 - LICENSE.md
 - CONTRIBUTING.md
 - README.md 
