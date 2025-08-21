@@ -24,32 +24,32 @@ show_tile: true
 <section id="two" class="spotlights">
 	<section>
 		<a href="#" class="image">
-			<img src="{% link assets/images/coach_4.jpg %}" alt="場地租借" data-position="center center" />
+			<img src="{% link assets/images/facility-interior-1.jpg %}" alt="武術訓練場地" data-position="center center" />
 		</a>
 		<div class="content">
 			<div class="inner">
 				<header class="major">
-					<h3>場地租借費用</h3>
+					<h3>專業訓練空間</h3>
 				</header>
-				<p>提供靈活的場地租借服務，適合個人練習、小組訓練或企業團建活動。費用合理，環境優雅，是您練習武術的理想選擇。</p>
+				<p>寬敞明亮的訓練場地，配備完善的鏡面牆和專業地墊，提供最佳的練習環境。適合各種武術項目的訓練需求。</p>
 				<ul class="actions">
-					<li><a href="#contact" class="button">了解詳情</a></li>
+					<li><a href="#contact" class="button">預約參觀</a></li>
 				</ul>
 			</div>
 		</div>
 	</section>
 	<section>
 		<a href="#" class="image">
-			<img src="{% link assets/images/coach_5.jpg %}" alt="器材租借" data-position="top center" />
+			<img src="{% link assets/images/facility-interior-2.jpg %}" alt="場地設施" data-position="center center" />
 		</a>
 		<div class="content">
 			<div class="inner">
 				<header class="major">
-					<h3>器材租借費用</h3>
+					<h3>完善設施配備</h3>
 				</header>
-				<p>提供各式武術器材租借服務，包括太極劍、功夫扇、木人樁等傳統器材，讓您的練習更加豐富多樣。</p>
+				<p>場地配備專業武術訓練設施，包括鏡面牆、專業地墊、通風設備等，確保學員在舒適安全的環境中練習。</p>
 				<ul class="actions">
-					<li><a href="#contact" class="button">查看器材</a></li>
+					<li><a href="#contact" class="button">了解設施</a></li>
 				</ul>
 			</div>
 		</div>
