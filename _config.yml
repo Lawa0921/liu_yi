@@ -30,6 +30,10 @@ markdown: kramdown
 
 sass:
   style: compressed
+  quiet_deps: true
+  silence_deprecations:
+    - import
+    - global-builtin
 
 exclude:
 - "*.gemspec"

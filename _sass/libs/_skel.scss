@@ -1,6 +1,8 @@
 // skel.scss v3.0.1 | (c) skel.io | MIT licensed */
 
 @use "sass:map";
+@use "sass:list";
+@use "sass:math";
 
 // Vars.
 
@@ -184,7 +186,7 @@
 		$query: 'screen';
 
 		// Breakpoint.
-			@if $breakpoint and map-has-key($breakpoints, $breakpoint) {
+			@if $breakpoint and map.has-key($breakpoints, $breakpoint) {
 				$query: $query + ' and ' + map.get($breakpoints, $breakpoint);
 			}
 
@@ -307,13 +309,13 @@
 	@mixin grid-gutters($gutters, $class: null, $multiplier: 1) {
 
 		// Expand gutters if it's not a list.
-			@if length($gutters) == 1 {
+			@if list.length($gutters) == 1 {
 				$gutters: ($gutters, 0);
 			}
 
 		// Get column and row gutter values.
-			$c: nth($gutters, 1);
-			$r: nth($gutters, 2);
+			$c: list.nth($gutters, 1);
+			$r: list.nth($gutters, 2);
 
 		// Get class (if provided).
 			$x: '';
@@ -409,7 +411,7 @@
 					@include containers($containers);
 
 				// Apply per-breakpoint.
-					@each $name in map-keys($breakpoints) {
+					@each $name in map.keys($breakpoints) {
 
 						// Get/use breakpoint setting if it exists.
 							$x: map.get($configPerBreakpoint, $name);
@@ -491,7 +493,7 @@
 					@include grid($grid-gutters);
 
 				// Apply per-breakpoint.
-					@each $name in map-keys($breakpoints) {
+					@each $name in map.keys($breakpoints) {
 
 						// Get/use breakpoint setting if it exists.
 							$x: map.get($configPerBreakpoint, $name);
