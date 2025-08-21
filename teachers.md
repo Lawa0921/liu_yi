@@ -2,7 +2,7 @@
 title: 師資簡介
 layout: landing
 description: '專業師資團隊，傳承正宗武術精神'
-image: assets/images/coach_1.jpg
+image: assets/images/martial-arts-instructor-bg.jpg
 nav-menu: true
 show_tile: true
 ---

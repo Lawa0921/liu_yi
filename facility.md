@@ -2,7 +2,7 @@
 title: 場地資訊
 layout: landing
 description: '寬敞舒適的練習環境，專業的武術訓練場地'
-image: assets/images/coach_4.jpg
+image: assets/images/martial-arts-dojo-bg.jpg
 nav-menu: true
 show_tile: true
 ---

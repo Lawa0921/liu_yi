@@ -12,11 +12,8 @@
 
         {% include header.html %}
 
-        <section id="banner" class="style2">
+        <section id="banner" class="style2" {% if page.image %}style="background-image: url('{{ site.baseurl }}/{{ page.image }}');"{% endif %}>
             <div class="inner">
-                <span class="image">
-                    <img src="{{ site.baseurl }}/{{ page.image }}" alt="">
-                </span>
                 <header class="major">
 
                     <h1>{{ page.title }}</h1>
