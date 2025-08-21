@@ -75,17 +75,17 @@
 		}
 
 		&.special {
-			background-color: _palette(fg-bold);
+			background-color: _theme-var(fg-bold);
 			box-shadow: none;
-			color: _palette(bg);
+			color: _theme-var(bg);
 
 			&:hover, &:active {
-				background-color: _palette(highlight);
-				color: _palette(bg) !important;
+				background-color: _theme-var(highlight);
+				color: _theme-var(bg) !important;
 			}
 
 			&:active {
-				background-color: color.scale(color.scale(_palette(highlight), $lightness: -15%), $saturation: -5%);
+				background-color: _theme-var(highlight);
 			}
 		}
 

@@ -27,7 +27,7 @@
 
 				  &:after {
 					    content: '';
-					    background-color: _palette(fg-bold);
+					    background-color: _theme-var(fg-bold);
 					    display: block;
 					    height: 2px;
 					    margin: 0.325em 0 0.5em 0;
@@ -68,3 +68,10 @@
 			}
 		}
 	}
+	
+// Homepage section headers should keep consistent underline color
+section#two {
+	header.major > :first-child:after {
+		background-color: #242943 !important;
+	}
+}

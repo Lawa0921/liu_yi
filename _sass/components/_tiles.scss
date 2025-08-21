@@ -54,6 +54,11 @@
 				a {
 					color: #ffffff !important;
 				}
+				
+				// Override major header underline style
+				&.major > :first-child:after {
+					background-color: #ffffff !important;
+				}
 			}
 
 			h3 {
@@ -63,6 +68,16 @@
 					&:hover {
 						color: inherit !important;
 					}
+				}
+				
+				// Keep underline color consistent in tiles
+				&:after {
+					content: '';
+					background-color: #ffffff !important;
+					display: block;
+					height: 2px;
+					margin: 0.325em 0 0.5em 0;
+					width: 100%;
 				}
 			}
 

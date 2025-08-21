@@ -3,7 +3,7 @@ layout: home
 title: Home
 landing-title: '六藝武術工作室'
 description: null
-image: null
+image: assets/images/logo_large.jpg
 author: null
 show_tile: false
 ---

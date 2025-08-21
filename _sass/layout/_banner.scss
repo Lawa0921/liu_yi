@@ -29,7 +29,7 @@
 			@include vendor('transition', 'opacity #{_duration(banner)} ease');
 			@include vendor('transition-delay', '0.75s');
 			@include vendor('pointer-events', 'none');
-			background-color: _palette(bg);
+			background-color: rgba(36, 41, 67, 0.9);
 			content: '';
 			display: block;
 			height: 100%;
@@ -88,6 +88,7 @@
 
 					&:after {
 						max-width: 100%;
+						background-color: #ffffff !important;
 					}
 				}
 			}

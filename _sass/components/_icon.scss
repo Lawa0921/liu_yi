@@ -19,9 +19,9 @@
 
 		&.alt {
 			&:before {
-				background-color: _palette(fg-bold);
+				background-color: _theme-var(fg-bold);
 				border-radius: 100%;
-				color: _palette(bg);
+				color: _theme-var(bg);
 				display: inline-block;
 				height: 2em;
 				line-height: 2em;
@@ -39,13 +39,13 @@
 
 			&:hover {
 				&:before {
-					background-color: _palette(accent1);
+					background-color: _theme-var(accent1);
 				}
 			}
 
 			&:active {
 				&:before {
-					background-color: color.scale(color.scale(_palette(accent1), $lightness: -15%), $saturation: -5%);
+					background-color: _theme-var(accent1);
 				}
 			}
 		}
