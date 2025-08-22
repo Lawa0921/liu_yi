@@ -16,7 +16,7 @@
     <section id="banner" class="major" {% if page.image %}style="background-image: url('{{ site.baseurl }}/{{ page.image }}');"{% endif %}>
         <div class="inner">
             <header class="major">
-                <h1>{{ page.landing-title }}</h1>
+                <img src="{{ "assets/images/text_transparent.png" | absolute_url }}" alt="{{ page.landing-title }}" class="banner-title-image">
             </header>
             <div class="content">
                 <p style="text-transform: uppercase;">{{ site.description }}</p>

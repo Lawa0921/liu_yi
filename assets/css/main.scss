@@ -80,6 +80,31 @@
 	@import 'layout/wrapper';
 	@import 'layout/menu';
 
+// Inner mixin
+@mixin inner {
+	> .inner {
+		margin: 0 auto;
+		max-width: _size(inner);
+		padding: 0 6em;
+		width: calc(100% - 6em);
+		
+		@include breakpoint(large) {
+			padding: 0 4em;
+			width: calc(100% - 4em);
+		}
+		
+		@include breakpoint(medium) {
+			padding: 0 3em;
+			width: calc(100% - 3em);
+		}
+		
+		@include breakpoint(small) {
+			padding: 0 2em;
+			width: calc(100% - 2em);
+		}
+	}
+}
+
 // Line Modal
 #line-modal {
 	@include vendor('transition', (
