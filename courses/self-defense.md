@@ -1,7 +1,7 @@
 ---
-title: 防身格鬥
+title: 防身格鬥班
 layout: landing
-description: '實用防身技術教學,包含基礎格鬥技術、情境應對與防身策略'
+description: '專為 6-12 歲兒童設計,以踢打摔等防身格鬥技巧全面訓練身心機能與衝突反應力'
 image: assets/images/coach_1.jpg
 nav-menu: false
 show_tile: false
@@ -14,9 +14,10 @@ show_tile: false
 <section id="one">
 	<div class="inner">
 		<header class="major">
-			<h2>防身格鬥</h2>
+			<h2>防身格鬥班</h2>
 		</header>
-		<p>防身格鬥課程教授實用防身技術，包含基礎格鬥技術、情境應對與防身策略，提升自我保護能力。課程內容涵蓋拳擊、踢擊、擒拿等多種技術，並透過實際情境演練，讓學員能在緊急狀況下有效保護自己。</p>
+		<p>專為 <strong>6-12 歲已上小學的孩童</strong>設計的防身格鬥課程，以<strong>踢、打、摔</strong>等防身格鬥技巧為核心訓練內容。</p>
+		<p>課程全面訓練兒童的<strong>身心機能</strong>、<strong>遭遇衝突的反應力</strong>，以及<strong>面對衝擊的耐受力強化</strong>。透過系統化的格鬥訓練，讓孩子不僅學會保護自己，更培養面對挑戰時的冷靜與自信。</p>
 		<p>由經驗豐富的猴子教練指導，他擁有豐富的格鬥與防身教學經驗，能夠傳授最實用的防身技巧。</p>
 	</div>
 </section>
@@ -33,10 +34,11 @@ show_tile: false
 					<h3>課程特色</h3>
 				</header>
 				<ul>
-					<li><strong>實用技術</strong>：教授真正有效的防身技術</li>
-					<li><strong>情境訓練</strong>：模擬真實情況，提升應變能力</li>
-					<li><strong>全面防護</strong>：涵蓋站立與地面防身技術</li>
-					<li><strong>心理建設</strong>：培養面對危機的心理素質</li>
+					<li><strong>踢打摔技巧</strong>：全面學習防身格鬥的核心技術</li>
+					<li><strong>身心機能訓練</strong>：強化身體素質與心理素質</li>
+					<li><strong>衝突反應力</strong>：提升遭遇衝突時的應變能力</li>
+					<li><strong>耐受力強化</strong>：訓練面對衝擊的承受能力</li>
+					<li><strong>實戰導向</strong>：透過實際演練建立自信與技能</li>
 				</ul>
 			</div>
 		</div>

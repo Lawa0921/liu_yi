@@ -1,7 +1,7 @@
 ---
-title: 內家養身功
+title: 內家養身功課程
 layout: landing
-description: '傳統內家功法,注重氣息調理與身心平衡,適合養生保健'
+description: '專為追求長久健康者設計,打造專屬先天聖體,強身養生提升運動表現'
 image: assets/images/coach_3.jpg
 nav-menu: false
 show_tile: false
@@ -14,9 +14,19 @@ show_tile: false
 <section id="one">
 	<div class="inner">
 		<header class="major">
-			<h2>內家養身功</h2>
+			<h2>內家養身功課程</h2>
 		</header>
-		<p>內家養身功是傳統內家功法，注重氣息調理與身心平衡，適合想要養生保健、舒緩壓力的學員。透過緩慢而精準的動作、呼吸調控與意念引導，達到調和氣血、強健體魄的效果。</p>
+		<p><strong>專為「追求長久健康」的你而設計。</strong>我們不只教你動作，更透過專業師傅的引導，打造專屬<strong>「先天聖體」</strong>，強身養生，提升運動表現！</p>
+
+		<h3>本課程適合：</h3>
+		<ul>
+			<li>✅ <strong>長時間久坐上班族</strong>：需要低強度的課程調整身體</li>
+			<li>✅ <strong>本身有運動習慣者</strong>：想強化自身運動效果</li>
+			<li>✅ <strong>高齡長輩</strong>：需要透過運動來強身健體</li>
+			<li>✅ <strong>身體常有痠痛問題者</strong>：找不到如何讓自己身體回到理想狀態的方法</li>
+		</ul>
+
+		<p>更透過專業師傅的引導，無論是<strong>面對日常痠痛</strong>，或是<strong>突破運動瓶頸</strong>，都能看見顯著的改變🔥</p>
 		<p>課程由蕭蕭教練指導，傳授正統的內家功法，幫助學員在現代忙碌生活中找到身心平衡。</p>
 	</div>
 </section>

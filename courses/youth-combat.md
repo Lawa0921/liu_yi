@@ -1,7 +1,7 @@
 ---
-title: 青少年格鬥基礎班
+title: 青少年散打班
 layout: landing
-description: '專為青少年設計的格鬥基礎課程,學習拳擊、踢擊等基本技術'
+description: '專為 12 歲以上青少年設計,以踢打摔為核心,高強度訓練增強自信與應對能力'
 image: assets/images/coach_3.jpg
 nav-menu: false
 show_tile: false
@@ -14,10 +14,11 @@ show_tile: false
 <section id="one">
 	<div class="inner">
 		<header class="major">
-			<h2>青少年格鬥基礎班</h2>
+			<h2>青少年散打班</h2>
 		</header>
-		<p>專為青少年設計的格鬥基礎課程，學習拳擊、踢擊等基本技術，培養自信與體能。這個年齡段是建立格鬥基礎的黃金時期，透過系統化的訓練，不僅能提升身體素質，更能培養堅韌的意志力。</p>
-		<p>課程內容結合拳擊、泰拳、踢擊等多種格鬥技術，讓青少年學員能夠全面發展格鬥能力。</p>
+		<p>專為 <strong>12 歲以上</strong>的青少年設計的散打格鬥課程，以<strong>踢、打、摔</strong>為核心技術。</p>
+		<p>課程提供<strong>比兒童班更強的運動強度</strong>，特別適合國高中生抒發課業壓力。透過系統化的散打訓練，不僅能提升身體素質，更能<strong>增強孩子在衝突中冷靜應對的能力與自信</strong>，培養堅韌的意志力與強大的心理素質。</p>
+		<p>這個年齡段是建立格鬥基礎的黃金時期，透過高強度的訓練，讓青少年在挑戰中成長茁壯。</p>
 	</div>
 </section>
 

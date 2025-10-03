@@ -1,7 +1,7 @@
 ---
 title: 兒童武術
 layout: landing
-description: '專為 6-13 歲兒童設計的武術課程,透過趣味教學培養身體協調性、專注力與紀律性'
+description: '專為 6-12 歲兒童設計的武術課程,強調內化的習武態度,學習動與靜的功夫精神'
 image: assets/images/coach_1.jpg
 nav-menu: false
 show_tile: false
@@ -16,7 +16,8 @@ show_tile: false
 		<header class="major">
 			<h2>兒童武術</h2>
 		</header>
-		<p>專為 6-13 歲兒童設計的武術課程，透過趣味教學培養身體協調性、專注力與紀律性，奠定武術基礎。課程結合傳統武術與現代教學法，讓孩子在快樂中學習，在武術中成長。</p>
+		<p>專為 <strong>6-12 歲已上小學的孩童</strong>設計的傳統武術課程，強調<strong>「內化」的習武態度</strong>。</p>
+		<p>透過傳統武術各門各派拳法的學習，讓孩子體會<strong>「動」的謹慎確實</strong>與<strong>「靜」的內化沉穩</strong>，實現動與靜的功夫精神。課程不僅培養身體素質，更注重心性涵養，讓孩子在武術中學習專注、自律與沉穩的品格。</p>
 		<p>由經驗豐富的猴子教練指導，以活潑生動的教學方式，將複雜的武術技巧轉化為孩子們能理解的趣味動作。</p>
 	</div>
 </section>
@@ -33,10 +34,11 @@ show_tile: false
 					<h3>課程特色</h3>
 				</header>
 				<ul>
-					<li><strong>趣味教學</strong>：遊戲化教學方式，讓孩子愛上武術</li>
-					<li><strong>品格培養</strong>：在武術訓練中培養紀律、尊重與自信</li>
+					<li><strong>內化習武態度</strong>：培養謹慎確實的「動」與內化沉穩的「靜」</li>
+					<li><strong>傳統武術傳承</strong>：學習各門各派正統拳法，奠定武術根基</li>
+					<li><strong>動靜兼修</strong>：實現動與靜的功夫精神，培養身心平衡</li>
+					<li><strong>品格涵養</strong>：在武術訓練中培養紀律、尊重與自信</li>
 					<li><strong>體能提升</strong>：全面性的身體素質訓練</li>
-					<li><strong>安全第一</strong>：適齡化的訓練內容，確保學習安全</li>
 				</ul>
 			</div>
 		</div>

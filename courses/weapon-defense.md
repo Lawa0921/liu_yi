@@ -1,7 +1,7 @@
 ---
-title: 兵器防身
+title: 防身兵器班
 layout: landing
-description: '傳統兵器與現代防身應用,學習如何使用日常物品進行防身'
+description: '專為 6-12 歲兒童設計,以自我保護為核心,透過傳統兵器訓練延伸到日常物品的防身應用'
 image: assets/images/coach_1.jpg
 nav-menu: false
 show_tile: false
@@ -14,9 +14,10 @@ show_tile: false
 <section id="one">
 	<div class="inner">
 		<header class="major">
-			<h2>兵器防身</h2>
+			<h2>防身兵器班</h2>
 		</header>
-		<p>兵器防身課程教授傳統兵器與現代防身應用，學習如何使用日常物品進行防身，以及傳統兵器基礎。課程內容涵蓋短棍、長棍、雨傘等日常物品的防身應用，以及傳統兵器的基礎技法。</p>
+		<p>專為 <strong>6-12 歲已上小學的孩童</strong>設計的兵器防身課程，以<strong>自我保護為核心目標</strong>。</p>
+		<p>課程理念：<strong>任何能抓在手上的物品都會是很好的防身武器</strong>。透過傳統兵器訓練建立扎實基礎，再延伸到日常隨手可得的物品（如雨傘、背包、筆等），讓孩子學會在任何情況下都能保護自己，實現自我保護的目標。</p>
 		<p>由經驗豐富的猴子教練指導，他擅長將傳統兵器技術轉化為實用的現代防身技巧。</p>
 	</div>
 </section>
