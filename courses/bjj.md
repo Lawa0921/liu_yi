@@ -1,0 +1,96 @@
+---
+title: 巴西柔術 (Brazilian Jiu-Jitsu)
+layout: landing
+description: '源自巴西的地面格鬥術,強調技巧與槓桿原理,讓體型較小的人也能制服對手'
+image: assets/images/coach_3.jpg
+nav-menu: false
+show_tile: false
+---
+
+<!-- Main -->
+<div id="main">
+
+<!-- One -->
+<section id="one">
+	<div class="inner">
+		<header class="major">
+			<h2>巴西柔術 (Brazilian Jiu-Jitsu)</h2>
+		</header>
+		<p>巴西柔術 (BJJ) 是源自巴西的地面格鬥術，強調技巧與槓桿原理，讓體型較小的人也能制服對手。這項武術注重地面纏鬥技術，透過位置控制、關節技與絞技來制服對手，是一門高度實用的現代武術。</p>
+		<p>課程由經驗豐富的歐文教練指導，從基礎動作到進階技術，系統化地帶領學員進入 BJJ 的世界。</p>
+	</div>
+</section>
+
+<!-- Two -->
+<section id="two" class="spotlights">
+	<section>
+		<div class="image">
+			<img src="{% link assets/images/coach_3.jpg %}" alt="巴西柔術訓練" data-position="center center" />
+		</div>
+		<div class="content">
+			<div class="inner">
+				<header class="major">
+					<h3>課程特色</h3>
+				</header>
+				<ul>
+					<li><strong>技巧導向</strong>：重視技術而非力量，適合各種體型的學員</li>
+					<li><strong>實戰應用</strong>：地面格鬥技術在實戰中高度有效</li>
+					<li><strong>循序漸進</strong>：從基礎位置到進階技術，系統化教學</li>
+					<li><strong>安全訓練</strong>：注重安全原則，讓學員在保護中成長</li>
+				</ul>
+			</div>
+		</div>
+	</section>
+	<section>
+		<div class="image">
+			<img src="{% link assets/images/coach_3.jpg %}" alt="課程內容" data-position="top center" />
+		</div>
+		<div class="content">
+			<div class="inner">
+				<header class="major">
+					<h3>課程內容</h3>
+				</header>
+				<h4>基礎技術</h4>
+				<ul>
+					<li>基本位置控制 (Guard, Mount, Side Control)</li>
+					<li>逃脫技術與防守原則</li>
+					<li>基礎掃技 (Sweep) 與過渡技術</li>
+				</ul>
+				<h4>進階技術</h4>
+				<ul>
+					<li>各種關節技 (Armbar, Kimura, Omoplata)</li>
+					<li>絞技應用 (Choke Techniques)</li>
+					<li>位置過渡與連續技術</li>
+					<li>實戰對練與應用</li>
+				</ul>
+			</div>
+		</div>
+	</section>
+</section>
+
+<!-- Three -->
+<section id="three">
+	<div class="inner">
+		<header class="major">
+			<h3>授課教練</h3>
+		</header>
+		<p><a href="{% link teachers/coach-owen.md %}">歐文教練</a>專精於巴西柔術教學，擁有豐富的競賽與教學經驗。他的教學風格系統化且注重細節，能夠幫助學員快速掌握 BJJ 的核心技術。</p>
+	</div>
+</section>
+
+<!-- Four -->
+<section id="four">
+	<div class="inner">
+		<header class="major">
+			<h3>課表與收費</h3>
+		</header>
+		<p>詳細的課程時間請參考<a href="{% link schedule.md %}">課表資訊</a>，收費方案請參考<a href="{% link pricing.md %}">收費方案</a>頁面。</p>
+		<p>本課程採用點數制收費，一般課程 1 小時使用 10 點，1.5 小時使用 12 點。</p>
+		<ul class="actions">
+			<li><a href="{% link pricing.md %}" class="button">查看收費方案</a></li>
+			<li><a href="{% link schedule.md %}" class="button">查看課表</a></li>
+		</ul>
+	</div>
+</section>
+
+</div>
