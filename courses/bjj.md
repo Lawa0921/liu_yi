@@ -2,7 +2,7 @@
 title: 巴西柔術 (Brazilian Jiu-Jitsu)
 layout: landing
 description: '源自巴西的地面格鬥術,強調技巧與槓桿原理,讓體型較小的人也能制服對手'
-image: assets/images/coach_3.jpg
+image: assets/images/bjj_training_1.jpg
 nav-menu: false
 show_tile: false
 ---
@@ -35,7 +35,7 @@ show_tile: false
 <section id="two" class="spotlights">
 	<section>
 		<div class="image">
-			<img src="{% link assets/images/coach_3.jpg %}" alt="巴西柔術訓練" data-position="center center" />
+			<img src="{% link assets/images/bjj_training_1.jpg %}" alt="地面控制訓練" data-position="center center" />
 		</div>
 		<div class="content">
 			<div class="inner">
@@ -53,7 +53,7 @@ show_tile: false
 	</section>
 	<section>
 		<div class="image">
-			<img src="{% link assets/images/coach_3.jpg %}" alt="課程內容" data-position="top center" />
+			<img src="{% link assets/images/bjj_training_2.jpg %}" alt="技術指導" data-position="top center" />
 		</div>
 		<div class="content">
 			<div class="inner">
@@ -73,6 +73,58 @@ show_tile: false
 					<li>位置過渡與連續技術</li>
 					<li>實戰對練與應用</li>
 				</ul>
+			</div>
+		</div>
+	</section>
+	<section>
+		<div class="image">
+			<img src="{% link assets/images/bjj_training_3.jpg %}" alt="實戰對練" data-position="center center" />
+		</div>
+		<div class="content">
+			<div class="inner">
+				<header class="major">
+					<h3>實戰對練</h3>
+				</header>
+				<p>透過實戰對練 (Rolling)，學員能在安全的環境中測試所學技術，培養實戰反應與應變能力。</p>
+			</div>
+		</div>
+	</section>
+	<section>
+		<div class="image">
+			<img src="{% link assets/images/bjj_training_4.jpg %}" alt="位置控制練習" data-position="center center" />
+		</div>
+		<div class="content">
+			<div class="inner">
+				<header class="major">
+					<h3>位置控制</h3>
+				</header>
+				<p>學習如何建立並維持優勢位置，這是巴西柔術的核心基礎，也是後續技術應用的關鍵。</p>
+			</div>
+		</div>
+	</section>
+	<section>
+		<div class="image">
+			<img src="{% link assets/images/bjj_training_5.jpg %}" alt="技術細節指導" data-position="center center" />
+		</div>
+		<div class="content">
+			<div class="inner">
+				<header class="major">
+					<h3>細節指導</h3>
+				</header>
+				<p>歐文教練注重技術細節，確保每位學員都能正確理解並執行技術動作，建立扎實的技術基礎。</p>
+			</div>
+		</div>
+	</section>
+	<section>
+		<div class="image">
+			<img src="{% link assets/images/bjj_training_6.jpg %}" alt="團體訓練氛圍" data-position="center center" />
+		</div>
+		<div class="content">
+			<div class="inner">
+				<header class="major">
+					<h3>訓練氛圍</h3>
+				</header>
+				<p>我們重視團隊精神與互相學習，在友善的氛圍中，每位學員都能找到適合自己的進步節奏。</p>
 			</div>
 		</div>
 	</section>
