@@ -1,8 +1,14 @@
 ---
 title: 巴西柔術 (Brazilian Jiu-Jitsu)
-layout: landing
+layout: course
 description: '源自巴西的地面格鬥術,強調技巧與槓桿原理,讓體型較小的人也能制服對手'
-image: assets/images/bjj_training_1.jpg
+gallery:
+  - assets/images/bjj_training_1.jpg
+  - assets/images/bjj_training_2.jpg
+  - assets/images/bjj_training_3.jpg
+  - assets/images/bjj_training_4.jpg
+  - assets/images/bjj_training_5.jpg
+  - assets/images/bjj_training_6.jpg
 nav-menu: false
 show_tile: false
 ---
@@ -76,48 +82,6 @@ show_tile: false
 			</div>
 		</div>
 	</section>
-</section>
-
-<!-- Training Gallery -->
-<section id="training-gallery">
-	<div class="inner">
-		<header class="major">
-			<h2>訓練實景</h2>
-		</header>
-		<p>一窺我們的巴西柔術課程訓練環境與氛圍</p>
-		<div class="box alt">
-			<div class="row gtr-50 gtr-uniform">
-				<div class="col-6">
-					<span class="image fit">
-						<img src="{% link assets/images/bjj_training_3.jpg %}" alt="實戰對練 - 透過 Rolling 測試所學技術" />
-					</span>
-					<h3>實戰對練 (Rolling)</h3>
-					<p>在安全環境中測試技術，培養實戰反應與應變能力</p>
-				</div>
-				<div class="col-6">
-					<span class="image fit">
-						<img src="{% link assets/images/bjj_training_4.jpg %}" alt="位置控制練習" />
-					</span>
-					<h3>位置控制</h3>
-					<p>學習建立並維持優勢位置，這是柔術的核心基礎</p>
-				</div>
-				<div class="col-6">
-					<span class="image fit">
-						<img src="{% link assets/images/bjj_training_5.jpg %}" alt="技術細節指導" />
-					</span>
-					<h3>細節指導</h3>
-					<p>教練注重技術細節，確保動作正確執行</p>
-				</div>
-				<div class="col-6">
-					<span class="image fit">
-						<img src="{% link assets/images/bjj_training_6.jpg %}" alt="團體訓練氛圍" />
-					</span>
-					<h3>訓練氛圍</h3>
-					<p>友善的團隊精神，互相學習共同進步</p>
-				</div>
-			</div>
-		</div>
-	</div>
 </section>
 
 <!-- Three -->
