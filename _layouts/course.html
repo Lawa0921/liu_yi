@@ -33,7 +33,14 @@
             </div>
         </section>
 
-        {{ content }}
+        <!-- Main -->
+        <div id="main" class="alt">
+            <section id="one">
+                <div class="inner">
+                    {{ content }}
+                </div>
+            </section>
+        </div>
 
         {% include footer.html %}
 
@@ -106,6 +113,102 @@
                 height: 100%;
                 background: rgba(0, 0, 0, 0.5);
                 z-index: 1;
+            }
+
+            /* Coach Card Styles */
+            .coach-card {
+                margin: 2em 0;
+            }
+
+            .coach-card .coach-link {
+                display: block;
+                border: 2px solid #efefef;
+                border-radius: 4px;
+                padding: 2em;
+                text-decoration: none;
+                transition: all 0.3s ease;
+                background: #f8f8f8;
+            }
+
+            .coach-card .coach-link:hover {
+                border-color: #2e3842;
+                background: #fff;
+                transform: translateY(-2px);
+                box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            }
+
+            .coach-card .coach-info h3 {
+                margin-top: 0;
+                color: #2e3842;
+            }
+
+            .coach-card .coach-info p {
+                margin-bottom: 1.5em;
+                color: #555;
+            }
+
+            .coach-card .button {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                background: #2e3842;
+                color: white;
+                padding: 0.75em 1.5em;
+                border-radius: 4px;
+                transition: background 0.3s ease;
+                text-align: center;
+            }
+
+            .coach-card .coach-link:hover .button {
+                background: #3d4c5a;
+            }
+
+            /* Dark Mode Styles */
+            [data-theme="dark"] #main.alt {
+                background-color: #1a1d23;
+            }
+
+            [data-theme="dark"] #main.alt h2,
+            [data-theme="dark"] #main.alt h3,
+            [data-theme="dark"] #main.alt h4 {
+                color: #ffffff;
+            }
+
+            [data-theme="dark"] #main.alt p,
+            [data-theme="dark"] #main.alt li {
+                color: #b8bcc4;
+            }
+
+            [data-theme="dark"] #main.alt hr {
+                border-color: #3d4554;
+            }
+
+            [data-theme="dark"] .coach-card .coach-link {
+                background: #2a2f3a;
+                border-color: #3d4554;
+            }
+
+            [data-theme="dark"] .coach-card .coach-link:hover {
+                background: #333945;
+                border-color: #5a6272;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            }
+
+            [data-theme="dark"] .coach-card .coach-info h3 {
+                color: #ffffff;
+            }
+
+            [data-theme="dark"] .coach-card .coach-info p {
+                color: #b8bcc4;
+            }
+
+            [data-theme="dark"] .coach-card .button {
+                background: #5a6272;
+                color: #ffffff;
+            }
+
+            [data-theme="dark"] .coach-card .coach-link:hover .button {
+                background: #6d7686;
             }
         </style>
 
