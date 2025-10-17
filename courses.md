@@ -40,7 +40,7 @@ show_tile: true
 	</section>
 	<section>
 		<a href="{% link courses/self-defense.md %}" class="image">
-			<img src="{% link assets/images/coach_1.jpg %}" alt="防身格鬥" data-position="center center" />
+			<img src="{% link assets/images/kids_boxing_1.jpg %}" alt="防身格鬥" data-position="center center" />
 		</a>
 		<div class="content">
 			<div class="inner">
@@ -71,46 +71,17 @@ show_tile: true
 		</div>
 	</section>
 	<section>
-		<a class="image">
-			<img src="{% link assets/images/coach_5.jpg %}" alt="更多格鬥課程即將推出" data-position="center center" />
+		<a href="{% link courses/kids-programs.md %}" class="image">
+			<img src="{% link assets/images/kids_group_training.jpg %}" alt="兒童武術課程" data-position="center center" />
 		</a>
 		<div class="content">
 			<div class="inner">
 				<header class="major">
-					<h3>MMA 綜合格鬥</h3>
+					<h3>兒童武術課程</h3>
 				</header>
-				<p>綜合格鬥技術訓練課程即將推出，結合站立打擊與地面纏鬥，打造全方位格鬥能力。</p>
-			</div>
-		</div>
-	</section>
-	<section>
-		<a href="{% link courses/kids-martial-arts.md %}" class="image">
-			<img src="{% link assets/images/coach_1.jpg %}" alt="兒童武術" data-position="center center" />
-		</a>
-		<div class="content">
-			<div class="inner">
-				<header class="major">
-					<h3>兒童武術</h3>
-				</header>
-				<p>專為 6-13 歲兒童設計，透過趣味教學培養武術基礎與品格。<br><strong>授課教練</strong>：猴子教練</p>
+				<p>專為 3-13 歲兒童設計的完整武術課程，包含幼兒武術、兒童武術、防身格鬥與兵器訓練。<br><strong>授課教練</strong>：猴子教練</p>
 				<ul class="actions">
-					<li><a href="{% link courses/kids-martial-arts.md %}" class="button">查看詳情</a></li>
-				</ul>
-			</div>
-		</div>
-	</section>
-	<section>
-		<a href="{% link courses/toddler-martial-arts.md %}" class="image">
-			<img src="{% link assets/images/coach_1.jpg %}" alt="幼兒武術" data-position="center center" />
-		</a>
-		<div class="content">
-			<div class="inner">
-				<header class="major">
-					<h3>幼兒武術</h3>
-				</header>
-				<p>專為 3-6 歲幼兒設計，遊戲化教學培養基礎動作能力。<br><strong>授課教練</strong>：猴子教練</p>
-				<ul class="actions">
-					<li><a href="{% link courses/toddler-martial-arts.md %}" class="button">查看詳情</a></li>
+					<li><a href="{% link courses/kids-programs.md %}" class="button">查看詳情</a></li>
 				</ul>
 			</div>
 		</div>
