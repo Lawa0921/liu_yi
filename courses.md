@@ -24,7 +24,7 @@ show_tile: true
 <section id="courses" class="spotlights">
 	<section>
 		<a href="{% link courses/bjj.md %}" class="image">
-			<img src="{% link assets/images/coach_3.jpg %}" alt="巴西柔術" data-position="center center" />
+			<img src="{% link assets/images/bjj_training_3.jpg %}" alt="巴西柔術" data-position="center center" />
 		</a>
 		<div class="content">
 			<div class="inner">
@@ -56,7 +56,7 @@ show_tile: true
 	</section>
 	<section>
 		<a href="{% link courses/youth-combat.md %}" class="image">
-			<img src="{% link assets/images/coach_4.jpg %}" alt="青少年格鬥基礎班" data-position="center center" />
+			<img src="{% link assets/images/kids_boxing_2.jpg %}" alt="青少年格鬥基礎班" data-position="center center" />
 		</a>
 		<div class="content">
 			<div class="inner">
@@ -88,7 +88,7 @@ show_tile: true
 	</section>
 	<section>
 		<a href="{% link courses/traditional-combat.md %}" class="image">
-			<img src="{% link assets/images/coach_2.jpg %}" alt="傳武技擊" data-position="center center" />
+			<img src="{% link assets/images/facility-interior-1.jpg %}" alt="傳武技擊" data-position="center center" />
 		</a>
 		<div class="content">
 			<div class="inner">
@@ -104,7 +104,7 @@ show_tile: true
 	</section>
 	<section>
 		<a href="{% link courses/bajiquan.md %}" class="image">
-			<img src="{% link assets/images/coach_2.jpg %}" alt="八極專修" data-position="center center" />
+			<img src="{% link assets/images/facility-interior-2.jpg %}" alt="八極專修" data-position="center center" />
 		</a>
 		<div class="content">
 			<div class="inner">
@@ -120,7 +120,7 @@ show_tile: true
 	</section>
 	<section>
 		<a href="{% link courses/weapon-defense.md %}" class="image">
-			<img src="{% link assets/images/coach_1.jpg %}" alt="兵器防身" data-position="center center" />
+			<img src="{% link assets/images/kids_weapon_1.jpg %}" alt="兵器防身" data-position="center center" />
 		</a>
 		<div class="content">
 			<div class="inner">
@@ -136,7 +136,7 @@ show_tile: true
 	</section>
 	<section>
 		<a href="{% link courses/chinese-weapons.md %}" class="image">
-			<img src="{% link assets/images/coach_2.jpg %}" alt="中式兵器" data-position="center center" />
+			<img src="{% link assets/images/kids_weapon_2.jpg %}" alt="中式兵器" data-position="center center" />
 		</a>
 		<div class="content">
 			<div class="inner">
@@ -152,7 +152,7 @@ show_tile: true
 	</section>
 	<section>
 		<a href="{% link courses/core-yoga.md %}" class="image">
-			<img src="{% link assets/images/coach_3.jpg %}" alt="核心瑜珈" data-position="center center" />
+			<img src="{% link assets/images/yoga_warrior_balance.jpg %}" alt="核心瑜珈" data-position="center center" />
 		</a>
 		<div class="content">
 			<div class="inner">
@@ -168,7 +168,7 @@ show_tile: true
 	</section>
 	<section>
 		<a href="{% link courses/internal-arts.md %}" class="image">
-			<img src="{% link assets/images/coach_4.jpg %}" alt="內家養身功" data-position="center center" />
+			<img src="{% link assets/images/yoga_floor_stretch.jpg %}" alt="內家養身功" data-position="center center" />
 		</a>
 		<div class="content">
 			<div class="inner">
@@ -184,7 +184,7 @@ show_tile: true
 	</section>
 	<section>
 		<a href="{% link courses/street-dance.md %}" class="image">
-			<img src="{% link assets/images/coach_5.jpg %}" alt="街舞一對一" data-position="center center" />
+			<img src="{% link assets/images/martial-arts-dojo-bg.jpg %}" alt="街舞一對一" data-position="center center" />
 		</a>
 		<div class="content">
 			<div class="inner">
