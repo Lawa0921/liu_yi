@@ -1,6 +1,6 @@
 ---
 title: 防身格鬥班
-layout: landing
+layout: course
 description: '專為 6-12 歲兒童設計,以踢打摔等防身格鬥技巧全面訓練身心機能與衝突反應力'
 image: assets/images/coach_1.jpg
 nav-menu: false

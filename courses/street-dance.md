@@ -1,6 +1,6 @@
 ---
 title: 街舞一對一
-layout: landing
+layout: course
 description: '一對一街舞教學,涵蓋 Hip Hop、Popping、Locking 等多種街舞風格'
 image: assets/images/coach_3.jpg
 nav-menu: false

@@ -1,6 +1,6 @@
 ---
 title: 內家養身功課程
-layout: landing
+layout: course
 description: '專為追求長久健康者設計,打造專屬先天聖體,強身養生提升運動表現'
 image: assets/images/coach_3.jpg
 nav-menu: false

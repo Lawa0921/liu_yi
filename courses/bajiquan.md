@@ -1,6 +1,6 @@
 ---
 title: 八極專修
-layout: landing
+layout: course
 description: '八極拳完整系統教學,從基礎小架到大架,以及對練與實戰應用'
 image: assets/images/coach_2.jpg
 nav-menu: false

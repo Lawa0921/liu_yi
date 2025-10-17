@@ -1,6 +1,6 @@
 ---
 title: 傳武技擊
-layout: landing
+layout: course
 description: '傳統武術實戰技擊,教授傳統武術的實用技法與應用'
 image: assets/images/coach_2.jpg
 nav-menu: false

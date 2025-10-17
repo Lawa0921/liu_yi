@@ -1,6 +1,6 @@
 ---
 title: 青少年散打班
-layout: landing
+layout: course
 description: '專為 12 歲以上青少年設計,以踢打摔為核心,高強度訓練增強自信與應對能力'
 image: assets/images/coach_3.jpg
 nav-menu: false

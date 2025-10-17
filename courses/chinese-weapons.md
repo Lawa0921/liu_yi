@@ -1,6 +1,6 @@
 ---
 title: 中式兵器
-layout: landing
+layout: course
 description: '傳統中式兵器教學,包含槍、棍、刀、劍等兵器的基礎套路與應用技法'
 image: assets/images/coach_2.jpg
 nav-menu: false

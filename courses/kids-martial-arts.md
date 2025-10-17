@@ -1,6 +1,6 @@
 ---
 title: 兒童武術
-layout: landing
+layout: course
 description: '專為 6-12 歲兒童設計的武術課程,強調內化的習武態度,學習動與靜的功夫精神'
 image: assets/images/coach_1.jpg
 nav-menu: false

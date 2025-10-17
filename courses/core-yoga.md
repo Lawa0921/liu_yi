@@ -1,6 +1,6 @@
 ---
 title: 核心瑜珈
-layout: landing
+layout: course
 description: '結合瑜珈柔軟性與核心肌群訓練,強化身體穩定性與平衡感'
 image: assets/images/coach_3.jpg
 nav-menu: false

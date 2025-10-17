@@ -1,6 +1,6 @@
 ---
 title: 防身兵器班
-layout: landing
+layout: course
 description: '專為 6-12 歲兒童設計,以自我保護為核心,透過傳統兵器訓練延伸到日常物品的防身應用'
 image: assets/images/coach_1.jpg
 nav-menu: false
