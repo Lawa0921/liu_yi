@@ -1,99 +1,74 @@
 ---
 title: LISA 教練
-layout: landing
-description: '核心瑜珈專家，結合瑜珈與武術的身心訓練'
-image: assets/images/coach_3.jpg
+layout: teacher
+description: '核心瑜珈專家，專精於身體調理與柔軟度訓練'
+image: assets/images/yoga_warrior_balance.jpg
 nav-menu: false
 show_tile: false
+gallery:
+  - assets/images/yoga_warrior_balance.jpg
+  - assets/images/yoga_floor_stretch.jpg
+  - assets/images/yoga_kneeling_backbend.jpg
+  - assets/images/yoga_boat_pose.jpg
 ---
 
-<!-- Main -->
-<div id="main">
+## LISA 教練
 
-<!-- One -->
-<section id="one">
-	<div class="inner">
-		<header class="major">
-			<h2>LISA 教練</h2>
-		</header>
-		<p>LISA 教練是資深瑜珈教練，專精於核心肌群訓練與瑜珈教學。她獨特地將瑜珈的柔軟性訓練與武術的力量訓練結合，創造出獨特的核心瑜珈課程，幫助學員建立強健的核心肌群，提升整體身體素質。</p>
-	</div>
-</section>
+LISA 教練是核心瑜珈的專業導師，擁有豐富的瑜珈教學經驗。她專精於結合核心肌群訓練與傳統瑜珈體位法，幫助學員在提升身體穩定性的同時，也能改善柔軟度與身心平衡。
 
-<!-- Two -->
-<section id="two" class="spotlights">
-	<section>
-		<div class="image">
-			<img src="{% link assets/images/coach_3.jpg %}" alt="LISA 教練" data-position="center center" />
-		</div>
-		<div class="content">
-			<div class="inner">
-				<header class="major">
-					<h3>專長領域</h3>
-				</header>
-				<ul>
-					<li><strong>核心瑜珈</strong>：核心肌群強化訓練</li>
-					<li><strong>哈達瑜珈</strong>：傳統瑜珈體位法教學</li>
-					<li><strong>運動傷害預防</strong>：身體評估與矯正</li>
-					<li><strong>呼吸法</strong>：瑜珈呼吸與冥想指導</li>
-				</ul>
-			</div>
-		</div>
-	</section>
-	<section>
-		<div class="image">
-			<img src="{% link assets/images/coach_3.jpg %}" alt="教學風格" data-position="top center" />
-		</div>
-		<div class="content">
-			<div class="inner">
-				<header class="major">
-					<h3>資歷與認證</h3>
-				</header>
-				<h4>專業認證</h4>
-				<ul>
-					<li>RYT 200 國際瑜珈師資認證</li>
-					<li>核心訓練專業教練證照</li>
-					<li>運動傷害防護員證照</li>
-				</ul>
-				<h4>教學經歷</h4>
-				<ul>
-					<li>瑜珈教學經驗 10 年以上</li>
-					<li>累計指導學員超過 500 人</li>
-					<li>健身房、瑜珈館專任教練</li>
-					<li>企業瑜珈課程講師</li>
-				</ul>
-			</div>
-		</div>
-	</section>
-</section>
+她的教學細膩且注重個別差異，能夠針對每位學員的身體狀況與需求，提供客製化的指導與調整，讓每個人都能在安全的前提下，找到最適合自己的練習方式。
 
-<!-- Three -->
-<section id="three">
-	<div class="inner">
-		<header class="major">
-			<h3>教學理念</h3>
-		</header>
-		<blockquote>
-			「瑜珈不只是身體的鍛鍊，更是心靈的修練。透過核心訓練，我們不僅強化身體，也培養內在的穩定與力量。每個人都能在瑜珈中找到屬於自己的平衡。」
-		</blockquote>
-		<p>LISA 教練的教學溫和細膩，注重每位學員的身體狀況與個別需求。她善於引導學員正確使用身體，避免運動傷害，讓瑜珈成為終身受用的健康習慣。</p>
-	</div>
-</section>
+---
 
-<!-- Four -->
-<section id="four">
-	<div class="inner">
-		<header class="major">
-			<h3>授課課程</h3>
-		</header>
-		<div class="box">
-			<h4>核心瑜珈</h4>
-			<p>結合瑜珈與核心訓練的特色課程</p>
-			<ul class="actions">
-				<li><a href="{% link courses/core-yoga.md %}" class="button">查看課程詳情</a></li>
-			</ul>
-		</div>
-	</div>
-</section>
+## 專長領域
 
+- **核心瑜珈**：結合核心訓練與瑜珈體位法
+- **身體調理**：改善姿勢不良與身體痠痛
+- **柔軟度訓練**：系統化提升身體柔軟度
+- **呼吸調控**：透過呼吸技巧達到身心平衡
+
+---
+
+## 教學與訓練照片
+
+<div class="photo-grid">
+	<img src="{% link assets/images/yoga_warrior_balance.jpg %}" alt="戰士式平衡訓練" />
+	<img src="{% link assets/images/yoga_floor_stretch.jpg %}" alt="地板伸展練習" />
+	<img src="{% link assets/images/yoga_kneeling_backbend.jpg %}" alt="跪姿後仰動作" />
+	<img src="{% link assets/images/yoga_boat_pose.jpg %}" alt="船式核心訓練" />
+</div>
+
+---
+
+## 資歷與認證
+
+### 專業認證
+- 國際瑜珈聯盟 RYT 200 認證教師
+- 核心瑜珈專業認證
+- 運動傷害防護員證照
+
+### 教學經歷
+- 瑜珈教學經驗 8 年以上
+- 企業瑜珈課程講師
+- 私人瑜珈教練
+- 身體調理工作坊講師
+
+---
+
+## 教學理念
+
+> 「每個人的身體都是獨一無二的，瑜珈不是比較，而是與自己對話的過程。我希望透過核心瑜珈的練習，幫助每位學員找回身體的力量與柔軟，重新建立與身體的連結。」
+
+LISA 教練的教學溫和而堅定，她重視正確的體位與呼吸，讓學員在循序漸進的練習中，感受身體的變化與進步。
+
+---
+
+## 授課課程
+
+<div class="box">
+	<h4>核心瑜珈</h4>
+	<p>結合瑜珈柔軟性與核心肌群訓練，強化身體穩定性與平衡感</p>
+	<ul class="actions">
+		<li><a href="{% link courses/core-yoga.md %}" class="button small">查看詳情</a></li>
+	</ul>
 </div>
