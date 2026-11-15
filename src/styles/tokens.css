@@ -1,0 +1,130 @@
+/*
+ * 設計變數：全站的色彩、字體、間距都從這裡來。
+ *
+ * 兩層：
+ *   1. 原色（--ink-*、--gold-*…）：從 logo 實際取色。
+ *   2. 語意色（--color-*）：元件只用這一層。日後要做「小孩那一面」的淺色配色（設計文件 §4.1 方向 C），
+ *      只要在某個選擇器下重新指定語意色即可，元件不用改。
+ */
+
+:root {
+  /* ── 原色 ─────────────────────────────────────────── */
+  --ink-900: #0b0a09; /* 近黑底（logo_large.jpg 的底是純黑，略提亮避免死黑） */
+  --ink-800: #151310;
+  --ink-700: #221f1a;
+  --gold-500: #b3924f; /* 古金：取自 logo_transparent.png 獅徽 */
+  --gold-400: #c9a866;
+  --gold-600: #d39600; /* 亮金：取自 text_transparent.png「六藝」題字，只做點綴 */
+  --paper-100: #f1e3c6; /* 米白：取自 logo_large.jpg 線條 */
+  --paper-300: #c9bda3;
+  --seal-500: #b3261e; /* 朱紅（印章色）：logo 裡沒有，【我定】 */
+  --seal-400: #cf3a2c;
+  --azure-500: #2c6470; /* 石青：冷色點綴，只用在「小孩」標記。壓深到與米白字對比 ≥ 4.5:1 */
+  --lacquer-950: #050504; /* 比底色更深一階：外框外緣、放大視窗的背景 */
+  /* 3D 兵器的材質色（設計文件 §15.1）。金屬的顏色就是它的反射色，所以鋼接近白。 */
+  --steel-200: #dfe3e6; /* 拋光鋼 */
+  --waxwood-300: #d0ad76; /* 白蠟桿 */
+  --waxwood-600: #76552e; /* 白蠟桿的木紋 */
+  --hardwood-800: #2c1c13; /* 深色硬木（柄） */
+  --hardwood-950: #0f0906;
+  --cord-700: #3b2a1e; /* 褐色纏繩（苗刀柄） */
+  --cord-800: #1c2731; /* 藏青纏繩（劍柄） */
+  --lacquer-800: #2b0f0c; /* 劍鞘的暗紅漆 */
+
+  /* ── 語意色 ───────────────────────────────────────── */
+  --color-bg: var(--ink-900);
+  --color-surface: var(--ink-800);
+  --color-surface-raised: var(--ink-700);
+  --color-text: var(--paper-100);
+  --color-text-muted: var(--paper-300);
+  --color-accent: var(--gold-500);
+  --color-accent-strong: var(--gold-400);
+  --color-highlight: var(--gold-600);
+  --color-seal: var(--seal-500);
+  --color-on-seal: var(--paper-100);
+  --color-border: color-mix(in srgb, var(--gold-500) 45%, transparent);
+  --color-border-subtle: color-mix(in srgb, var(--paper-100) 14%, transparent);
+  --color-focus: var(--gold-400);
+  --color-seal-strong: var(--seal-400);
+  --color-cool: var(--azure-500);
+  --color-deep: var(--lacquer-950);
+  --color-line: color-mix(in srgb, var(--gold-500) 72%, transparent); /* 外框與紋樣的金線 */
+  --color-line-faint: color-mix(in srgb, var(--gold-500) 22%, transparent);
+  --color-pattern: color-mix(in srgb, var(--gold-500) 16%, transparent); /* 窗櫺等底紋 */
+  --color-veil: color-mix(in srgb, var(--lacquer-950) 86%, transparent); /* 視窗背景 */
+  --color-on-accent: var(--ink-900);
+  --color-steel: var(--steel-200);
+  --color-brass: var(--gold-500); /* 兵器的銅件：古金 */
+  --color-waxwood: var(--waxwood-300);
+  --color-waxwood-grain: var(--waxwood-600);
+  --color-hilt: var(--hardwood-800);
+  --color-hilt-grain: var(--hardwood-950);
+  --color-cord: var(--cord-700);
+  --color-cord-cool: var(--cord-800);
+  --color-scabbard: var(--lacquer-800);
+  --color-void: #000; /* 純黑：只給「黑底圖片以混色模式融進底色」這類技術用途 */
+
+  /* ── 字體 ─────────────────────────────────────────── */
+  /* --font-noto-serif-tc 由 Astro 字型功能注入（astro.config.mjs 的 fonts），只載 700 一個字重。 */
+  --font-display: var(--font-noto-serif-tc), 'Songti TC', 'PMingLiU', serif;
+  --font-body: system-ui, -apple-system, 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans TC', sans-serif;
+
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: clamp(1.25rem, 1.1rem + 0.6vw, 1.5rem);
+  --text-2xl: clamp(1.5rem, 1.2rem + 1.4vw, 2.25rem);
+  --text-3xl: clamp(2rem, 1.4rem + 3vw, 3.5rem);
+  --text-display: clamp(3rem, 1.5rem + 8vw, 7.5rem);
+  --text-xs: 0.75rem;
+
+  --leading-tight: 1.25;
+  --leading-body: 1.8;
+  --tracking-display: 0.08em;
+
+  /* ── 間距 ─────────────────────────────────────────── */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4.5rem;
+  --space-9: 7rem;
+  --space-section: clamp(var(--space-8), 10vw, var(--space-9));
+
+  /* ── 版面 ─────────────────────────────────────────── */
+  --page-width: 72rem;
+  --measure: 40rem; /* 內文欄寬 */
+  --gutter: clamp(var(--space-4), 4vw, var(--space-6));
+  --header-height: 4rem;
+  --radius: 2px;
+  --line: 1px;
+
+  /* ── 固定外框（桌機 ≥ 60rem 才有完整外框；手機只有上下細線） ── */
+  --frame-inset: 0px;
+  --frame-top: 3.5rem;
+  --frame-bottom: 0.75rem;
+  /* 外框內可視高度：首屏與釘選的三幕用它，不直接用 100vh。 */
+  --stage-height: calc(100vh - var(--frame-top) - var(--frame-bottom));
+
+  /* ── 動態 ─────────────────────────────────────────── */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+@supports (height: 100svh) {
+  :root {
+    --stage-height: calc(100svh - var(--frame-top) - var(--frame-bottom));
+  }
+}
+
+@media (min-width: 60rem) {
+  :root {
+    --frame-inset: 0.875rem;
+    --frame-top: 4.5rem;
+    --frame-bottom: 3.5rem;
+    --header-height: 4.5rem;
+  }
+}

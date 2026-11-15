@@ -1,0 +1,20 @@
+---
+// 擂台：方形的台面，四角回紋，中央兩道對峙的斜線。自繪向量，純紋飾。
+interface Props {
+  class?: string;
+}
+const { class: className } = Astro.props;
+
+// 左上角的回紋角飾，其他三角以旋轉複製。
+const corner = 'M150 96H96V150M120 176V120H176V156H140V140H158';
+---
+
+<svg class:list={["line-art", className]} viewBox="0 0 800 800" fill="none" stroke="currentColor" stroke-width="1.25" aria-hidden="true" focusable="false">
+  <rect x="40" y="40" width="720" height="720" />
+  <rect x="60" y="60" width="680" height="680" opacity="0.5" />
+  {[0, 90, 180, 270].map((turn) => <path d={corner} transform={`rotate(${turn} 400 400)`} />)}
+  <path d="M400 150L650 400L400 650L150 400Z" opacity="0.75" />
+  <path d="M400 206L594 400L400 594L206 400Z" opacity="0.45" />
+  <path d="M206 206L330 330M594 594L470 470M594 206L470 330M206 594L330 470" />
+  <path d="M400 40V150M400 650V760M40 400H150M650 400H760" opacity="0.6" />
+</svg>

@@ -1,0 +1,61 @@
+---
+// 課程影片區。沒有影片網址（videoEmbed 回傳 null）時「整個區塊不輸出」。
+// YouTube：先只放一個連結，點擊後才由 src/scripts/lite-video.ts 換成播放器（不預載 iframe）；
+// 沒有 JS 時就是連到 YouTube 的普通連結。其他網址：普通連結。
+// data-video-section、data-lite-video 是測試與腳本的約定，請保留。
+import Plaque from './Plaque.astro';
+import { videoEmbed } from '../lib/video';
+
+interface Props {
+  videoUrl: string | undefined;
+  courseTitle: string;
+}
+
+const { videoUrl, courseTitle } = Astro.props;
+const embed = videoEmbed(videoUrl);
+---
+
+{
+  embed && (
+    <section class="section section--tight video-section" data-video-section aria-labelledby="video-heading">
+      <div class="container">
+        <Plaque id="video-heading">課程影片</Plaque>
+        <div class="lite-video">
+          {embed.kind === 'youtube' ? (
+            <a
+              class="button lite-video__play"
+              href={embed.url}
+              data-lite-video
+              data-embed-url={embed.embedUrl}
+              data-title={`${courseTitle}課程影片`}
+            >
+              播放{courseTitle}課程影片
+            </a>
+          ) : (
+            <a class="button" href={embed.url} target="_blank" rel="noopener noreferrer">
+              觀看{courseTitle}課程影片
+            </a>
+          )}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+<style is:global>
+  .lite-video {
+    display: grid;
+    place-items: center;
+    max-width: 60rem;
+    margin-inline: auto;
+    aspect-ratio: 16 / 9;
+    border: var(--line) solid var(--color-line);
+    background: var(--color-surface);
+  }
+
+  .lite-video__frame {
+    width: 100%;
+    height: 100%;
+    border: 0;
+  }
+</style>

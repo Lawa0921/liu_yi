@@ -1,0 +1,83 @@
+---
+// 場地。文字只留照片上看得到的事實（鏡面牆、地墊）；地址等業主提供後再加。
+import { Image } from 'astro:assets';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Plaque from '../components/Plaque.astro';
+import interior1 from '../assets/images/facility-interior-1.jpg';
+import interior2 from '../assets/images/facility-interior-2.jpg';
+import { BOOKING_ANCHOR } from '../lib/site';
+
+const photos = [
+  { src: interior1, alt: '訓練場地全景：鋪滿地墊的教室，一側是整面鏡牆，天花板有成排的燈' },
+  { src: interior2, alt: '從另一個角度看訓練場地：地墊、鏡牆與吊掛的沙袋' },
+];
+---
+
+<BaseLayout title="場地" description="六藝武術工作室的訓練場地：寬敞明亮，配備鏡面牆與地墊。" ogImage={interior1}>
+  <section class="section section--flush-top" aria-labelledby="page-title">
+    <div class="container">
+      <div class="page-head">
+        <Plaque as="h1" id="page-title" size="page" reveal={false}>場地</Plaque>
+        <p class="lead">寬敞明亮的訓練場地，配備鏡面牆和地墊。</p>
+      </div>
+      <ul class="facility-photos">
+        {
+          photos.map((photo, index) => (
+            <li class="cornered">
+              <i class="cornered__tick" />
+              <i class="cornered__tick" />
+              <i class="cornered__tick" />
+              <i class="cornered__tick" />
+              <div data-reveal="wipe" style={`--reveal-i:${index}`}>
+                <Image
+                  src={photo.src}
+                  alt={photo.alt}
+                  width={1200}
+                  height={900}
+                  fit="cover"
+                  sizes="(min-width: 60rem) 34rem, 95vw"
+                  loading={index === 0 ? 'eager' : 'lazy'}
+                />
+              </div>
+            </li>
+          ))
+        }
+      </ul>
+      <p class="facility-cta"><a class="button" href={BOOKING_ANCHOR} data-line-open>預約參觀</a></p>
+    </div>
+  </section>
+</BaseLayout>
+
+<style>
+  .facility-photos {
+    display: grid;
+    gap: var(--space-6);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .facility-photos li {
+    border: var(--line) solid var(--color-line-faint);
+  }
+
+  .facility-photos :global(img) {
+    width: 100%;
+  }
+
+  .facility-cta {
+    margin: var(--space-7) 0 0;
+    text-align: center;
+  }
+
+  @media (min-width: 48rem) {
+    .facility-photos {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    /* 兩張錯開一點，不是並排的格子。 */
+    .facility-photos li:nth-child(2) {
+      margin-top: var(--space-8);
+    }
+  }
+</style>

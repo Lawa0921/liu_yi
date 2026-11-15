@@ -1,0 +1,71 @@
+---
+// 兵器輪廓：中國劍、苗刀、大槍。自繪的線稿向量，只當紋飾用（不是照片或實物素材的替代品）。
+// 都畫成橫放、鋒尖朝右；要直放由使用處旋轉。線條用 currentColor，纓穗用印章紅。
+interface Props {
+  kind: 'jian' | 'miaodao' | 'spear';
+  class?: string;
+}
+const { kind, class: className } = Astro.props;
+
+const fixed = (n: number) => n.toFixed(1);
+
+// 劍柄的纏繩。
+const jianWraps = Array.from({ length: 5 }, (_, i) => 198 - i * 19).map((x) => `M${x} 26.5L${x - 9} 37.5`).join('');
+
+// 苗刀刀柄：上緣從 (308,41) 微彎到 (60,66)，纏繩沿著彎度排。
+const miaoWraps = Array.from({ length: 11 }, (_, i) => 292 - i * 21)
+  .map((x) => {
+    const top = 41 + (308 - x) * 0.1;
+    return `M${x} ${fixed(top + 0.5)}L${x - 11} ${fixed(top + 12.5)}`;
+  })
+  .join('');
+
+// 槍纓：一束向後下垂的絲線。
+const spearTassel = Array.from({ length: 11 }, (_, i) => {
+  const x = 1046 - i * 1.6;
+  return `M${fixed(x)} 34C${fixed(x - 4 - i * 2.6)} ${50 + i}, ${fixed(x - 18 - i * 4.4)} ${70 + i * 1.6}, ${fixed(x - 30 - i * 6.5)} ${fixed(88 + (i % 3) * 6 + i * 0.8)}`;
+}).join('');
+---
+
+{
+  kind === 'jian' && (
+    <svg class:list={["line-art", className]} viewBox="0 0 1000 64" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true" focusable="false">
+      <path d="M236 24L930 27.5L988 32L930 36.5L236 40" />
+      <path d="M242 32H970" opacity="0.6" />
+      <path d="M236 14C226 15 219 20 216 26H210V38H216C219 44 226 49 236 50C231 44 231 20 236 14Z" />
+      <path d="M210 26.5H112M210 37.5H112" />
+      <path d={jianWraps} opacity="0.6" />
+      <path d="M112 23C100 21 91 25 88 32C91 39 100 43 112 41Z" />
+      <circle cx="84" cy="32" r="3" />
+      <g style="stroke:var(--color-seal-strong)">
+        <path d="M81 32C66 32 58 40 49 45" />
+        <circle cx="46" cy="46.5" r="3" style="fill:var(--color-seal-strong)" />
+        <path d="M43 47L6 51M43 46L9 45M43 48L8 57M43 49L13 62" />
+      </g>
+    </svg>
+  )
+}
+{
+  kind === 'miaodao' && (
+    <svg class:list={["line-art", className]} viewBox="0 0 1000 90" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true" focusable="false">
+      <path d="M318 40Q660 18 990 44" />
+      <path d="M318 54Q650 34 930 46Q968 48 990 44" />
+      <path d="M332 44Q650 23 900 39" opacity="0.6" />
+      <rect x="308" y="31" width="10" height="32" rx="3" />
+      <path d="M308 41Q190 50 60 66M308 53Q190 63 60 79" />
+      <path d="M60 66C51 68 51 78 60 79" />
+      <path d={miaoWraps} opacity="0.6" />
+    </svg>
+  )
+}
+{
+  kind === 'spear' && (
+    <svg class:list={["line-art", className]} viewBox="0 0 1200 110" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true" focusable="false">
+      <path d="M2 26L1046 28.5M2 36L1046 33.5M2 26V36" />
+      <rect x="1046" y="26.5" width="12" height="9" />
+      <path d="M1058 27C1084 20 1142 22 1197 31C1142 40 1084 42 1058 35Z" />
+      <path d="M1060 31H1188" opacity="0.6" />
+      <path d={spearTassel} style="stroke:var(--color-seal-strong)" stroke-width="1.25" />
+    </svg>
+  )
+}

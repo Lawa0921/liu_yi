@@ -1,0 +1,479 @@
+---
+// 首頁首屏：直書大字「六藝武術」＋獅子主視覺＋一對直排短句，底部是海水紋。
+//
+// 主視覺集中在 .hero__visual 這一個區塊（data-hero-visual）。業主之後要換成八極拳主題時只換這一塊：
+// 換掉裡面的 <Image>，其餘（直書標題、對句、進場順序）不用動（設計文件 §6-1）。
+//
+// 獅子 logo 只有黑底點陣圖：用混色模式（lighten）讓黑底融進頁面底色，再以一層幕由下往上收走把牠擦出來。
+// 設計文件說「金線描出若描不乾淨就改用遮罩擦出」——這裡採後者，沒有硬描向量。
+// 第二版（設計文件 §15.2-5）：獅子上有一道跟著指標移動的金屬掃光（.hero__sheen，位置由 src/scripts/hero-sheen.ts 寫入）。
+// 進場動畫全是 CSS、只動 transform／opacity，只在有 JS 且沒有要求減少動態時才播；其餘情況內容直接就在。
+import { Image } from 'astro:assets';
+import logo from '../assets/images/logo_large.jpg';
+import { CATEGORY_LABEL, MAIN_CATEGORIES } from '../lib/courses';
+import { BOOKING_ANCHOR, BOOKING_LABEL, SITE } from '../lib/site';
+import { url } from '../lib/url';
+
+const titleChars = [...SITE.shortName];
+const titleRest = SITE.name.slice(SITE.shortName.length);
+const categories = MAIN_CATEGORIES.map((category) => CATEGORY_LABEL[category]);
+
+// 主視覺後面的圓環：八個方位的刻度（八極的「八方」）。
+const ticks = Array.from({ length: 64 }, (_, i) => {
+  const angle = (i / 64) * Math.PI * 2;
+  const major = i % 8 === 0;
+  const inner = major ? 462 : 478;
+  return {
+    x1: (500 + Math.cos(angle) * inner).toFixed(1),
+    y1: (500 + Math.sin(angle) * inner).toFixed(1),
+    x2: (500 + Math.cos(angle) * 490).toFixed(1),
+    y2: (500 + Math.sin(angle) * 490).toFixed(1),
+    major,
+  };
+});
+---
+
+<section class="hero" aria-labelledby="hero-title">
+  <div class="hero__stage">
+    <h1 id="hero-title" class="hero__title">
+      <span class="hero__title-main">
+        {titleChars.map((char, index) => <span class="hero__char" style={`--i:${index}`}>{char}</span>)}
+      </span><span class="hero__title-side">
+        <span class="hero__title-sub">{titleRest}</span>
+        <span class="seal hero__seal" aria-hidden="true"><span>武</span></span>
+      </span>
+    </h1>
+
+    <div class="hero__visual" data-hero-visual>
+      <div class="hero__figure">
+        <span class="hero__ink">
+        <Image
+          src={logo}
+          alt="六藝武術工作室的標誌：踏浪的獅子"
+          width={900}
+          height={900}
+          sizes="(min-width: 60rem) min(62vh, 42vw), 60vw"
+          loading="eager"
+          fetchpriority="high"
+          class="hero__lion"
+        />
+        <span class="hero__tint" aria-hidden="true"></span>
+        <span class="hero__sheen" aria-hidden="true"></span>
+        </span>
+        <span class="hero__curtain" aria-hidden="true"></span>
+      </div>
+      <svg class="hero__ring" viewBox="0 0 1000 1000" fill="none" stroke="currentColor" aria-hidden="true" focusable="false">
+        <circle cx="500" cy="500" r="498" stroke-width="1.5"></circle>
+        <circle cx="500" cy="500" r="454" stroke-width="1" opacity="0.5"></circle>
+        {ticks.map((t) => <line x1={t.x1} y1={t.y1} x2={t.x2} y2={t.y2} stroke-width={t.major ? 2 : 1} opacity={t.major ? 1 : 0.55} />)}
+      </svg>
+    </div>
+
+    <div class="hero__couplet">
+      <p class="hero__couplet-line">{SITE.tagline}</p>
+      <p class="hero__couplet-line hero__couplet-line--second">
+        {categories.map((label) => <span>{label}</span>)}
+      </p>
+    </div>
+
+    <ul class="hero__actions">
+      <li class="hero__action-booking">
+        <a class="button button--solid" href={BOOKING_ANCHOR} data-line-open>{BOOKING_LABEL}</a>
+      </li>
+      <li><a class="button" href={url('/courses/')}>看課程</a></li>
+    </ul>
+  </div>
+
+  <div class="hero__waves" aria-hidden="true">
+    <span class="wave-band wave-band--back"></span>
+    <span class="wave-band"></span>
+  </div>
+</section>
+
+<script>
+  import { initHeroSheen } from '../scripts/hero-sheen';
+
+  initHeroSheen();
+</script>
+
+<style>
+  .hero {
+    position: relative;
+    overflow: hidden;
+    min-height: var(--stage-height);
+    display: grid;
+  }
+
+  .hero__stage {
+    --lion: min(64vw, 50vh);
+    position: relative;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    /* 三列緊靠在一起、整組垂直置中（不讓第一列把多出來的高度全吃掉）。 */
+    grid-template-rows: auto auto auto;
+    align-content: center;
+    align-items: center;
+    justify-items: center;
+    gap: var(--space-6) var(--space-3);
+    padding: var(--space-5) var(--gutter) calc(64px + var(--space-4));
+  }
+
+  /* ── 直書標題 ─────────────────────────────────────── */
+  .hero__title {
+    grid-column: 1;
+    grid-row: 1;
+    margin: 0;
+    writing-mode: vertical-rl;
+    font-size: clamp(3.25rem, 15vw, 5rem);
+    line-height: 1.08;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+
+  .hero__title-main {
+    display: block;
+  }
+
+  .hero__char {
+    display: inline-block;
+  }
+
+  /* 「工作室」與方印：大字左邊的一小行，靠下對齊。 */
+  .hero__title-side {
+    /* 直書裡這是 h1 的第二行（在大字左邊）；主軸是直的，justify 到底。 */
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.9em;
+    margin-block-start: 0.5em;
+    font-size: 0.2em;
+    letter-spacing: 0.7em;
+  }
+
+  .hero__title-sub {
+    color: var(--color-accent-strong);
+  }
+
+  .hero__seal {
+    writing-mode: horizontal-tb;
+    font-size: 1.15em;
+  }
+
+  /* ── 主視覺 ───────────────────────────────────────── */
+  .hero__visual {
+    grid-column: 2;
+    grid-row: 1;
+    position: relative;
+    width: var(--lion);
+    aspect-ratio: 1;
+  }
+
+  .hero__ring {
+    position: absolute;
+    inset: -12%;
+    width: 124%;
+    height: 124%;
+    max-width: none;
+    color: var(--color-line);
+    opacity: 0.7;
+    pointer-events: none;
+  }
+
+  .hero__figure {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    isolation: isolate;
+    background: var(--color-bg);
+  }
+
+  /* 圖檔是純黑底：整組（圖＋上色層）和底色取「較亮」者，黑底就融進頁面底色，只留下線條。 */
+  .hero__ink {
+    position: absolute;
+    inset: 0;
+    isolation: isolate;
+    mix-blend-mode: lighten;
+  }
+
+  .hero__lion {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  /* 由上而下從米白過渡到古金：獅子是米白，腳下的浪帶金。 */
+  .hero__tint {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, transparent 45%, var(--color-accent-strong) 100%);
+    mix-blend-mode: multiply;
+  }
+
+  /* 金屬掃光：一道斜的亮帶加一團光核，用 color-dodge 疊上去——黑底不受影響，只有獅子的線條被提亮成金屬的反光。 */
+  .hero__sheen {
+    --sheen-x: 50%;
+    --sheen-y: 50%;
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(
+        circle at var(--sheen-x) var(--sheen-y),
+        color-mix(in srgb, var(--color-text) 80%, transparent) 0,
+        transparent 30%
+      ),
+      linear-gradient(
+        104deg,
+        transparent calc(var(--sheen-x) - 15%),
+        color-mix(in srgb, var(--color-highlight) 75%, transparent) var(--sheen-x),
+        transparent calc(var(--sheen-x) + 15%)
+      );
+    mix-blend-mode: color-dodge;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.6s var(--ease-out);
+  }
+
+  /* 指標動過才出現（沒有指標的時候不放一道不會動的亮帶在那裡）。 */
+  .hero__sheen[data-active] {
+    opacity: 1;
+  }
+
+  .hero__curtain {
+    position: absolute;
+    inset: -1px;
+    background: var(--color-bg);
+    transform: scaleY(0);
+    transform-origin: center top;
+  }
+
+  /* ── 對句 ─────────────────────────────────────────── */
+  .hero__couplet {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    display: grid;
+    gap: var(--space-2);
+    justify-items: center;
+  }
+
+  .hero__couplet-line {
+    margin: 0;
+    padding-inline-start: 0.5em;
+    color: var(--color-accent-strong);
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    font-weight: 700;
+    letter-spacing: 0.5em;
+    white-space: nowrap;
+  }
+
+  .hero__couplet-line--second {
+    display: flex;
+    gap: 0.5em;
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+  }
+
+  .hero__actions {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--space-3);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .hero__waves {
+    position: absolute;
+    inset: auto 0 0;
+    display: grid;
+  }
+
+  .hero__waves > * {
+    grid-area: 1 / 1;
+    align-self: end;
+  }
+
+  /* ── 桌機：左直書大字、中獅子、右一對直排 ─────────── */
+  @media (min-width: 60rem) {
+    .hero__stage {
+      --lion: min(62vh, 42vw);
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+      grid-template-rows: 1fr;
+      align-content: stretch;
+      gap: 0;
+      padding: var(--space-6) clamp(4.5rem, 7vw, 7.5rem) 4.5rem;
+    }
+
+    .hero__title {
+      grid-column: 1;
+      justify-self: start;
+      align-self: center;
+      font-size: min(15.5vh, 10.5vw);
+    }
+
+    .hero__visual {
+      grid-column: 2;
+    }
+
+    .hero__couplet {
+      grid-column: 3;
+      grid-row: 1;
+      justify-self: end;
+      align-self: center;
+      display: flex;
+      /* 直書時 column 是由右往左排：第一句在右。 */
+      flex-direction: column;
+      gap: var(--space-6);
+      writing-mode: vertical-rl;
+    }
+
+    .hero__couplet-line,
+    .hero__couplet-line--second {
+      gap: 0;
+      padding: 0;
+      font-size: clamp(1.5rem, 3.4vh, 2rem);
+      letter-spacing: 0.62em;
+    }
+
+    .hero__actions {
+      grid-column: 3;
+      grid-row: 1;
+      align-self: end;
+      justify-self: end;
+    }
+
+    /* 「預約體驗」在桌機已經常駐於外框下緣，首屏不重複；「看課程」改成一行帶底線的字，不和它疊成兩顆按鈕。 */
+    .hero__action-booking {
+      display: none;
+    }
+
+    .hero__actions .button {
+      min-height: 0;
+      padding: 0 0 var(--space-2);
+      border: 0;
+      border-bottom: var(--line) solid var(--color-accent);
+      overflow: visible;
+    }
+
+    .hero__actions .button::before {
+      display: none;
+    }
+
+    .hero__actions .button:hover {
+      color: var(--color-text);
+    }
+  }
+
+  /* ── 進場：獅子擦出 → 大字逐字 → 對句、印、按鈕。整組在 1.2 秒內完成（圓環的緩慢旋轉不算）。 ── */
+  @media (prefers-reduced-motion: no-preference) {
+    :global(html.js) .hero__curtain {
+      animation: hero-curtain 0.9s var(--ease-in-out) both;
+    }
+
+    :global(html.js) .hero__lion {
+      animation: hero-settle 1.2s var(--ease-out) both;
+    }
+
+    :global(html.js) .hero__ring {
+      animation:
+        hero-fade 0.8s var(--ease-out) 0.3s both,
+        hero-turn 240s linear infinite;
+    }
+
+    :global(html.js) .hero__char {
+      animation: hero-char 0.6s var(--ease-out) both;
+      animation-delay: calc(0.15s + var(--i) * 0.08s);
+    }
+
+    :global(html.js) .hero__title-sub {
+      animation: hero-fade 0.5s var(--ease-out) 0.55s both;
+    }
+
+    :global(html.js) .hero__seal {
+      animation: hero-stamp 0.35s cubic-bezier(0.3, 1.6, 0.5, 1) 0.8s both;
+    }
+
+    :global(html.js) .hero__couplet-line {
+      animation: hero-fade 0.5s var(--ease-out) 0.5s both;
+    }
+
+    :global(html.js) .hero__couplet-line--second {
+      animation-delay: 0.6s;
+    }
+
+    :global(html.js) .hero__actions {
+      animation: hero-fade 0.5s var(--ease-out) 0.65s both;
+    }
+
+    :global(html.js) .hero__waves {
+      animation: hero-rise 0.9s var(--ease-out) 0.2s both;
+    }
+  }
+
+  @keyframes hero-curtain {
+    from {
+      transform: scaleY(1);
+    }
+    to {
+      transform: scaleY(0);
+    }
+  }
+
+  @keyframes hero-settle {
+    from {
+      transform: scale(1.07);
+    }
+    to {
+      transform: none;
+    }
+  }
+
+  @keyframes hero-fade {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes hero-turn {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes hero-char {
+    from {
+      opacity: 0;
+      transform: translate3d(0, 0.35em, 0);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes hero-stamp {
+    from {
+      opacity: 0;
+      transform: scale(1.7);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes hero-rise {
+    from {
+      opacity: 0;
+      transform: translate3d(0, 40%, 0);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+</style>

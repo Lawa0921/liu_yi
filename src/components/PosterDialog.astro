@@ -1,0 +1,83 @@
+---
+// 海報的站內放大視窗（全站共用一個）。由 src/scripts/poster-lightbox.ts 接到每個 [data-poster] 連結上。
+// 用原生 <dialog>：Esc 關閉、焦點管理與關閉後焦點回到原本的連結，都由瀏覽器處理。
+// 視窗佔滿整個畫面，圖以外的地方（視窗本身的留白）點了就關。
+---
+
+<dialog id="poster-dialog" class="poster-dialog" aria-label="海報放大檢視">
+  <form method="dialog" class="poster-dialog__bar">
+    <button class="button poster-dialog__close" type="submit">關閉</button>
+  </form>
+  <img class="poster-dialog__image" alt="" data-poster-image decoding="async" />
+</dialog>
+
+<style>
+  .poster-dialog {
+    width: 100vw;
+    max-width: none;
+    height: 100vh;
+    height: 100dvh;
+    max-height: none;
+    margin: 0;
+    padding: var(--space-8) var(--gutter) var(--space-7);
+    border: 0;
+    background: transparent;
+    overflow: auto;
+    overscroll-behavior: contain;
+    cursor: zoom-out;
+  }
+
+  .poster-dialog::backdrop {
+    background: var(--color-veil);
+  }
+
+  .poster-dialog__bar {
+    position: fixed;
+    top: var(--space-4);
+    right: var(--gutter);
+    z-index: 1;
+    margin: 0;
+  }
+
+  .poster-dialog__close {
+    background: var(--color-bg);
+  }
+
+  /* 至少 48rem 寬：手機上會比螢幕寬很多，視窗可以橫向、直向捲動（也能雙指縮放），字才看得清楚。 */
+  .poster-dialog__image {
+    width: clamp(48rem, 100%, 62rem);
+    max-width: none;
+    height: auto;
+    margin-inline: auto;
+    border: var(--line) solid var(--color-line);
+    background: var(--color-surface);
+    cursor: default;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .poster-dialog[open] .poster-dialog__image {
+      animation: poster-dialog-in 0.5s var(--ease-out) both;
+    }
+
+    .poster-dialog[open]::backdrop {
+      animation: poster-dialog-fade 0.4s var(--ease-out) both;
+    }
+  }
+
+  @keyframes poster-dialog-in {
+    from {
+      opacity: 0;
+      transform: translate3d(0, 1.5rem, 0) scale(0.97);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes poster-dialog-fade {
+    from {
+      opacity: 0;
+    }
+  }
+</style>

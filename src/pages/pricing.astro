@@ -1,0 +1,86 @@
+---
+// 收費：這一版照用海報（設計文件 §7）。金額與規定不轉成文字，避免抄錯；
+// 等業主提供文字版資料再改成真正的表格。海報以掛軸的樣子排進版面，點擊在站內放大。
+import BaseLayout from '../layouts/BaseLayout.astro';
+import PosterFigure from '../components/PosterFigure.astro';
+import Plaque from '../components/Plaque.astro';
+import pricingTable from '../assets/images/pricing-table.png';
+import vip from '../assets/images/vip.png';
+import memberPolicy from '../assets/images/member-policy.png';
+import refundPolicy from '../assets/images/refund-policy.png';
+import { BOOKING_ANCHOR } from '../lib/site';
+
+const DETAIL = '詳細內容請見圖片或洽 LINE。';
+const posters = [
+  { src: pricingTable, caption: '課程收費表' },
+  { src: vip, caption: 'VIP 會員說明' },
+  { src: memberPolicy, caption: '一般會員收費說明' },
+  { src: refundPolicy, caption: '退費說明' },
+];
+---
+
+<BaseLayout title="收費" description="六藝武術工作室的收費方案、VIP 會員、會員須知與退費說明。" ogImage={pricingTable}>
+  <section class="section section--flush-top" aria-labelledby="page-title">
+    <div class="container">
+      <div class="page-head">
+        <Plaque as="h1" id="page-title" size="page" reveal={false}>收費</Plaque>
+        <p class="lead">
+          收費方案與相關規定請見下方海報；有任何問題，歡迎<a href={BOOKING_ANCHOR} data-line-open>用 LINE 詢問</a>。
+        </p>
+      </div>
+      <div class="poster-grid">
+        {
+          posters.map((poster, index) => (
+            <section class="poster-grid__item" aria-labelledby={`poster-${index}`} data-reveal style={`--reveal-i:${index % 2}`}>
+              <h2 id={`poster-${index}`}>{poster.caption}</h2>
+              <PosterFigure
+                src={poster.src}
+                alt={`${poster.caption}海報。${DETAIL}`}
+                caption={poster.caption}
+                eager={index === 0}
+              />
+            </section>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+</BaseLayout>
+
+<style>
+  .poster-grid {
+    display: grid;
+    gap: var(--space-8) var(--space-7);
+    justify-items: center;
+  }
+
+  .poster-grid__item {
+    display: grid;
+    justify-items: center;
+    width: 100%;
+  }
+
+  .poster-grid__item h2 {
+    margin-bottom: var(--space-5);
+    padding-inline-start: 0.3em;
+    font-size: var(--text-xl);
+    letter-spacing: 0.3em;
+    text-align: center;
+  }
+
+  /* 圖說與上面的標題重複，這一頁只留標題。 */
+  .poster-grid__item :global(figcaption) {
+    display: none;
+  }
+
+  @media (min-width: 60rem) {
+    .poster-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    /* 右欄往下錯開，像並掛的兩幅卷軸。 */
+    .poster-grid__item:nth-child(even) {
+      margin-top: var(--space-8);
+    }
+  }
+</style>

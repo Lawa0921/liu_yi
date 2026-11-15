@@ -1,0 +1,181 @@
+/*
+ * 固定外框（設計文件 §6「固定外框」）。標記在 src/components/Frame.astro。
+ *   桌機（≥ 60rem）：金色細線框加四角回紋角飾；上緣是頁首（Header.astro），下緣是「預約體驗」與捲動提示。
+ *   手機：只剩上下兩條細線，頁首收成獅徽加漢堡鈕。
+ * 外框本身不接收滑鼠事件；框外的邊由 box-shadow 以底色蓋住，內容看起來就是在框內捲動。
+ */
+
+.frame {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+}
+
+.frame__line,
+.frame__corner {
+  display: none;
+}
+
+/* 下緣 */
+.frame-foot {
+  position: fixed;
+  inset: auto 0 0;
+  z-index: 49;
+  height: var(--frame-bottom);
+  background: var(--color-bg);
+  border-top: var(--line) solid var(--color-line-faint);
+}
+
+.frame-foot__hint {
+  display: none;
+}
+
+.frame-foot__progress {
+  position: absolute;
+  inset: -1px 0 auto;
+  height: 1px;
+  background: var(--color-accent);
+  transform: scaleX(0);
+  transform-origin: left center;
+}
+
+/* 捲動進度：瀏覽器支援捲動驅動動畫時才有，不需要 JS。 */
+@supports (animation-timeline: scroll()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .frame-foot__progress {
+      animation: frame-progress linear both;
+      animation-timeline: scroll(root block);
+    }
+  }
+}
+
+@keyframes frame-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@media (min-width: 60rem) {
+  .frame__line {
+    display: block;
+    position: absolute;
+    inset: var(--frame-inset);
+    border: var(--line) solid var(--color-line);
+    /* 框外的邊蓋成更深一階的底色。 */
+    box-shadow: 0 0 0 calc(var(--frame-inset) + 2px) var(--color-deep);
+  }
+
+  .frame__corner {
+    display: block;
+    position: absolute;
+    width: 3.25rem;
+    height: 3.25rem;
+    color: var(--color-accent);
+  }
+
+  .frame__corner--tl {
+    top: var(--frame-inset);
+    left: var(--frame-inset);
+  }
+
+  .frame__corner--tr {
+    top: var(--frame-inset);
+    right: var(--frame-inset);
+    transform: scaleX(-1);
+  }
+
+  .frame__corner--bl {
+    bottom: var(--frame-inset);
+    left: var(--frame-inset);
+    transform: scaleY(-1);
+  }
+
+  .frame__corner--br {
+    bottom: var(--frame-inset);
+    right: var(--frame-inset);
+    transform: scale(-1);
+  }
+
+  .frame-foot {
+    inset: auto var(--frame-inset) var(--frame-inset);
+    height: calc(var(--frame-bottom) - var(--frame-inset));
+    display: flex;
+    align-items: center;
+    padding-inline: 4.5rem;
+  }
+
+  .frame-foot__hint {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-3);
+    color: var(--color-text-muted);
+    font-family: var(--font-display);
+    font-size: var(--text-xs);
+    letter-spacing: 0.5em;
+  }
+
+  .frame-foot__hint-line {
+    position: relative;
+    width: 3rem;
+    height: 1px;
+    overflow: hidden;
+    background: var(--color-line-faint);
+  }
+
+  .frame-foot__hint-line::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--color-accent);
+    animation: hint-run 2.4s var(--ease-in-out) infinite;
+  }
+
+  /* 外框依序畫出（只在有 JS、且沒有要求減少動態時）。 */
+  @media (prefers-reduced-motion: no-preference) {
+    html.js .frame__corner {
+      animation: frame-corner-in 1.2s var(--ease-out) 0.2s both;
+    }
+  }
+}
+
+@keyframes hint-run {
+  0% {
+    transform: translateX(-101%);
+  }
+  55%,
+  100% {
+    transform: translateX(101%);
+  }
+}
+
+@keyframes frame-corner-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .frame-foot__hint-line::after {
+    animation: none;
+    transform: none;
+  }
+}
+
+/* 手機選單展開時鎖住底下的捲動。 */
+html.nav-open {
+  overflow: hidden;
+}
+
+/* 沒有 JS 的手機版：頁首不固定（選單直接展開在頁面上方），所以不需要預留上緣。 */
+@media (max-width: 59.999rem) {
+  html:not(.js) body {
+    padding-top: 0;
+  }
+}

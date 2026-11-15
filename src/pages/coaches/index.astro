@@ -1,0 +1,65 @@
+---
+// 師資總覽。
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import CoachCard from '../../components/CoachCard.astro';
+import Plaque from '../../components/Plaque.astro';
+import { getPublishedCoaches } from '../../lib/content';
+
+const coaches = await getPublishedCoaches();
+---
+
+<BaseLayout title="師資" description="六藝武術工作室的教練：詹前賢總教練、猴子館長、LISA、歐文。">
+  <section class="section section--flush-top" aria-labelledby="page-title">
+    <div class="container">
+      <div class="page-head">
+        <Plaque as="h1" id="page-title" size="page" reveal={false}>師資</Plaque>
+      </div>
+      <h2 class="visually-hidden">教練</h2>
+      <ul class="coach-grid">
+        {
+          coaches.map((coach, index) => (
+            <li style={`--i:${index}`}>
+              <CoachCard coach={coach} />
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+  </section>
+</BaseLayout>
+
+<style>
+  .coach-grid {
+    display: grid;
+    gap: var(--space-5);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  @media (min-width: 48rem) {
+    .coach-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: var(--space-6);
+    }
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    :global(html.js) .coach-grid > li {
+      animation: coach-in 0.9s var(--ease-out) both;
+      animation-delay: calc(var(--i) * 0.1s + 0.1s);
+    }
+  }
+
+  @keyframes coach-in {
+    from {
+      opacity: 0;
+      transform: translate3d(0, 1.5rem, 0);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+</style>

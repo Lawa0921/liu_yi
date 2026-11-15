@@ -1,0 +1,111 @@
+---
+// 全站共用版型：<head>（SEO、Open Graph、字型）、固定外框、頁首、頁尾、LINE 視窗、海報放大視窗。
+// 固定外框（Frame.astro＋Header.astro）包在這裡的 <body> 內，各頁不用管。
+import { Font, getImage } from 'astro:assets';
+import '../styles/global.css';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+import LineDialog from '../components/LineDialog.astro';
+import PosterDialog from '../components/PosterDialog.astro';
+import Frame from '../components/Frame.astro';
+import { AUDIENCE_STORAGE_KEY } from '../lib/audience';
+import { SITE } from '../lib/site';
+import { url } from '../lib/url';
+import logoLarge from '../assets/images/logo_large.jpg';
+import logoEmblem from '../assets/images/logo_transparent.png';
+
+interface Props {
+  /** 頁面標題；首頁不傳，直接用站名。 */
+  title?: string;
+  description?: string;
+  /** Open Graph 圖；不傳就用獅子 logo。 */
+  ogImage?: ImageMetadata;
+  ogType?: 'website' | 'article';
+  noindex?: boolean;
+}
+
+const { title, description = SITE.description, ogImage = logoLarge, ogType = 'website', noindex = false } = Astro.props;
+
+const fullTitle = title ? `${title}｜${SITE.name}` : `${SITE.name}｜${SITE.tagline}`;
+const canonical = new URL(Astro.url.pathname, Astro.site).href;
+
+// 社群平台不一定吃 WebP／AVIF，OG 圖固定輸出 JPEG 1200×630。
+const og = await getImage({ src: ogImage, width: 1200, height: 630, fit: 'cover', format: 'jpeg' });
+const ogUrl = new URL(og.src, Astro.site).href;
+
+const favicon = await getImage({ src: logoEmblem, width: 96, height: 96, fit: 'cover', format: 'png' });
+---
+
+<!doctype html>
+<html lang={SITE.lang} data-audience-key={AUDIENCE_STORAGE_KEY}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{fullTitle}</title>
+    <meta name="description" content={description} />
+    {/* noindex 的頁面（404）沒有對應的正式網址，不輸出 canonical 與 og:url。 */}
+    {noindex ? <meta name="robots" content="noindex" /> : <link rel="canonical" href={canonical} />}
+    <link rel="icon" type="image/png" href={favicon.src} />
+    <link rel="sitemap" href={url('/sitemap-index.xml')} />
+
+    <meta property="og:site_name" content={SITE.name} />
+    <meta property="og:title" content={fullTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content={ogType} />
+    {!noindex && <meta property="og:url" content={canonical} />}
+    <meta property="og:locale" content={SITE.ogLocale} />
+    <meta property="og:image" content={ogUrl} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <meta name="theme-color" content="#0b0a09" />
+    <Font cssVariable="--font-noto-serif-tc" />
+
+    {/* 首次繪製前執行：標記有 JS，並還原上次選的「大人｜小孩」，避免卡片閃一下。 */}
+    <script is:inline>
+      (function () {
+        var root = document.documentElement;
+        root.classList.add('js');
+        var stored = null;
+        try {
+          stored = window.localStorage.getItem(root.dataset.audienceKey || "");
+        } catch (e) {}
+        root.dataset.audience = stored === 'kid' ? 'kid' : 'adult';
+      })();
+    </script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">跳到主要內容</a>
+    <Header />
+    <main id="main">
+      <slot />
+    </main>
+    <Footer />
+    <Frame />
+    <LineDialog />
+    <PosterDialog />
+
+    <script>
+      import { initLineDialog, initNavMenu } from '../scripts/site-chrome';
+      import { initAudienceToggle } from '../scripts/audience-toggle';
+      import { initCardCarousels } from '../scripts/card-carousel';
+      import { initLiteVideos } from '../scripts/lite-video';
+      import { initReveal } from '../scripts/reveal';
+      import { initGalleries } from '../scripts/gallery';
+      import { initPosterLightbox } from '../scripts/poster-lightbox';
+      import { initWeapons3d } from '../scripts/weapons3d';
+
+      initNavMenu();
+      initLineDialog();
+      initAudienceToggle();
+      initCardCarousels();
+      initLiteVideos();
+      initReveal();
+      initGalleries();
+      initPosterLightbox();
+      // 頁面上有 3D 兵器的區塊才會有動作；three 本身等接近那個區塊才下載。
+      initWeapons3d();
+    </script>
+  </body>
+</html>

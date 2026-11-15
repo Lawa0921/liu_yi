@@ -1,0 +1,422 @@
+---
+// 課程卡片。兩種樣子，外框尺寸一致，排在一起不會一高一低：
+//   有照片 → 照片卡：照片疊在一起，由 src/scripts/card-carousel.ts 輪播（.is-active 是目前那張）。
+//            換圖時新的一張淡入並緩慢收斂，一道金線由左至右掃過；左下角的小刻度標出第幾張。
+//   沒照片 → 文字卡（字牌）：窗櫺底紋上放分類單字與該分類的紋樣（兵器輪廓／八方／擂台），
+//            不放任何替代圖（設計文件 §6「缺照片時」）。
+//            兵器類的字牌是 3D 兵器的宿主（data-weapon3d="card"，設計文件 §15.2-4）：
+//            3D 就緒後線稿退場、單字淡到後面；沒有 WebGL／沒有 JS 時就是原本的線稿字牌。
+// class 名稱與 data-* 屬性是測試與腳本的約定，請保留。
+import { Image } from 'astro:assets';
+import Weapon from './ornament/Weapon.astro';
+import Bafang from './ornament/Bafang.astro';
+import Leitai from './ornament/Leitai.astro';
+import { AUDIENCE_LABEL, CATEGORY_GLYPH } from '../lib/courses';
+import type { Course } from '../lib/content';
+import { url } from '../lib/url';
+
+interface Props {
+  course: Course;
+}
+
+const { course } = Astro.props;
+const { title, summary, photos, category, audience } = course.data;
+const hasPhotos = photos.length > 0;
+const glyph = category === 'other' ? undefined : CATEGORY_GLYPH[category];
+---
+
+<article class:list={['course-card', 'cornered', hasPhotos ? 'course-card--photo' : 'course-card--text']} data-carousel-host>
+  <a class="course-card__link" href={url(`/courses/${course.id}/`)}>
+    <i class="cornered__tick"></i>
+    <i class="cornered__tick"></i>
+    <i class="cornered__tick"></i>
+    <i class="cornered__tick"></i>
+    {
+      hasPhotos ? (
+        <div class="course-card__media" data-carousel>
+          {photos.map((photo, index) => (
+            <Image
+              src={photo.src}
+              alt={photo.alt}
+              width={640}
+              height={512}
+              fit="cover"
+              sizes="(min-width: 48rem) 22rem, 90vw"
+              loading="lazy"
+              class:list={['course-card__slide', { 'is-active': index === 0 }]}
+              data-slide
+            />
+          ))}
+          <span class="course-card__sweep" aria-hidden="true" />
+          {photos.length > 1 && (
+            <span class="course-card__pips" aria-hidden="true">
+              {photos.map(() => (
+                <i />
+              ))}
+            </span>
+          )}
+        </div>
+      ) : (
+        <div
+          class="course-card__plate"
+          aria-hidden="true"
+          data-weapon3d={category === 'weapon' ? 'card' : undefined}
+          data-weapon3d-scope={category === 'weapon' ? '' : undefined}
+        >
+          <span class="lattice course-card__lattice" />
+          {category === 'weapon' && (
+            <>
+              <Weapon kind="jian" class="course-card__motif course-card__motif--jian weapon3d-fallback" />
+              <Weapon kind="miaodao" class="course-card__motif course-card__motif--miaodao weapon3d-fallback" />
+            </>
+          )}
+          {category === 'fist' && <Bafang class="course-card__motif course-card__motif--emblem" />}
+          {category === 'combat' && <Leitai class="course-card__motif course-card__motif--emblem" />}
+          {glyph && <span class="course-card__glyph">{glyph}</span>}
+        </div>
+      )
+    }
+    <div class="course-card__body">
+      {
+        (glyph || audience !== 'all') && (
+          <p class="course-card__label">
+            {glyph && (
+              <span class="seal">
+                <span>{glyph}</span>
+              </span>
+            )}
+            {audience !== 'all' && <span>{AUDIENCE_LABEL[audience]}</span>}
+          </p>
+        )
+      }
+      <h3 class="course-card__title">{title}</h3>
+      <p class="course-card__summary">{summary}</p>
+    </div>
+  </a>
+</article>
+
+<style>
+  .course-card {
+    height: 100%;
+    border: var(--line) solid var(--color-line-faint);
+    background: var(--color-surface);
+    transition: border-color 0.4s;
+  }
+
+  .course-card:hover,
+  .course-card:focus-within {
+    border-color: var(--color-line);
+  }
+
+  .course-card:hover .cornered__tick:nth-of-type(1) {
+    transform: translate(-5px, -5px);
+  }
+
+  .course-card:hover .cornered__tick:nth-of-type(2) {
+    transform: translate(5px, -5px);
+  }
+
+  .course-card:hover .cornered__tick:nth-of-type(3) {
+    transform: translate(-5px, 5px);
+  }
+
+  .course-card:hover .cornered__tick:nth-of-type(4) {
+    transform: translate(5px, 5px);
+  }
+
+  .course-card__link {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  /* ── 照片 ─────────────────────────────────────────── */
+  .course-card__media,
+  .course-card__plate {
+    position: relative;
+    aspect-ratio: 5 / 4;
+    overflow: hidden;
+    background: var(--color-bg);
+    border-bottom: var(--line) solid var(--color-line-faint);
+  }
+
+  .course-card__slide {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0;
+    transform: scale(1.12);
+    /* 退場：先淡出，淡完才把放大歸位（下次進場再收斂一次）。 */
+    transition:
+      opacity 1.1s var(--ease-in-out),
+      transform 0s linear 1.1s;
+  }
+
+  .course-card__slide.is-active {
+    opacity: 1;
+    transform: scale(1);
+    transition:
+      opacity 1.1s var(--ease-in-out),
+      transform 3.4s var(--ease-out);
+  }
+
+  /* 照片下緣壓暗一點，刻度與邊線才清楚。 */
+  .course-card__media::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(transparent 60%, var(--color-veil));
+    opacity: 0.5;
+    pointer-events: none;
+  }
+
+  /* 換圖時掃過的一道金線（每個張數各一個動畫名稱，屬性一變就重播）。 */
+  .course-card__sweep {
+    position: absolute;
+    inset: 0 auto 0 0;
+    z-index: 1;
+    width: 100%;
+    border-right: 1px solid var(--color-accent-strong);
+    background: linear-gradient(90deg, transparent 80%, color-mix(in srgb, var(--color-accent-strong) 22%, transparent));
+    opacity: 0;
+    transform: translate3d(-100%, 0, 0);
+    pointer-events: none;
+  }
+
+  .course-card__media[data-active-slide='1'] .course-card__sweep {
+    animation: card-sweep-1 1.1s var(--ease-in-out);
+  }
+
+  .course-card__media[data-active-slide='2'] .course-card__sweep {
+    animation: card-sweep-2 1.1s var(--ease-in-out);
+  }
+
+  .course-card__media[data-active-slide='3'] .course-card__sweep {
+    animation: card-sweep-3 1.1s var(--ease-in-out);
+  }
+
+  .course-card__media[data-active-slide='4'] .course-card__sweep {
+    animation: card-sweep-4 1.1s var(--ease-in-out);
+  }
+
+  @keyframes card-sweep-1 {
+    0% {
+      opacity: 1;
+      transform: translate3d(-100%, 0, 0);
+    }
+    100% {
+      opacity: 1;
+      transform: translate3d(0, 0, 0);
+    }
+  }
+
+  @keyframes card-sweep-2 {
+    0% {
+      opacity: 1;
+      transform: translate3d(-100%, 0, 0);
+    }
+    100% {
+      opacity: 1;
+      transform: translate3d(0, 0, 0);
+    }
+  }
+
+  @keyframes card-sweep-3 {
+    0% {
+      opacity: 1;
+      transform: translate3d(-100%, 0, 0);
+    }
+    100% {
+      opacity: 1;
+      transform: translate3d(0, 0, 0);
+    }
+  }
+
+  @keyframes card-sweep-4 {
+    0% {
+      opacity: 1;
+      transform: translate3d(-100%, 0, 0);
+    }
+    100% {
+      opacity: 1;
+      transform: translate3d(0, 0, 0);
+    }
+  }
+
+  /* 第幾張的小刻度：輪播啟動（有 data-active-slide）後才出現。 */
+  .course-card__pips {
+    position: absolute;
+    left: var(--space-4);
+    bottom: var(--space-3);
+    z-index: 2;
+    display: flex;
+    gap: 5px;
+    opacity: 0;
+    transition: opacity 0.4s;
+  }
+
+  .course-card__media[data-active-slide] .course-card__pips {
+    opacity: 1;
+  }
+
+  .course-card__pips i {
+    width: 1.125rem;
+    height: 2px;
+    background: color-mix(in srgb, var(--color-text) 35%, transparent);
+    transition: background-color 0.4s;
+  }
+
+  .course-card__media[data-active-slide='0'] .course-card__pips i:nth-child(1),
+  .course-card__media[data-active-slide='1'] .course-card__pips i:nth-child(2),
+  .course-card__media[data-active-slide='2'] .course-card__pips i:nth-child(3),
+  .course-card__media[data-active-slide='3'] .course-card__pips i:nth-child(4),
+  .course-card__media[data-active-slide='4'] .course-card__pips i:nth-child(5) {
+    background: var(--color-accent-strong);
+  }
+
+  /* ── 字牌（沒有照片） ─────────────────────────────── */
+  .course-card__plate {
+    display: grid;
+    place-items: center;
+    background: radial-gradient(ellipse at 50% 55%, var(--color-surface-raised), var(--color-bg) 72%);
+    color: var(--color-line);
+  }
+
+  .course-card__lattice {
+    -webkit-mask-image: var(--pattern-lattice), radial-gradient(ellipse at center, transparent 22%, #000 78%);
+    mask-image: var(--pattern-lattice), radial-gradient(ellipse at center, transparent 22%, #000 78%);
+    -webkit-mask-composite: source-in;
+    mask-composite: intersect;
+    -webkit-mask-size:
+      48px 48px,
+      100% 100%;
+    mask-size:
+      48px 48px,
+      100% 100%;
+    background-color: var(--color-line-faint);
+  }
+
+  :global(.course-card__motif) {
+    position: absolute;
+    max-width: none;
+    opacity: 0.7;
+    transition: transform 1.4s var(--ease-out);
+  }
+
+  :global(.course-card__motif--emblem) {
+    width: 92%;
+    opacity: 0.5;
+  }
+
+  :global(.course-card__motif--jian) {
+    width: 128%;
+    left: -14%;
+    transform: rotate(-24deg);
+  }
+
+  :global(.course-card__motif--miaodao) {
+    width: 128%;
+    left: -14%;
+    transform: rotate(24deg) scaleX(-1);
+  }
+
+  .course-card:hover :global(.course-card__motif--emblem) {
+    transform: rotate(22.5deg);
+  }
+
+  .course-card:hover :global(.course-card__motif--jian) {
+    transform: rotate(-28deg);
+  }
+
+  .course-card:hover :global(.course-card__motif--miaodao) {
+    transform: rotate(28deg) scaleX(-1);
+  }
+
+  .course-card__glyph {
+    position: relative;
+    font-family: var(--font-display);
+    font-size: clamp(6rem, 11vw, 8.5rem);
+    font-weight: 700;
+    line-height: 1;
+    background: linear-gradient(170deg, var(--color-text) 10%, var(--color-accent-strong) 48%, var(--color-accent) 85%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    /* 字後面墊一圈底色，讓紋樣的線不穿過筆畫。 */
+    filter: drop-shadow(0 0 14px var(--color-bg)) drop-shadow(0 0 6px var(--color-bg));
+    transition: transform 1.4s var(--ease-out);
+  }
+
+  /* 3D 兵器就緒：單字退到後面當底，讓金屬的反光當主角。 */
+  .course-card__plate[data-weapon3d-state='ready'] .course-card__glyph {
+    opacity: 0.22;
+  }
+
+  .course-card__plate :global(.weapon3d__canvas) {
+    z-index: 1;
+  }
+
+  .course-card:hover .course-card__glyph {
+    transform: scale(1.05);
+  }
+
+  /* ── 文字區 ───────────────────────────────────────── */
+  .course-card__body {
+    position: relative;
+    flex: 1;
+    padding: var(--space-5) var(--space-5) var(--space-6);
+  }
+
+  .course-card__label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    margin: 0 0 var(--space-3);
+    color: var(--color-accent-strong);
+    font-family: var(--font-display);
+    font-size: var(--text-sm);
+    font-weight: 700;
+    letter-spacing: 0.4em;
+  }
+
+  .course-card__label .seal {
+    font-size: 0.8rem;
+  }
+
+  .course-card__title {
+    position: relative;
+    display: table;
+    margin-bottom: var(--space-3);
+    padding-bottom: var(--space-3);
+    font-size: var(--text-2xl);
+    letter-spacing: 0.16em;
+    transition: color 0.3s;
+  }
+
+  .course-card__title::after {
+    content: '';
+    position: absolute;
+    inset: auto 0 0;
+    height: 1px;
+    background: var(--color-accent);
+    transform: scaleX(0.28);
+    transform-origin: left center;
+    transition: transform 0.6s var(--ease-out);
+  }
+
+  .course-card:hover .course-card__title::after,
+  .course-card:focus-within .course-card__title::after {
+    transform: scaleX(1);
+  }
+
+  .course-card__summary {
+    margin: 0;
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+    line-height: 1.8;
+  }
+</style>

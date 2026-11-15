@@ -1,0 +1,59 @@
+---
+// 課程總覽：大人／小孩切換 × 三分類，下方「其他課程」。
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import AudienceCards from '../../components/AudienceCards.astro';
+import CourseCard from '../../components/CourseCard.astro';
+import Plaque from '../../components/Plaque.astro';
+import { getPublishedCourses } from '../../lib/content';
+import { otherCourses } from '../../lib/courses';
+
+const courses = await getPublishedCourses();
+const others = otherCourses(courses);
+---
+
+<BaseLayout title="課程" description="六藝武術工作室的課程：大人與小孩各有兵器、拳術、格鬥三門課，另有巴西柔術與核心瑜珈。">
+  <section class="section section--flush-top" aria-labelledby="page-title">
+    <div class="container">
+      <div class="page-head">
+        <Plaque as="h1" id="page-title" size="page" reveal={false}>課程</Plaque>
+        <p class="lead">兵器、拳術、格鬥，大人和小孩各一門。</p>
+      </div>
+      <h2 class="visually-hidden">兵器、拳術、格鬥</h2>
+      <AudienceCards courses={courses} />
+    </div>
+  </section>
+
+  {
+    others.length > 0 && (
+      <section class="section section--flush-top" aria-labelledby="other-heading">
+        <div class="container">
+          <Plaque id="other-heading">其他課程</Plaque>
+          <ul class="other-grid">
+            {others.map((course, index) => (
+              <li data-reveal style={`--reveal-i:${index}`}>
+                <CourseCard course={course} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+    )
+  }
+</BaseLayout>
+
+<style>
+  .other-grid {
+    display: grid;
+    gap: var(--space-5);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  @media (min-width: 48rem) {
+    .other-grid {
+      grid-template-columns: repeat(3, 1fr);
+      gap: var(--space-6);
+    }
+  }
+</style>

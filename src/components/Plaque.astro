@@ -1,0 +1,23 @@
+---
+// 匾額式標題：金線雙框、四角釘頭，左右各一段回紋。樣式在 src/styles/ornament.css（.plaque）。
+// 標題文字就是 <h1>／<h2> 本身的內容（測試與無障礙名稱都靠它）。
+interface Props {
+  /** 標題層級。 */
+  as?: 'h1' | 'h2';
+  id?: string;
+  /** page = 頁首的大匾；section = 區塊標題。 */
+  size?: 'page' | 'section';
+  /** 進場效果；頁首的匾一開始就在畫面上，傳 false。 */
+  reveal?: boolean;
+}
+
+const { as: Tag = 'h2', id, size = 'section', reveal = true } = Astro.props;
+---
+
+<div class="plaque-row" data-reveal={reveal ? '' : undefined}>
+  <span class="rule" aria-hidden="true"></span>
+  <div class:list={['plaque', { 'plaque--page': size === 'page' }]}>
+    <Tag class="plaque__title" id={id}><slot /></Tag>
+  </div>
+  <span class="rule rule--flip" aria-hidden="true"></span>
+</div>

@@ -1,0 +1,87 @@
+---
+// 找不到頁面：窗櫺底紋上一個大大的「無」字。
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { url } from '../lib/url';
+---
+
+<BaseLayout title="找不到頁面" description="這個網址沒有內容。" noindex>
+  <section class="lost">
+    <span class="lattice lost__lattice" aria-hidden="true"></span>
+    <p class="lost__glyph" aria-hidden="true">無</p>
+    <div class="lost__text">
+      <h1>找不到這一頁</h1>
+      <span class="rule lost__rule" aria-hidden="true"></span>
+      <p class="lead">網址可能打錯了，或是頁面已經搬走。</p>
+      <ul class="lost__actions">
+        <li><a class="button button--solid" href={url('/')}>回首頁</a></li>
+        <li><a class="button" href={url('/courses/')}>看課程</a></li>
+      </ul>
+    </div>
+  </section>
+</BaseLayout>
+
+<style>
+  .lost {
+    position: relative;
+    display: grid;
+    place-items: center;
+    gap: var(--space-5);
+    min-height: calc(var(--stage-height) * 0.9);
+    padding: var(--space-8) var(--gutter);
+    overflow: hidden;
+    text-align: center;
+  }
+
+  .lost__lattice {
+    -webkit-mask-image: var(--pattern-lattice), radial-gradient(ellipse at center, #000, transparent 70%);
+    mask-image: var(--pattern-lattice), radial-gradient(ellipse at center, #000, transparent 70%);
+    -webkit-mask-composite: source-in;
+    mask-composite: intersect;
+    -webkit-mask-size:
+      48px 48px,
+      100% 100%;
+    mask-size:
+      48px 48px,
+      100% 100%;
+  }
+
+  .lost__glyph {
+    position: relative;
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: clamp(10rem, 34vh, 20rem);
+    font-weight: 700;
+    line-height: 1;
+    background: linear-gradient(170deg, var(--color-text) 10%, var(--color-accent-strong) 48%, var(--color-accent) 85%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    filter: drop-shadow(0 0 22px var(--color-bg)) drop-shadow(0 0 10px var(--color-bg));
+  }
+
+  .lost__text {
+    position: relative;
+    display: grid;
+    justify-items: center;
+  }
+
+  .lost__text h1 {
+    padding-inline-start: 0.3em;
+    letter-spacing: 0.3em;
+  }
+
+  .lost__rule {
+    width: 9.625rem;
+    margin-bottom: var(--space-5);
+  }
+
+  .lost__actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--space-4);
+    margin: var(--space-5) 0 0;
+    padding: 0;
+    list-style: none;
+  }
+</style>

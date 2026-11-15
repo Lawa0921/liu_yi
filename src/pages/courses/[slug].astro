@@ -1,0 +1,658 @@
+---
+// 單一課程：名稱與一句話簡介、照片（有才顯示，可用按鈕切換）、內文、子項區塊、影片（有才顯示）、授課教練、相關連結。
+// 內文可能只有兩三句（等業主補文案），版型不能靠內文撐高度：
+// 首屏右側有照片就放照片；沒有照片就放字牌（分類單字＋紋樣），不放任何替代圖。
+import { Image } from 'astro:assets';
+import { render } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import CoachCard from '../../components/CoachCard.astro';
+import Plaque from '../../components/Plaque.astro';
+import VideoSection from '../../components/VideoSection.astro';
+import Weapon from '../../components/ornament/Weapon.astro';
+import Bafang from '../../components/ornament/Bafang.astro';
+import Leitai from '../../components/ornament/Leitai.astro';
+import { coachesOfCourse, getPublishedCoaches, getPublishedCourses, type Course } from '../../lib/content';
+import { AUDIENCE_LABEL, CATEGORY_GLYPH, CATEGORY_LABEL } from '../../lib/courses';
+import { BOOKING_ANCHOR, BOOKING_LABEL } from '../../lib/site';
+import { url } from '../../lib/url';
+
+export async function getStaticPaths() {
+  const courses = await getPublishedCourses();
+  return courses.map((course) => ({ params: { slug: course.id }, props: { course } }));
+}
+
+interface Props {
+  course: Course;
+}
+
+const { course } = Astro.props;
+const { title, summary, photos, subItems, videoUrl, category, audience } = course.data;
+const { Content } = await render(course);
+const coaches = coachesOfCourse(course, await getPublishedCoaches());
+const glyph = category === 'other' ? undefined : CATEGORY_GLYPH[category];
+
+// 子項名稱 → 對應的兵器（只有這三種有；其他名稱就不畫）。
+// 每個子項是一件可轉動的 3D 兵器（設計文件 §15.2-4；src/scripts/weapons3d.ts），線稿是沒有 WebGL／沒有 JS 時的退路。
+const WEAPON_KIND: Record<string, 'jian' | 'miaodao' | 'spear'> = { 中國劍: 'jian', 苗刀: 'miaodao', 大槍: 'spear' };
+---
+
+<BaseLayout title={title} description={`${title}：${summary}`} ogImage={photos[0]?.src} ogType="article">
+  <article class="course">
+    <header class="course-head">
+      <div class="course-head__text">
+        <p class="course-head__label">
+          {
+            glyph && (
+              <span class="seal">
+                <span>{glyph}</span>
+              </span>
+            )
+          }
+          <span>{category === 'other' ? '其他課程' : CATEGORY_LABEL[category]}</span>
+          {audience !== 'all' && <span class="course-head__audience">{AUDIENCE_LABEL[audience]}</span>}
+        </p>
+        <h1 class="course-head__title">{title}</h1>
+        <span class="rule course-head__rule" aria-hidden="true"></span>
+        <p class="lead">{summary}</p>
+        <p class="course-head__cta">
+          <a class="button button--solid" href={BOOKING_ANCHOR} data-line-open>{BOOKING_LABEL}</a>
+        </p>
+      </div>
+
+      {
+        photos.length > 0 ? (
+          <div class="course-head__media cornered" data-gallery-root>
+            <i class="cornered__tick" />
+            <i class="cornered__tick" />
+            <i class="cornered__tick" />
+            <i class="cornered__tick" />
+            {/* 橫向捲動＋scroll-snap：不需要 JS 就能手動切換照片；有 JS 時另有上一張／下一張按鈕（src/scripts/gallery.ts）。 */}
+            <ul class="gallery" data-gallery aria-label={`${title}的照片`} tabindex={photos.length > 1 ? 0 : undefined}>
+              {photos.map((photo, index) => (
+                <li>
+                  <Image
+                    src={photo.src}
+                    alt={photo.alt}
+                    width={1200}
+                    height={900}
+                    fit="cover"
+                    sizes="(min-width: 60rem) 42rem, 95vw"
+                    loading={index === 0 ? 'eager' : 'lazy'}
+                    fetchpriority={index === 0 ? 'high' : undefined}
+                  />
+                </li>
+              ))}
+            </ul>
+            {photos.length > 1 && (
+              <div class="gallery-controls" data-requires-js>
+                <button class="gallery-controls__button" type="button" data-gallery-prev aria-label="上一張照片">
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                    <path d="M20 12H5M11 5.5L4.5 12L11 18.5" />
+                  </svg>
+                </button>
+                <span class="gallery-controls__status" data-gallery-status aria-live="polite">
+                  1 / {photos.length}
+                </span>
+                <button class="gallery-controls__button" type="button" data-gallery-next aria-label="下一張照片">
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                    <path d="M4 12H19M13 5.5L19.5 12L13 18.5" />
+                  </svg>
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          glyph && (
+            <div class="course-head__plate cornered" aria-hidden="true">
+              <i class="cornered__tick" />
+              <i class="cornered__tick" />
+              <i class="cornered__tick" />
+              <i class="cornered__tick" />
+              <span class="lattice course-head__lattice" />
+              {category === 'weapon' && (
+                <>
+                  <Weapon kind="spear" class="course-head__motif course-head__motif--spear" />
+                  <Weapon kind="jian" class="course-head__motif course-head__motif--jian" />
+                  <Weapon kind="miaodao" class="course-head__motif course-head__motif--miaodao" />
+                </>
+              )}
+              {category === 'fist' && <Bafang class="course-head__motif course-head__motif--emblem" />}
+              {category === 'combat' && <Leitai class="course-head__motif course-head__motif--emblem" />}
+              <span class="course-head__glyph">{glyph}</span>
+            </div>
+          )
+        )
+      }
+    </header>
+
+    <section class="section section--tight">
+      <div class="container course-body">
+        <div class="prose" data-course-body>
+          <Content />
+        </div>
+      </div>
+    </section>
+
+    {
+      subItems.length > 0 && (
+        <section class="section section--tight" aria-labelledby="sub-items-heading">
+          <div class="container" data-weapon3d-scope>
+            <Plaque id="sub-items-heading">練什麼</Plaque>
+            <p class="sub-items__hint" data-weapon3d-controls>拖曳轉動</p>
+            <ul class="sub-items" data-sub-items>
+              {subItems.map((item, index) => (
+                <li class="sub-item cornered" data-reveal style={`--reveal-i:${index}`}>
+                  <i class="cornered__tick" />
+                  <i class="cornered__tick" />
+                  <i class="cornered__tick" />
+                  <i class="cornered__tick" />
+                  {WEAPON_KIND[item.name] && (
+                    <span class="sub-item__weapon" data-weapon3d="single" data-weapon-kind={WEAPON_KIND[item.name]}>
+                      <Weapon kind={WEAPON_KIND[item.name]!} class="weapon3d-fallback" />
+                    </span>
+                  )}
+                  <h3 class="sub-item__name">{item.name}</h3>
+                  {item.description && <p class="sub-item__text">{item.description}</p>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+      )
+    }
+
+    <VideoSection videoUrl={videoUrl} courseTitle={title} />
+
+    {
+      coaches.length > 0 && (
+        <section class="section section--tight" aria-labelledby="coach-heading">
+          <div class="container">
+            <Plaque id="coach-heading">授課教練</Plaque>
+            <ul class="course-coaches">
+              {coaches.map((coach) => (
+                <li data-reveal>
+                  <CoachCard coach={coach} />
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+      )
+    }
+
+    <footer class="section section--tight">
+      <div class="container">
+        <span class="hairline" aria-hidden="true" />
+        <ul class="course-links">
+          <li><a class="button button--solid" href={BOOKING_ANCHOR} data-line-open>{BOOKING_LABEL}</a></li>
+          <li><a class="button" href={url('/schedule/')}>課表</a></li>
+          <li><a class="button" href={url('/pricing/')}>收費</a></li>
+          <li><a class="button" href={url('/courses/')}>返回課程總覽</a></li>
+        </ul>
+      </div>
+    </footer>
+  </article>
+</BaseLayout>
+
+<style>
+  /* ── 首屏 ─────────────────────────────────────────── */
+  .course-head {
+    display: grid;
+    gap: var(--space-6);
+    align-items: center;
+    width: min(100% - 2 * var(--gutter), var(--page-width));
+    margin-inline: auto;
+    padding-block: clamp(var(--space-6), 6vw, var(--space-8)) var(--space-6);
+  }
+
+  .course-head__label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    margin: 0 0 var(--space-4);
+    color: var(--color-accent-strong);
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: 0.4em;
+  }
+
+  .course-head__label .seal {
+    font-size: 0.95rem;
+  }
+
+  .course-head__audience {
+    padding-inline-start: var(--space-3);
+    border-inline-start: var(--line) solid var(--color-line);
+    color: var(--color-text-muted);
+  }
+
+  .course-head__title {
+    margin-bottom: var(--space-5);
+    font-size: clamp(3rem, 2rem + 5.5vw, 6rem);
+    line-height: 1.1;
+    letter-spacing: 0.1em;
+    white-space: nowrap;
+  }
+
+  .course-head__rule {
+    width: min(100%, 15.75rem);
+    margin-bottom: var(--space-5);
+  }
+
+  .course-head__cta {
+    margin: var(--space-6) 0 0;
+  }
+
+  /* 照片 */
+  .course-head__media {
+    min-width: 0;
+    border: var(--line) solid var(--color-line-faint);
+    background: var(--color-surface);
+  }
+
+  .gallery {
+    display: flex;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  .gallery::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* 沒有 JS 時沒有按鈕，要留著捲軸讓人知道還有照片。 */
+  :global(html:not(.js)) .gallery {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-accent) transparent;
+  }
+
+  :global(html:not(.js)) .gallery::-webkit-scrollbar {
+    display: block;
+    height: 6px;
+  }
+
+  .gallery li {
+    flex: 0 0 100%;
+    scroll-snap-align: start;
+  }
+
+  .gallery :global(img) {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+  }
+
+  .gallery-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-top: var(--line) solid var(--color-line-faint);
+  }
+
+  .gallery-controls__button {
+    display: grid;
+    place-items: center;
+    width: 3.25rem;
+    height: 2.75rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--color-accent-strong);
+    cursor: pointer;
+    transition:
+      color 0.3s,
+      opacity 0.3s;
+  }
+
+  .gallery-controls__button svg {
+    transition: transform 0.4s var(--ease-out);
+  }
+
+  .gallery-controls__button:not(:disabled):hover {
+    color: var(--color-text);
+  }
+
+  .gallery-controls__button[data-gallery-prev]:not(:disabled):hover svg {
+    transform: translateX(-4px);
+  }
+
+  .gallery-controls__button[data-gallery-next]:not(:disabled):hover svg {
+    transform: translateX(4px);
+  }
+
+  .gallery-controls__button:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+
+  .gallery-controls__status {
+    color: var(--color-text-muted);
+    font-family: var(--font-display);
+    font-size: var(--text-sm);
+    font-weight: 700;
+    letter-spacing: 0.3em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* 字牌（沒有照片的課程） */
+  .course-head__plate {
+    position: relative;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    aspect-ratio: 4 / 3;
+    border: var(--line) solid var(--color-line-faint);
+    background: radial-gradient(ellipse at 50% 55%, var(--color-surface-raised), var(--color-bg) 72%);
+    color: var(--color-line);
+  }
+
+  .course-head__lattice {
+    -webkit-mask-image: var(--pattern-lattice), radial-gradient(ellipse at center, transparent 25%, #000 80%);
+    mask-image: var(--pattern-lattice), radial-gradient(ellipse at center, transparent 25%, #000 80%);
+    -webkit-mask-composite: source-in;
+    mask-composite: intersect;
+    -webkit-mask-size:
+      48px 48px,
+      100% 100%;
+    mask-size:
+      48px 48px,
+      100% 100%;
+    background-color: var(--color-line-faint);
+  }
+
+  :global(.course-head__motif) {
+    position: absolute;
+    max-width: none;
+    opacity: 0.7;
+  }
+
+  :global(.course-head__motif--emblem) {
+    width: 74%;
+    opacity: 0.55;
+  }
+
+  :global(.course-head__motif--spear) {
+    width: 124%;
+    left: -12%;
+    top: 12%;
+    transform: rotate(-9deg);
+  }
+
+  :global(.course-head__motif--jian) {
+    width: 104%;
+    left: -2%;
+    top: 46%;
+    transform: rotate(7deg);
+  }
+
+  :global(.course-head__motif--miaodao) {
+    width: 104%;
+    left: -2%;
+    top: 74%;
+    transform: rotate(-5deg);
+  }
+
+  .course-head__glyph {
+    position: relative;
+    font-family: var(--font-display);
+    font-size: clamp(9rem, 24vw, 17rem);
+    font-weight: 700;
+    line-height: 1;
+    background: linear-gradient(170deg, var(--color-text) 10%, var(--color-accent-strong) 48%, var(--color-accent) 85%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    filter: drop-shadow(0 0 18px var(--color-bg)) drop-shadow(0 0 8px var(--color-bg));
+  }
+
+  @media (min-width: 60rem) {
+    .course-head {
+      grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+      gap: var(--space-8);
+      min-height: min(calc(var(--stage-height) - var(--space-7)), 44rem);
+    }
+  }
+
+  /* 進場：標題由左、照片或字牌擦出。 */
+  @media (prefers-reduced-motion: no-preference) {
+    :global(html.js) .course-head__text > * {
+      animation: course-head-in 0.9s var(--ease-out) both;
+    }
+
+    :global(html.js) .course-head__text > :nth-child(2) {
+      animation-delay: 0.1s;
+    }
+
+    :global(html.js) .course-head__text > :nth-child(3) {
+      animation-delay: 0.2s;
+    }
+
+    :global(html.js) .course-head__text > :nth-child(4) {
+      animation-delay: 0.3s;
+    }
+
+    :global(html.js) .course-head__text > :nth-child(5) {
+      animation-delay: 0.4s;
+    }
+
+    :global(html.js) .course-head__media,
+    :global(html.js) .course-head__plate {
+      animation: course-media-in 1.1s var(--ease-out) 0.15s both;
+    }
+  }
+
+  @keyframes course-head-in {
+    from {
+      opacity: 0;
+      transform: translate3d(-1.5rem, 0, 0);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes course-media-in {
+    from {
+      opacity: 0;
+      transform: translate3d(0, 1.5rem, 0);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* ── 內文 ─────────────────────────────────────────── */
+  .course-body {
+    display: grid;
+    justify-items: center;
+  }
+
+  .course-body .prose {
+    width: 100%;
+  }
+
+  /* 第一段是帶氣氛的一句話：放大、襯線、左側一道金線。 */
+  .course-body .prose > :global(p:first-child) {
+    margin-bottom: var(--space-6);
+    padding-inline-start: var(--space-5);
+    border-inline-start: 2px solid var(--color-accent);
+    color: var(--color-text);
+    font-family: var(--font-display);
+    font-size: var(--text-xl);
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    line-height: 1.7;
+  }
+
+  .course-body .prose :global(p),
+  .course-body .prose :global(li) {
+    color: var(--color-text-muted);
+  }
+
+  .course-body .prose :global(strong) {
+    color: var(--color-text);
+  }
+
+  .course-body .prose :global(h2) {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    color: var(--color-text);
+    letter-spacing: 0.2em;
+  }
+
+  .course-body .prose :global(h2)::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, var(--color-line), transparent);
+  }
+
+  .course-body .prose :global(h3) {
+    color: var(--color-accent-strong);
+    letter-spacing: 0.16em;
+  }
+
+  .course-body .prose :global(ul) {
+    padding: 0;
+    list-style: none;
+  }
+
+  .course-body .prose :global(li) {
+    position: relative;
+    padding-inline-start: 1.4em;
+  }
+
+  .course-body .prose :global(li + li) {
+    margin-top: var(--space-2);
+  }
+
+  .course-body .prose :global(li)::before {
+    content: '';
+    position: absolute;
+    left: 0.15em;
+    top: 0.72em;
+    width: 0.4em;
+    height: 0.4em;
+    background: var(--color-accent);
+    transform: rotate(45deg);
+  }
+
+  /* ── 子項：一列一件，像兵器架。名稱與兵器各佔一格（兵器不壓到名稱）；
+        兵器是 3D（沒有 WebGL／JS 時是線稿），整件裝在自己的那一格裡 ── */
+  .sub-items {
+    display: grid;
+    gap: var(--space-4);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .sub-items__hint {
+    margin: 0 0 var(--space-4);
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+    letter-spacing: 0.3em;
+    text-align: center;
+  }
+
+  .sub-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-2);
+    padding: var(--space-4);
+    border: var(--line) solid var(--color-line-faint);
+    background: radial-gradient(ellipse at 60% 50%, var(--color-surface-raised), var(--color-surface) 70%);
+  }
+
+  .sub-item__name {
+    grid-row: 1;
+    margin: 0;
+    font-size: clamp(1.5rem, 6vw, 2.75rem);
+    letter-spacing: 0.3em;
+    white-space: nowrap;
+  }
+
+  /* 兵器自己的一格（畫布與線稿都在這裡面）。手機：名稱在上、兵器在下，給它一塊近乎方形的空間斜放。 */
+  .sub-item__weapon {
+    grid-row: 2;
+    position: relative;
+    height: min(100vw, 26rem);
+    color: var(--color-accent-strong);
+  }
+
+  .sub-item__weapon :global(svg) {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    width: 100%;
+    max-width: none;
+    transform: translateY(-50%) rotate(-4deg);
+  }
+
+  /* 大槍三公尺長，桿子從左緣出去：左緣漸隱，看起來是「還有很長」而不是被切斷。 */
+  .sub-item__weapon[data-weapon-kind='spear'] :global(canvas) {
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 16%);
+    mask-image: linear-gradient(90deg, transparent, #000 16%);
+  }
+
+  .sub-item__text {
+    grid-column: 1 / -1;
+    margin: 0;
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+  }
+
+  /* 桌機：名稱直書在左、兵器橫陳在右。 */
+  @media (min-width: 48rem) {
+    .sub-items {
+      gap: var(--space-5);
+    }
+
+    .sub-item {
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: center;
+      gap: var(--space-2) var(--space-6);
+      padding: var(--space-4) var(--space-5) var(--space-4) var(--space-7);
+    }
+
+    .sub-item__name {
+      grid-column: 1;
+      writing-mode: vertical-rl;
+    }
+
+    .sub-item__weapon {
+      grid-row: 1;
+      grid-column: 2;
+      height: clamp(14rem, 22vw, 17rem);
+    }
+  }
+
+  /* ── 教練、連結 ───────────────────────────────────── */
+  .course-coaches {
+    display: grid;
+    justify-content: center;
+    grid-template-columns: repeat(auto-fit, minmax(0, 17rem));
+    gap: var(--space-5);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .course-links {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--space-4);
+    margin: var(--space-7) 0 0;
+    padding: 0;
+    list-style: none;
+  }
+</style>

@@ -1,0 +1,176 @@
+---
+// 頁尾：海水紋帶、題字、導覽、聯絡方式（只有 Facebook 與 LINE QR）。
+// #line 是「預約體驗」在沒有 JavaScript 時的落點，id 不要改。
+// 地址、電話、營業時間等業主提供後再加（設計文件 §5、§13-4）；沒有就不顯示，不留空位。
+import { Image } from 'astro:assets';
+import titleArt from '../assets/images/text_transparent.png';
+import lineQr from '../assets/images/line.png';
+import { NAV_ITEMS, SITE } from '../lib/site';
+import { url } from '../lib/url';
+---
+
+<footer class="site-footer">
+  <div class="site-footer__waves" aria-hidden="true">
+    <span class="wave-band wave-band--back"></span>
+    <span class="wave-band"></span>
+  </div>
+
+  <div class="container site-footer__inner">
+    <div class="site-footer__brand">
+      <Image src={titleArt} alt={SITE.name} width={480} class="site-footer__title" />
+      <p class="site-footer__tagline">{SITE.tagline}</p>
+      <nav aria-label="頁尾導覽">
+        <ul class="site-footer__nav">
+          {
+            NAV_ITEMS.map((item) => (
+              <li>
+                <a href={url(item.path)}>{item.label}</a>
+              </li>
+            ))
+          }
+        </ul>
+      </nav>
+    </div>
+
+    <section id="line" class="site-footer__contact" aria-labelledby="line-heading">
+      <div class="site-footer__qr">
+        <Image src={lineQr} alt="六藝武術工作室的 LINE 好友 QR code" width={200} height={200} format="png" />
+      </div>
+      <div>
+        <h2 id="line-heading">預約體驗</h2>
+        <p>用 LINE 掃描 QR code，或直接點下面的連結加入好友，傳訊息預約或詢問課程。</p>
+        <p>
+          <a class="text-link" href={SITE.lineUrl} target="_blank" rel="noopener noreferrer">用 LINE 加入</a>
+        </p>
+        <p>
+          <a class="text-link" href={SITE.facebookUrl} target="_blank" rel="noopener noreferrer">Facebook 粉絲專頁</a>
+        </p>
+      </div>
+    </section>
+  </div>
+
+  <div class="container">
+    <span class="rule rule--faint" aria-hidden="true"></span>
+    <p class="site-footer__copyright">&copy; {SITE.name}</p>
+  </div>
+</footer>
+
+<style>
+  .site-footer {
+    position: relative;
+    margin-top: var(--space-6);
+    padding-bottom: var(--space-6);
+    background: linear-gradient(var(--color-bg), var(--color-deep));
+  }
+
+  .site-footer__waves {
+    display: grid;
+    margin-bottom: var(--space-7);
+    border-bottom: var(--line) solid var(--color-line-faint);
+  }
+
+  .site-footer__waves > * {
+    grid-area: 1 / 1;
+    align-self: end;
+  }
+
+  .site-footer__inner {
+    display: grid;
+    gap: var(--space-7);
+    align-items: start;
+    margin-bottom: var(--space-7);
+  }
+
+  .site-footer__title {
+    width: min(100%, 22rem);
+    /* 題字圖檔左側有留白，往左收一點才會跟下面的字對齊。 */
+    margin-inline-start: -6%;
+  }
+
+  .site-footer__tagline {
+    margin: var(--space-2) 0 var(--space-5);
+    color: var(--color-text-muted);
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: 0.5em;
+  }
+
+  .site-footer__nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-5);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .site-footer__nav a {
+    display: inline-block;
+    padding-block: var(--space-2);
+    color: var(--color-text);
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: 0.3em;
+    text-decoration: none;
+    transition: color 0.3s;
+  }
+
+  .site-footer__nav a:hover {
+    color: var(--color-accent-strong);
+  }
+
+  .site-footer__contact {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-5);
+    align-items: center;
+    scroll-margin-top: calc(var(--frame-top) + var(--space-5));
+  }
+
+  .site-footer__contact > div:last-child {
+    flex: 1 1 14rem;
+  }
+
+  .site-footer__contact h2 {
+    margin-bottom: var(--space-3);
+    font-size: var(--text-xl);
+    letter-spacing: 0.3em;
+  }
+
+  .site-footer__contact p {
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+  }
+
+  .site-footer__qr {
+    flex: none;
+    width: 9.5rem;
+    padding: var(--space-2);
+    background: var(--color-text);
+    outline: var(--line) solid var(--color-line);
+    outline-offset: 5px;
+  }
+
+  .site-footer__qr :global(img) {
+    width: 100%;
+  }
+
+  .site-footer__copyright {
+    margin: var(--space-4) 0 0;
+    color: var(--color-text-muted);
+    font-size: var(--text-xs);
+    letter-spacing: 0.2em;
+  }
+
+  @media (min-width: 60rem) {
+    .site-footer__inner {
+      grid-template-columns: 1fr 1fr;
+      gap: var(--space-8);
+    }
+
+    .site-footer__inner,
+    .site-footer > .container {
+      width: min(100% - 9rem, var(--page-width));
+    }
+  }
+</style>

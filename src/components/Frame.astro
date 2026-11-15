@@ -1,0 +1,31 @@
+---
+// 固定外框：金線框、四角回紋角飾、下緣的捲動提示與進度線、全站顆粒。樣式在 src/styles/chrome.css。
+// 純裝飾，全部 aria-hidden；「預約體驗」按鈕本身在 Header.astro 的導覽裡，桌機以 CSS 定位到下緣。
+import Corner from './ornament/Corner.astro';
+---
+
+<div class="frame" aria-hidden="true">
+  <span class="frame__line"></span>
+  <Corner class="frame__corner frame__corner--tl" />
+  <Corner class="frame__corner frame__corner--tr" />
+  <Corner class="frame__corner frame__corner--bl" />
+  <Corner class="frame__corner frame__corner--br" />
+</div>
+
+<div class="frame-foot" aria-hidden="true">
+  <span class="frame-foot__progress"></span>
+  <span class="frame-foot__hint">
+    <span>向下捲動</span>
+    <span class="frame-foot__hint-line"></span>
+  </span>
+</div>
+
+<div class="grain" aria-hidden="true"></div>
+
+{/* 方印的毛邊濾鏡（ornament.css 的 .seal 使用）。 */}
+<svg class="visually-hidden" aria-hidden="true" focusable="false" width="0" height="0">
+  <filter id="seal-rough" x="-10%" y="-10%" width="120%" height="120%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" result="noise"></feTurbulence>
+    <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.6" xChannelSelector="R" yChannelSelector="G"></feDisplacementMap>
+  </filter>
+</svg>

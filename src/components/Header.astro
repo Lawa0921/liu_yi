@@ -1,0 +1,357 @@
+---
+// 頁首：獅徽、導覽、常駐的「預約體驗」。它是固定外框的上緣（外框線與角飾在 Frame.astro）。
+//   桌機：獅徽與站名在左、導覽在右；「預約體驗」雖然是導覽的一部分，但以 CSS 固定在外框下緣。
+//   手機（有 JS）：只剩獅徽與漢堡鈕，選單展開成全螢幕，五個項目直書並排（由右至左）。
+//   手機（沒 JS）：頁首不固定，導覽直接橫排在頁面上方。
+// 標記與 data-* 屬性是測試與 src/scripts/site-chrome.ts 的約定，請保留。
+import { Image } from 'astro:assets';
+import emblem from '../assets/images/logo_transparent.png';
+import { BOOKING_ANCHOR, BOOKING_LABEL, NAV_ITEMS, SITE } from '../lib/site';
+import { url } from '../lib/url';
+
+const current = Astro.url.pathname;
+const isCurrent = (path: string) => current.startsWith(url(path));
+---
+
+<header class="site-header">
+  <div class="site-header__inner">
+    <a class="site-header__brand" href={url('/')}>
+      <Image src={emblem} alt="" width={96} height={96} fit="cover" loading="eager" class="site-header__emblem" />
+      <span class="site-header__name">{SITE.name}</span>
+    </a>
+
+    <button
+      class="site-header__toggle"
+      type="button"
+      data-nav-toggle
+      data-requires-js
+      aria-expanded="false"
+      aria-controls="site-nav"
+      aria-label="開啟選單"
+    >
+      <span class="site-header__bars" aria-hidden="true"><i></i><i></i><i></i></span>
+    </button>
+
+    <nav id="site-nav" class="site-nav" aria-label="主要導覽">
+      <span class="site-nav__lattice lattice" aria-hidden="true"></span>
+      <ul class="site-nav__list">
+        {
+          NAV_ITEMS.map((item, index) => (
+            <li style={`--i:${index}`}>
+              <a href={url(item.path)} aria-current={isCurrent(item.path) ? 'page' : undefined}>
+                {item.label}
+              </a>
+            </li>
+          ))
+        }
+      </ul>
+      <a class="button button--solid site-nav__cta" href={BOOKING_ANCHOR} data-line-open>{BOOKING_LABEL}</a>
+    </nav>
+  </div>
+</header>
+
+<style>
+  .site-header {
+    position: relative;
+    z-index: 50;
+    background: var(--color-bg);
+    border-bottom: var(--line) solid var(--color-line-faint);
+  }
+
+  .site-header__inner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2) var(--space-5);
+    min-height: var(--frame-top);
+    padding: var(--space-2) var(--gutter);
+  }
+
+  .site-header__brand {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-3);
+    color: var(--color-text);
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: 0.22em;
+    text-decoration: none;
+  }
+
+  .site-header__emblem {
+    width: auto;
+    height: 2.5rem;
+    transition: transform 0.9s var(--ease-out);
+  }
+
+  .site-header__brand:hover .site-header__emblem {
+    transform: rotate(-12deg);
+  }
+
+  .site-header__toggle {
+    display: grid;
+    place-items: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    margin-inline-end: -0.5rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--color-accent-strong);
+    cursor: pointer;
+  }
+
+  .site-header__bars {
+    position: relative;
+    display: block;
+    width: 1.625rem;
+    height: 1rem;
+  }
+
+  .site-header__bars i {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    height: 1.5px;
+    background: currentColor;
+    transition:
+      transform 0.45s var(--ease-out),
+      opacity 0.3s;
+  }
+
+  .site-header__bars i:nth-child(1) {
+    top: 0;
+  }
+
+  .site-header__bars i:nth-child(2) {
+    top: calc(50% - 0.75px);
+    transform: scaleX(0.6);
+    transform-origin: right center;
+  }
+
+  .site-header__bars i:nth-child(3) {
+    bottom: 0;
+  }
+
+  .site-header__toggle[aria-expanded='true'] i:nth-child(1) {
+    transform: translateY(calc(0.5rem - 0.75px)) rotate(45deg);
+  }
+
+  .site-header__toggle[aria-expanded='true'] i:nth-child(2) {
+    opacity: 0;
+  }
+
+  .site-header__toggle[aria-expanded='true'] i:nth-child(3) {
+    transform: translateY(calc(-0.5rem + 0.75px)) rotate(-45deg);
+  }
+
+  .site-nav {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3) var(--space-5);
+  }
+
+  .site-nav__lattice {
+    display: none;
+  }
+
+  .site-nav__list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-5);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .site-nav__list a {
+    position: relative;
+    display: inline-block;
+    padding: var(--space-2) 0;
+    color: var(--color-text);
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: 0.3em;
+    text-decoration: none;
+    transition: color 0.3s;
+  }
+
+  .site-nav__list a:hover,
+  .site-nav__list a[aria-current='page'] {
+    color: var(--color-accent-strong);
+  }
+
+  /* ── 桌機：固定在外框上緣 ───────────────────────────── */
+  @media (min-width: 60rem) {
+    .site-header {
+      position: fixed;
+      inset: var(--frame-inset) var(--frame-inset) auto;
+      height: calc(var(--frame-top) - var(--frame-inset));
+    }
+
+    .site-header__inner {
+      flex-wrap: nowrap;
+      height: 100%;
+      min-height: 0;
+      padding: 0 4.5rem;
+    }
+
+    .site-header__toggle {
+      display: none;
+    }
+
+    .site-nav__list {
+      flex-wrap: nowrap;
+      gap: var(--space-6);
+    }
+
+    .site-nav__list a {
+      /* 字距補償，讓底線對齊字面。 */
+      margin-inline-end: -0.3em;
+    }
+
+    .site-nav__list a::after {
+      content: '';
+      position: absolute;
+      inset: auto 0.3em 0.2rem 0;
+      height: 1px;
+      background: var(--color-accent);
+      transform: scaleX(0);
+      transform-origin: left center;
+      transition: transform 0.45s var(--ease-out);
+    }
+
+    .site-nav__list a:hover::after,
+    .site-nav__list a[aria-current='page']::after {
+      transform: scaleX(1);
+    }
+
+    /* 「預約體驗」：固定在外框下緣右側。 */
+    .site-nav__cta {
+      position: fixed;
+      right: calc(var(--frame-inset) + 4.5rem);
+      bottom: calc(var(--frame-inset) + (var(--frame-bottom) - var(--frame-inset) - 2rem) / 2);
+      min-height: 2rem;
+      padding-block: 0;
+      font-size: var(--text-sm);
+    }
+  }
+
+  /* ── 手機，有 JS：固定細條＋全螢幕選單 ─────────────── */
+  @media (max-width: 59.999rem) {
+    :global(html.js) .site-header {
+      position: fixed;
+      inset: 0 0 auto;
+      height: var(--frame-top);
+    }
+
+    :global(html.js) .site-header__inner {
+      flex-wrap: nowrap;
+      height: 100%;
+      min-height: 0;
+      padding-block: 0;
+    }
+
+    :global(html.js) .site-header__name {
+      font-size: var(--text-sm);
+    }
+
+    :global(html.js) .site-nav {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      flex-direction: column;
+      flex-wrap: nowrap;
+      justify-content: center;
+      gap: var(--space-7);
+      padding: calc(var(--frame-top) + var(--space-5)) var(--gutter) var(--space-7);
+      background: var(--color-bg);
+      visibility: hidden;
+      opacity: 0;
+      transition:
+        opacity 0.4s var(--ease-out),
+        visibility 0s linear 0.4s;
+    }
+
+    :global(html.js) .site-nav.is-open {
+      visibility: visible;
+      opacity: 1;
+      transition:
+        opacity 0.4s var(--ease-out),
+        visibility 0s;
+    }
+
+    :global(html.js) .site-nav__lattice {
+      display: block;
+      -webkit-mask-image: var(--pattern-lattice), linear-gradient(transparent, #000 45%, transparent);
+      mask-image: var(--pattern-lattice), linear-gradient(transparent, #000 45%, transparent);
+      -webkit-mask-composite: source-in;
+      mask-composite: intersect;
+      -webkit-mask-size:
+        48px 48px,
+        100% 100%;
+      mask-size:
+        48px 48px,
+        100% 100%;
+    }
+
+    /* 五個項目直書並排，由右至左讀。 */
+    :global(html.js) .site-nav__list {
+      position: relative;
+      flex-direction: row-reverse;
+      flex-wrap: nowrap;
+      justify-content: center;
+      gap: 0;
+    }
+
+    :global(html.js) .site-nav__list li + li {
+      border-inline-end: var(--line) solid var(--color-line-faint);
+    }
+
+    :global(html.js) .site-nav__list a {
+      writing-mode: vertical-rl;
+      padding: var(--space-5) clamp(0.6rem, 3.4vw, 1.25rem);
+      font-size: clamp(1.75rem, 8.5vw, 2.75rem);
+      letter-spacing: 0.35em;
+      line-height: 1.2;
+    }
+
+    :global(html.js) .site-nav__cta {
+      position: relative;
+      align-self: center;
+      min-width: 14rem;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      :global(html.js) .site-nav.is-open li {
+        animation: nav-item-in 0.7s var(--ease-out) both;
+        animation-delay: calc(var(--i) * 70ms + 80ms);
+      }
+
+      :global(html.js) .site-nav.is-open .site-nav__cta {
+        animation: nav-item-in 0.7s var(--ease-out) 0.5s both;
+      }
+    }
+  }
+
+  /* ── 手機，沒 JS：導覽直接展開 ───────────────────────── */
+  @media (max-width: 59.999rem) {
+    :global(html:not(.js)) .site-nav {
+      flex-basis: 100%;
+      justify-content: space-between;
+    }
+  }
+
+  @keyframes nav-item-in {
+    from {
+      opacity: 0;
+      transform: translate3d(0, -1.5rem, 0);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+</style>

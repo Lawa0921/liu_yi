@@ -1,0 +1,103 @@
+---
+// 「預約體驗」的 LINE QR 視窗。由 src/scripts/site-chrome.ts 的 initLineDialog 開啟；
+// 用原生 <dialog>：Esc 關閉、焦點管理都由瀏覽器處理。
+import { Image } from 'astro:assets';
+import lineQr from '../assets/images/line.png';
+import { SITE } from '../lib/site';
+---
+
+<dialog id="line-dialog" class="line-dialog" aria-labelledby="line-dialog-title">
+  <div class="line-dialog__inner cornered">
+    <i class="cornered__tick"></i>
+    <i class="cornered__tick"></i>
+    <i class="cornered__tick"></i>
+    <i class="cornered__tick"></i>
+    <h2 id="line-dialog-title" class="line-dialog__title">預約體驗</h2>
+    <span class="rule line-dialog__rule" aria-hidden="true"></span>
+    <p>用 LINE 掃描 QR code，或直接點下面的按鈕加入好友，傳訊息預約或詢問課程。</p>
+    <div class="line-dialog__qr">
+      <Image src={lineQr} alt={`${SITE.name}的 LINE 好友 QR code`} width={320} height={320} format="png" loading="lazy" />
+    </div>
+    <p class="line-dialog__actions">
+      <a class="button button--solid" href={SITE.lineUrl} target="_blank" rel="noopener noreferrer">用 LINE 加入</a>
+    </p>
+    <form method="dialog">
+      <button class="button" type="submit">關閉</button>
+    </form>
+  </div>
+</dialog>
+
+<style>
+  .line-dialog {
+    width: min(100% - 2 * var(--gutter), 26rem);
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--color-text);
+    text-align: center;
+    overflow: visible;
+  }
+
+  .line-dialog__inner {
+    padding: var(--space-6) var(--space-6) var(--space-6);
+    border: var(--line) solid var(--color-line);
+    background: var(--color-surface);
+  }
+
+  .line-dialog::backdrop {
+    background: var(--color-veil);
+  }
+
+  .line-dialog__title {
+    margin-bottom: var(--space-3);
+    padding-inline-start: 0.4em;
+    font-size: var(--text-2xl);
+    letter-spacing: 0.4em;
+  }
+
+  .line-dialog__rule {
+    width: 7rem;
+    margin: 0 auto var(--space-4);
+  }
+
+  .line-dialog p {
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+  }
+
+  .line-dialog__qr {
+    width: min(100%, 15rem);
+    margin: 0 auto var(--space-5);
+    padding: var(--space-3);
+    background: var(--color-text);
+  }
+
+  .line-dialog__qr :global(img) {
+    width: 100%;
+  }
+
+  .line-dialog .line-dialog__actions {
+    margin-bottom: var(--space-3);
+  }
+
+  .line-dialog .button {
+    width: min(100%, 15rem);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .line-dialog[open] .line-dialog__inner {
+      animation: line-dialog-in 0.5s var(--ease-out) both;
+    }
+  }
+
+  @keyframes line-dialog-in {
+    from {
+      opacity: 0;
+      transform: translate3d(0, 1.25rem, 0);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+</style>

@@ -1,0 +1,72 @@
+/*
+ * 第二版的共用樣式（設計文件 §15）：3D 兵器的畫布、刀光層、震腳。
+ * 約定：
+ *   [data-weapon3d]                           3D 兵器的宿主（src/scripts/weapons3d.ts）
+ *   [data-weapon3d-scope]                     包住宿主與它的線稿退路、操作列的範圍
+ *   data-weapon3d-state="ready|fallback"      標在宿主與範圍上；沒有這個屬性＝還沒載（或沒有 JS），顯示線稿
+ */
+
+.weapon3d__canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* 橫向拖曳用來轉兵器，直向仍是捲頁。 */
+  touch-action: pan-y;
+  cursor: grab;
+  outline-offset: -4px;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+.weapon3d__canvas[aria-hidden='true'] {
+  pointer-events: none;
+  cursor: auto;
+}
+
+[data-dragging] > .weapon3d__canvas {
+  cursor: grabbing;
+}
+
+/* 3D 就緒後，同一範圍裡的線稿退場；只有 3D 才用得到的操作列這時才出現。 */
+[data-weapon3d-state='ready'] .weapon3d-fallback {
+  visibility: hidden;
+}
+
+[data-weapon3d-scope]:not([data-weapon3d-state='ready']) [data-weapon3d-controls] {
+  display: none;
+}
+
+/* ── 刀光層：整個視窗的一張畫布，純視覺 ─────────────── */
+
+.slash-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  width: 100%;
+  height: 100%;
+  /* 不擋點擊、不攔截捲動。 */
+  pointer-events: none;
+}
+
+/* 揮刀的那一下不反白文字（src/scripts/slash.ts 在快速拖曳時加上、放開就拿掉）。 */
+html.is-slashing,
+html.is-slashing * {
+  user-select: none;
+}
+
+/* ── 震腳：八方紋震開的圈 ───────────────────────────── */
+
+.stomp-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--emblem, 20rem);
+  height: var(--emblem, 20rem);
+  max-width: none;
+  margin: calc(var(--emblem, 20rem) / -2) 0 0 calc(var(--emblem, 20rem) / -2);
+  color: var(--color-accent-strong);
+  pointer-events: none;
+  opacity: 0;
+}
