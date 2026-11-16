@@ -2,12 +2,12 @@ import { expect, test, type Page } from '@playwright/test';
 import { shockwave } from '../../src/qi/engine/effects';
 import type { QiStage } from '../../src/qi/engine/qi-stage';
 
-// 試作四項補強與開場演出（Task 16）：換招拖尾、落地衝擊波、開場吸氣流線、大槍桿與紅纓，跑在開發用的 harness 頁。
+// 試作四項補強與開場演出（Task 16）：換招拖尾、落地衝擊波、開場吸氣流線、大槍桿與紅纓，跑在測試專用的 harness 頁（/__test/qi-harness/，只在 npm run build:harness 的 dist-harness 裡，由 playwright 的 engine project 服務）。
 // 與 qi-engine.spec 同一套規矩：headless 的 WebGL 是軟體繪製，一律 ?qi-tier=min&qi-debug=1，時間用停住的假時鐘、
 // 只有 runFor 會推進；不碰 OS 層級的滑鼠鍵盤。
 test.describe.configure({ mode: 'default', timeout: 120_000 });
 
-const HARNESS = './lab/qi-harness/?qi-tier=min&qi-debug=1';
+const HARNESS = './__test/qi-harness/?qi-tier=min&qi-debug=1';
 const T0 = new Date('2026-01-01T08:00:00');
 const T1 = new Date('2026-01-01T09:00:00');
 const READY = { timeout: 30_000 };

@@ -4,6 +4,7 @@ import sitemap from '@astrojs/sitemap';
 import { resolveDeployTarget } from './deploy-target.mjs';
 import { twkaiGuard } from './integrations/twkai-guard.ts';
 import { qiAssets } from './integrations/qi-assets.ts';
+import { QI_HARNESS_PATH, qiHarness } from './integrations/qi-harness.ts';
 
 // site／base／outDir 的預設值與環境變數覆寫都在 deploy-target.mjs。
 const { site, base, outDir } = resolveDeployTarget(process.env);
@@ -15,13 +16,15 @@ export default defineConfig({
   output: 'static',
   trailingSlash: 'always',
   build: { format: 'directory' },
-  // /lab/ 底下是給業主看方向的拋棄式試作，不進 sitemap。
+  // /lab/（拋棄式試作的位置，已移除）與引擎 e2e 的 harness 路徑都不進 sitemap。
   integrations: [
-    sitemap({ filter: (page) => !page.includes('/lab/') }),
+    sitemap({ filter: (page) => !page.includes('/lab/') && !page.includes(`${QI_HARNESS_PATH}/`) }),
     // 建置時產出「氣」首頁的形體檔（src/assets/generated/qi/shapes/，已忽略；輸入雜湊不變就跳過）。
     qiAssets(),
     // 建置時檢查頁面用字都在 TW-Kai 子集內（TWKAI_GUARD=warn 時只警告）。
     twkaiGuard(),
+    // 引擎 e2e 的 harness 頁：只有 QI_HARNESS=1（npm run build:harness）才註冊，一般建置與部署沒有這一頁。
+    qiHarness(),
   ],
   image: {
     // <Image>／<Picture> 預設輸出 srcset 與 sizes；原圖最大 4080px，不會原尺寸輸出。

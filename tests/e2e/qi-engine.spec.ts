@@ -1,12 +1,12 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { QiStage } from '../../src/qi/engine/qi-stage';
 
-// 「氣」光點引擎核心（Task 15）：GPGPU 模擬、掌風、換招衝量、光暈，跑在開發用的 harness 頁。
+// 「氣」光點引擎核心（Task 15）：GPGPU 模擬、掌風、換招衝量、光暈，跑在測試專用的 harness 頁（/__test/qi-harness/，只在 npm run build:harness 的 dist-harness 裡，由 playwright 的 engine project 服務）。
 // headless 的 WebGL 是軟體繪製（SwiftShader）：一律 ?qi-tier=min&qi-debug=1（光暈那一個測試除外），
 // 時間用停住的假時鐘，只有 runFor 會推進；不碰 OS 層級的滑鼠鍵盤（page.mouse 是 CDP 在頁面內送事件）。
 test.describe.configure({ mode: 'default', timeout: 120_000 });
 
-const HARNESS = './lab/qi-harness/?qi-tier=min&qi-debug=1';
+const HARNESS = './__test/qi-harness/?qi-tier=min&qi-debug=1';
 const T0 = new Date('2026-01-01T08:00:00');
 const T1 = new Date('2026-01-01T09:00:00');
 const READY = { timeout: 30_000 };
@@ -349,7 +349,7 @@ test.describe('光點引擎核心（桌機，tier=min）', () => {
   });
 
   test('沒有 ?qi-debug=1：stage.debug 不存在', async ({ page }) => {
-    await open(page, './lab/qi-harness/?qi-tier=min');
+    await open(page, './__test/qi-harness/?qi-tier=min');
     expect(await page.evaluate(() => 'debug' in (window as unknown as W).__qiStage)).toBe(false);
     await page.evaluate(() => (window as unknown as W).__qiStage.setPose('land'));
     await run(page, 500);
@@ -360,7 +360,7 @@ test.describe('光暈（桌機級 tier=high）', () => {
   test.use({ viewport: { width: 960, height: 600 } });
 
   test('開光暈時走 RT 與合成：畫面有東西、場景 RT 是全解析度（點大小不縮），光暈讓涵蓋面積比 min 大', async ({ page }) => {
-    await open(page, './lab/qi-harness/?qi-tier=high&qi-debug=1');
+    await open(page, './__test/qi-harness/?qi-tier=high&qi-debug=1');
     expect(await page.evaluate(() => stageOf().debug.tier())).toBe('high');
     await setPose(page, 'land');
     await run(page, 1500);
@@ -383,7 +383,7 @@ test.describe('光暈場景 RT 的比例（降級要有減載台階，Task 16 �
   test.use({ viewport: { width: 640, height: 400 } });
 
   test('mid 在 DPR 1：0.75（點大小同步縮到 0.75）；mid → high 回到 1；降到 min（沒有光暈）是 1', async ({ page }) => {
-    await open(page, './lab/qi-harness/?qi-tier=mid&qi-debug=1');
+    await open(page, './__test/qi-harness/?qi-tier=mid&qi-debug=1');
     await setPose(page, 'land');
     let u = await uniforms(page);
     expect(u.glow).toBe(1);
@@ -407,7 +407,7 @@ test.describe('光暈場景 RT 的比例（高 DPR）', () => {
   test.use({ viewport: { width: 640, height: 400 }, deviceScaleFactor: 2 });
 
   test('high 在 DPR 2：0.75（renderer 的 pixel ratio 上限 1.75，點大小 = 1.75 × 0.75）；mid 同樣 0.75', async ({ page }) => {
-    await open(page, './lab/qi-harness/?qi-tier=high&qi-debug=1');
+    await open(page, './__test/qi-harness/?qi-tier=high&qi-debug=1');
     await setPose(page, 'land');
     let u = await uniforms(page);
     expect(u.glow).toBe(1);
@@ -448,7 +448,7 @@ test.describe('減少動態（reducedMotion）', () => {
   });
 
   test('光暈退路：連半精度的 render target 都沒有（兩個浮點擴充都不在）→ 退成不開光暈，不是黑畫面', async ({ page }) => {
-    await open(page, './lab/qi-harness/?qi-tier=high&qi-debug=1', { blockExtensions: ['EXT_color_buffer_float', 'EXT_color_buffer_half_float'] });
+    await open(page, './__test/qi-harness/?qi-tier=high&qi-debug=1', { blockExtensions: ['EXT_color_buffer_float', 'EXT_color_buffer_half_float'] });
     await setPose(page, 'land');
     const u = await uniforms(page);
     expect(u.glow).toBe(0);
@@ -459,7 +459,7 @@ test.describe('減少動態（reducedMotion）', () => {
   });
 
   test('對照組：擴充都在時，同樣的設定會開光暈', async ({ page }) => {
-    await open(page, './lab/qi-harness/?qi-tier=high&qi-debug=1');
+    await open(page, './__test/qi-harness/?qi-tier=high&qi-debug=1');
     await setPose(page, 'land');
     const u = await uniforms(page);
     expect(u.glow).toBe(1);
@@ -486,7 +486,7 @@ test.describe('半精度退路（沒有 EXT_color_buffer_float 的裝置，例�
   });
 
   test('tier=mid（光暈）：半精度的模擬加半精度的光暈 RT 一起跑，不黑畫面', async ({ page }) => {
-    await open(page, './lab/qi-harness/?qi-tier=mid&qi-debug=1', NO_FLOAT);
+    await open(page, './__test/qi-harness/?qi-tier=mid&qi-debug=1', NO_FLOAT);
     await setPose(page, 'land');
     await run(page, 3000);
     const u = await uniforms(page);
@@ -553,8 +553,8 @@ test.describe('資源不洩漏', () => {
 // 並發出 `window` 的 `qi:tier` 事件（detail 是新的 tier）。harness 把它鏡射到 `html[data-qi-tier]`（正式首頁的接線見 home-engine.spec）。
 test.describe('依 fps 自動降級', () => {
   test.use({ viewport: { width: 640, height: 400 } });
-  const HIGH = './lab/qi-harness/?qi-tier=high&qi-debug=1';
-  const LOW = './lab/qi-harness/?qi-tier=low&qi-debug=1';
+  const HIGH = './__test/qi-harness/?qi-tier=high&qi-debug=1';
+  const LOW = './__test/qi-harness/?qi-tier=low&qi-debug=1';
 
   interface TierEvent {
     tier: string;
@@ -657,7 +657,7 @@ test.describe('依 fps 自動降級', () => {
   });
 
   test('?qi-tier=bogus 退回 initialTier 的結果（640 寬、非觸控 → low），調速器從實際的 tier 起算（low → min）', async ({ page }) => {
-    await open(page, './lab/qi-harness/?qi-tier=bogus&qi-debug=1');
+    await open(page, './__test/qi-harness/?qi-tier=bogus&qi-debug=1');
     expect(await page.evaluate(() => stageOf().debug.tier())).toBe('low');
     const fed = await feed(page, 40, 20_000);
     expect(fed.events.map((e) => e.tier)).toEqual(['min']);
