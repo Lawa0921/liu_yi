@@ -63,8 +63,10 @@ export interface QiStage {
    * `land`、`lift` 形體載入完成才開始計時；演完（約 3.4 秒）自動結束。`{ skip: true }` ＝ 立刻收尾：不播任何特效，
    * 停在 `land`（正在演才有作用；也取消還在等形體載入的開場）。演出中（或等形體載入中）`setPose` 成別的姿勢也會立刻結束開場；
    * `setPose('land')` 則不打斷它（開場本來就停在 land）。減少動態沒有效果。
+   * `onEnd`（Task 19，首頁用來收起「略過」鈕）：這一次開場結束時呼叫一次——演完、被略過、被別的姿勢打斷、或形體載不到而取消；
+   * 沒有演出（減少動態、已在演）時不會呼叫；`dispose` 也不呼叫。
    */
-  playIntro(opts?: { skip?: boolean }): void;
+  playIntro(opts?: { skip?: boolean; onEnd?: () => void }): void;
   /** 只動相機與 render target，不重建模擬、不動姿勢。 */
   resize(w: number, h: number): void;
   /** 重建 GPGPU（同一個 tier 也會重建）；保留目前姿勢。 */
@@ -200,6 +202,7 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
   let introToken = 0;
   let introExhaled = false;
   let introLanded = false;
+  let introOnEnd: (() => void) | null = null; // `playIntro` 的 `onEnd`：這一次開場結束時呼叫一次
   const impulse = { dir: new Vector3(), power: 0, mode: 0 };
   let pulses = 0;
   let virtualMs = 0;
@@ -279,11 +282,21 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
 
   /** 開場結束（演完、被略過、或演出中換了姿勢）：取消還在等形體的開場；停在 `lift` 的話回到 `land`（不給衝量）。 */
   const endIntro = (): void => {
+    const wasActive = introT >= 0 || introPending;
     introToken++;
     introPending = false;
-    if (introT < 0) return;
-    introT = -1;
-    if (pose === 'lift' && shapes.has('land')) apply('land', makeTarget('land'), false);
+    if (introT >= 0) {
+      introT = -1;
+      if (pose === 'lift' && shapes.has('land')) apply('land', makeTarget('land'), false);
+    }
+    if (wasActive) notifyIntroEnd();
+  };
+
+  /** 這一次開場結束了：把 `onEnd` 交出去並清掉（只呼叫一次）。 */
+  const notifyIntroEnd = (): void => {
+    const done = introOnEnd;
+    introOnEnd = null;
+    done?.();
   };
 
   const ensureShape = async (id: PoseId): Promise<void> => {
@@ -298,6 +311,7 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
     const state = introState(introT);
     if (state.phase === 'done') {
       introT = -1;
+      notifyIntroEnd();
       return undefined;
     }
     if (!introExhaled && state.phase !== 'handoff') {
@@ -520,6 +534,7 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
       }
       if (!sim || introT >= 0 || introPending) return; // 減少動態沒有演出；演出中再呼叫不重來
       introPending = true;
+      introOnEnd = opts?.onEnd ?? null;
       const token = ++introToken;
       Promise.all([ensureShape('land'), ensureShape('lift')]).then(
         () => {
@@ -531,7 +546,9 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
           introLanded = false;
         },
         () => {
-          if (token === introToken) introPending = false; // 形體載不到就不演（頁面照常、停在目前姿勢）
+          if (token !== introToken) return;
+          introPending = false; // 形體載不到就不演（頁面照常、停在目前姿勢）
+          notifyIntroEnd();
         },
       );
     },

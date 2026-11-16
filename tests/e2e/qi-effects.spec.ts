@@ -211,6 +211,68 @@ test.describe('開場吸氣流線（桌機，tier=min）', () => {
   });
 });
 
+test.describe('開場結束通知 onEnd（桌機，tier=min）', () => {
+  test.use({ viewport: { width: 1280, height: 720 } });
+
+  /** 開場結束時把標籤記進 window.__ends（回呼不能跨 evaluate 帶出來，所以記在頁面裡）。 */
+  const playWith = (page: Page, tag: string, skip = false) =>
+    page.evaluate(
+      ([name, skipIt]) => {
+        const w = window as unknown as { __ends?: string[] };
+        w.__ends ??= [];
+        stageOf().playIntro({ skip: skipIt, onEnd: () => w.__ends!.push(name) });
+      },
+      [tag, skip] as const,
+    );
+  const ends = (page: Page) => page.evaluate(() => (window as unknown as { __ends?: string[] }).__ends ?? []);
+
+  test('演完、skip、被別的姿勢打斷：各呼叫一次；沒在演時的 skip、演出中重複的 playIntro 不會多呼叫', async ({ page }) => {
+    await open(page);
+    await settleLand(page);
+
+    await playWith(page, 'idle-skip', true); // 沒在演：skip 無事，也不呼叫
+    expect(await ends(page)).toEqual([]);
+
+    await playWith(page, 'done');
+    await run(page, 3000);
+    expect(await ends(page), '還沒演完').toEqual([]);
+    await run(page, 800);
+    expect(await ends(page), '演完呼叫一次').toEqual(['done']);
+    await run(page, 1000);
+    expect(await ends(page), '演完之後不再呼叫').toEqual(['done']);
+
+    await playWith(page, 'skipped');
+    await run(page, 1500);
+    await playWith(page, 'again'); // 演出中再呼叫：不重來、新的 onEnd 也不會被登記
+    await page.evaluate(() => stageOf().playIntro({ skip: true }));
+    expect(await ends(page), 'skip 呼叫一次').toEqual(['done', 'skipped']);
+    await run(page, 4000);
+    expect(await ends(page)).toEqual(['done', 'skipped']);
+
+    await playWith(page, 'interrupted');
+    await run(page, 1500);
+    await setPose(page, 'dingzhou'); // 演出中換姿勢
+    expect(await ends(page), '被打斷呼叫一次').toEqual(['done', 'skipped', 'interrupted']);
+    await run(page, 4000);
+    expect(await ends(page)).toEqual(['done', 'skipped', 'interrupted']);
+  });
+
+  test('開場還在等形體載入時被別的姿勢取消：呼叫一次，之後 lift 載好也不會再呼叫', async ({ page }) => {
+    await open(page);
+    await setPose(page, 'land', false); // lift 還沒載過：playIntro 要等它
+    await page.evaluate(async () => {
+      const w = window as unknown as { __ends?: string[] };
+      w.__ends = [];
+      const stage = stageOf();
+      stage.playIntro({ onEnd: () => w.__ends!.push('canceled') });
+      await stage.setPose('dingzhou');
+    });
+    expect(await ends(page)).toEqual(['canceled']);
+    await run(page, 3500);
+    expect(await ends(page)).toEqual(['canceled']);
+  });
+});
+
 test.describe('落地衝擊波（桌機，tier=min）', () => {
   test.use({ viewport: { width: 1280, height: 720 } });
 
@@ -376,6 +438,18 @@ test.describe('大槍桿與紅纓（1440×900，tier=min）', () => {
 
 test.describe('減少動態', () => {
   test.use({ viewport: { width: 1280, height: 720 }, reducedMotion: 'reduce' });
+
+  test('playIntro 的 onEnd 不會被呼叫（沒有演出）', async ({ page }) => {
+    await open(page);
+    await setPose(page, 'land');
+    await page.evaluate(() => {
+      const w = window as unknown as { __ends?: string[] };
+      w.__ends = [];
+      stageOf().playIntro({ onEnd: () => w.__ends!.push('called') });
+    });
+    await run(page, 1000);
+    expect(await page.evaluate(() => (window as unknown as { __ends?: string[] }).__ends)).toEqual([]);
+  });
 
   test('playLanding／playIntro 沒有效果也不報錯（沒有模擬、沒有 rAF）', async ({ page }) => {
     await open(page);

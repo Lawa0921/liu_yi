@@ -4,8 +4,9 @@
  * 版面方向（設計 §7、決定 D17）：
  *   桌機：文字在左、光點在右（引擎取景 look.x = −visibleH·aspect·0.13，所以人形落在 63% 處）。
  *   手機：文字在下、光點在上（look.y 下移 13% 的可視高度，人形落在約 37% 處）。
- * 每個 [data-beat] 高 var(--stage-height)（svh），不用強制 scroll-snap；canvas 是之後掛上去的 position: fixed 背景層，
- * 所以這裡的版面只負責「文字放哪裡、光點的位置留空」。靜態圖（.beat__still）只在退回時露出（見下方規則）。
+ * 每個 [data-beat] 高 var(--stage-height)（svh），不用強制 scroll-snap；光點畫布（.home-canvas）是 position: fixed 的背景層
+ * （高度用 lvh：手機網址列伸縮時畫布不跟著變），所以這裡的版面只負責「文字放哪裡、光點的位置留空」。
+ * 靜態圖（.beat__still）只在退回時露出（見下方規則）。
  *
  * 顏色：黑底、米白（--color-text）當主字、古金（--color-accent）當線與註解、朱紅只給方印。
  * 字：TW-Kai 只有 400；不用漸層字、不用外發光。
@@ -17,6 +18,40 @@
   --text-col: 35rem;
   --beat-title: clamp(2.5rem, 1.6rem + 3.2vw, 4.25rem);
   overflow-x: clip;
+}
+
+/* ── 光點畫布（Task 19 接上引擎）──────────────────── */
+
+/*
+ * 固定在外框內的視窗上，在所有內容底下：內容（[data-beat]）是 position: relative 且 z-index: 1；
+ * 頁首 50、外框 60、段落導覽 45 都在它上面。畫布不接收指標事件（掌風的指標事件掛在 window）。
+ * 高度用 lvh（大視窗高）：網址列伸縮只改 innerHeight，畫布不變，所以不重新取景。
+ */
+.home-canvas {
+  position: fixed;
+  inset: var(--frame-top) var(--frame-inset) auto;
+  /* 可替換元素的 inset 不會把寬度撐開，所以寬度明寫。 */
+  width: calc(100% - 2 * var(--frame-inset));
+  height: calc(100% - var(--frame-top) - var(--frame-bottom));
+  z-index: 0;
+  display: block;
+  pointer-events: none;
+}
+
+@supports (height: 100lvh) {
+  .home-canvas {
+    height: calc(100lvh - var(--frame-top) - var(--frame-bottom));
+  }
+}
+
+/* 沒有 JS 或引擎退回靜態圖時，畫布不佔位。 */
+html:not(.js) .home-canvas,
+html.qi-static .home-canvas {
+  display: none;
+}
+
+[data-beat] {
+  z-index: 1;
 }
 
 /* ── 靜態圖：引擎在跑時整張隱藏；減少動態、沒有 WebGL（html.qi-static）、沒有 JS 時才露出 ── */
@@ -63,6 +98,17 @@ html.js:not(.qi-static) .beat__still {
   height: var(--poster-h);
   max-width: none;
   transform: translate(-50%, -50%);
+}
+
+/* 引擎接手後海報淡出（交叉淡化；這 0.6 秒就是開場時間軸的 handoff 階段）。 */
+html[data-qi-ready] .opening__poster {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .opening__poster {
+    transition: opacity 0.6s var(--ease-out);
+  }
 }
 
 .opening__lockup {
