@@ -16,7 +16,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "npm run build && npm run build:root && playwright test",
-    "test:e2e:only": "playwright test"
+    "test:e2e:only": "playwright test",
+    "fonts:subset": "tsx scripts/fonts/cli.ts",
+    "qi:snapshot-weapons": "tsx scripts/qi/snapshot-weapons.ts"
   },
   "dependencies": {
     "@astrojs/sitemap": "^3.7.5",
@@ -29,6 +31,10 @@
     "@playwright/test": "^1.65.1",
     "@types/three": "^0.187.0",
     "cross-env": "^10.1.0",
+    "fflate": "^0.8.3",
+    "sharp": "^0.35.5",
+    "subset-font": "^2.9.0",
+    "tsx": "^4.23.15",
     "typescript": "^6.0.3",
     "vitest": "^5.1.0"
   }

@@ -10,6 +10,10 @@ dist-ph/
 # 剪影的臨時佔位檔（只給開發與版面檢查用；正式素材在 src/assets/silhouettes/）
 src/assets/_placeholder-silhouettes/
 
+# 開發者本機快取（TW-Kai 原檔等，不進 git）與建置時生成的素材
+.cache/
+src/assets/generated/
+
 # tests
 playwright-report/
 test-results/
