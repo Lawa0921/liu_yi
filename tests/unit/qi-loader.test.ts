@@ -1,9 +1,4 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import ts from 'typescript';
 import { describe, expect, it, vi } from 'vitest';
-import { charsFromJs } from '../../scripts/fonts/charset';
 import { BEATS, POSE_BY_BEAT, type Audience } from '../../src/qi/config/poses';
 import { SHAPES } from '../../src/qi/config/shapes';
 import { encodeShape, type Shape } from '../../src/qi/shapes/format';
@@ -101,6 +96,32 @@ describe('createShapeLoader', () => {
     fetch.mockResolvedValue(binBuffer());
     await expect(loader.load('land')).resolves.toMatchObject({ count: 64 });
     expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('網路失敗（重試後仍失敗）：錯誤帶形體 id 與網址，原始錯誤放在 cause', async () => {
+    const original = new Error('offline');
+    const fetch = vi.fn<(url: string) => Promise<ArrayBuffer>>().mockRejectedValue(original);
+    const loader = createShapeLoader({ fetch, resolveUrl });
+    const error = await loader.load('land').catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain('land');
+    expect((error as Error).message).toContain('/shapes/land.bin');
+    expect((error as Error).message).toContain('offline');
+    expect((error as Error).cause).toBe(original);
+  });
+
+  it('網路失敗的 cause 是第二次（最後一次）的錯誤；非 Error 的 reject 值也包得起來', async () => {
+    const last = new Error('second');
+    const fetch = vi.fn<(url: string) => Promise<ArrayBuffer>>().mockRejectedValueOnce(new Error('first')).mockRejectedValueOnce(last);
+    const loader = createShapeLoader({ fetch, resolveUrl });
+    expect(((await loader.load('lift').catch((e: unknown) => e)) as Error).cause).toBe(last);
+
+    const odd = createShapeLoader({ fetch: () => Promise.reject('plain string'), resolveUrl });
+    const error = (await odd.load('kao').catch((e: unknown) => e)) as Error;
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toContain('kao');
+    expect(error.message).toContain('plain string');
+    expect(error.cause).toBe('plain string');
   });
 
   it('失敗時同時等待的呼叫端都收到 reject，且失敗不留在進行中表裡', async () => {
@@ -245,20 +266,5 @@ describe('shapeUrlResolver（urls.ts 的查表邏輯；import.meta.glob 的結�
     for (const id of ['spear', 'constructor', '__proto__', '../land', 'land.bin', '']) {
       expect(() => resolve(id), id).toThrow(/No shape file/);
     }
-  });
-});
-
-/**
- * 字型守門（D3）會掃建置產物裡所有 JS 的 CJK 字串，每個字都要在 TW-Kai 子集內。
- * 載入器、展開、網址表與它們依賴的 format／rng／poses 會被打進首頁的引擎 chunk，
- * 所以它們的程式碼（錯誤訊息等字串）不得含 CJK；註解會在轉譯時移除，仍可寫中文。
- * 這裡轉譯成 JS（移除註解）後，用守門本身的 `charsFromJs` 掃，與建置守門同一把尺。
- */
-describe('引擎的形體模組：程式碼字串不含 CJK（D3 字型守門）', () => {
-  const root = fileURLToPath(new URL('../../', import.meta.url));
-  it.each(['expand', 'loader', 'urls', 'format', 'rng'].map((n) => `src/qi/shapes/${n}.ts`).concat('src/qi/config/poses.ts'))('%s', (file) => {
-    const source = readFileSync(join(root, file), 'utf8');
-    const js = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.ESNext, removeComments: true } }).outputText;
-    expect([...charsFromJs(js)]).toEqual([]);
   });
 });

@@ -216,6 +216,39 @@ describe('expandTargets', () => {
   });
 });
 
+/**
+ * 跨 tier 前綴：同一批光點在各 tier 的目標互為前綴（煙格的挑選、位置與重複點的抖動都依序取亂數），
+ * 所以降級（重建成較小的貼圖）時人形的形狀不變、只是少了尾巴那一段點。
+ */
+describe('跨 tier 前綴：較小 tier 的目標逐位元等於 256² 版的前 size² × 4 個 float', () => {
+  const sizes = [112, 144, 192];
+  const prefix = (small: Float32Array, big: Float32Array) => Buffer.from(small.buffer).equals(Buffer.from(big.buffer, 0, small.byteLength));
+
+  it.each(sizes)('expandTargets（人形）size = %i', (size) => {
+    const shape = synthShape(20);
+    const small = expandTargets(shape, size, ambientField(size * size));
+    const big = expandTargets(shape, 256, ambientField(256 * 256));
+    expect(small).toHaveLength(size * size * 4);
+    expect(prefix(small, big)).toBe(true);
+  });
+
+  it.each(sizes)('expandTargets（兵器 layout）size = %i', (size) => {
+    const shape = synthShape(21);
+    const layout = weaponLayout('spear', true);
+    expect(prefix(expandTargets(shape, size, ambientField(size * size), layout), expandTargets(shape, 256, ambientField(256 * 256), layout))).toBe(true);
+  });
+
+  it.each(sizes)('flowTargets size = %i', (size) => {
+    expect(prefix(flowTargets(size, ambientField(size * size)), flowTargets(256, ambientField(256 * 256)))).toBe(true);
+  });
+
+  it('這個檢查是真的在比：換一個 seed 的環境煙，前綴就不再相等', () => {
+    const shape = synthShape(22);
+    const small = expandTargets(shape, 144, ambientField(144 * 144, 8));
+    expect(prefix(small, expandTargets(shape, 256, ambientField(256 * 256)))).toBe(false);
+  });
+});
+
 describe('weaponLayout（D13：寬／窄的長度與傾角；中點高度 1.05）', () => {
   it.each([
     ['jian', true, 2.9, 0.16],

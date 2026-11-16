@@ -3,13 +3,13 @@
  *
  * `createShapeLoader` 把「形體 id → 網址 → 位元組 → `Shape`」串起來，帶快取、在途請求去重與一次重試：
  *   - 同一個 id 同時被 `load` 兩次只會 `fetch` 一次，兩邊拿到同一個 `Shape`；載入完成後走快取。
- *   - 網路失敗（`fetch` reject）重試 1 次，還是失敗就 reject。內容壞了（魔數、長度、版本不符）不重試：
+ *   - 網路失敗（`fetch` reject）重試 1 次，還是失敗就 reject（錯誤帶形體 id 與網址，原始錯誤在 `cause`）。內容壞了（魔數、長度、版本不符）不重試：
  *     位元組已經回來了，再抓一次通常還是同樣的內容（例如伺服器回了 404 頁面）。
  *   - 失敗一律不快取，下次 `load` 從頭再來。
  *   - `prefetch` 是 fire-and-forget：失敗被吞掉（真的要用時 `load` 會重試並回報錯誤）。
  *
- * `fetch` 由呼叫端提供（瀏覽器用 `fetch(url).then(r => r.arrayBuffer())`，測試給假的）；呼叫端的 `fetch` 要在非 2xx 時 reject，
- * 否則錯誤頁會當成內容回來（最後仍會因魔數不符而 reject，只是訊息比較不直接）。
+ * `fetch` 由呼叫端提供（瀏覽器用 `shapes/fetch.ts` 的 `fetchBytes`：非 2xx 會 reject、15 秒逾時；測試給假的）；呼叫端的 `fetch`
+ * 要在非 2xx 時 reject，否則錯誤頁會當成內容回來（最後仍會因魔數不符而 reject，只是訊息比較不直接）。
  * `resolveUrl` 丟錯（未知的形體 id）會讓 `load` reject，不會同步丟出。
  */
 
@@ -39,7 +39,12 @@ export function createShapeLoader(opts: ShapeLoaderOptions): ShapeLoader {
     try {
       bytes = await opts.fetch(url);
     } catch {
-      bytes = await opts.fetch(url); // 網路失敗重試一次；第二次的錯誤原樣丟出
+      try {
+        bytes = await opts.fetch(url); // 網路失敗重試一次
+      } catch (error) {
+        // 第二次的錯誤包起來：帶形體 id 與網址，原始錯誤放在 cause
+        throw new Error(`Shape ${id} could not be fetched (${url}): ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+      }
     }
     try {
       return decodeShape(new Uint8Array(bytes));
