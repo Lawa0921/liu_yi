@@ -1,0 +1,62 @@
+---
+// 段落跳轉（決定 D25）：桌機右緣一列直書連結（開場、課程、師資、收費課表、預約）；手機不顯示（選單已有頁面連結）。
+// 不動既有的「主要導覽」。目前所在的段落標 aria-current。
+interface Props {
+  items: { id: string; label: string }[];
+}
+
+const { items } = Astro.props;
+---
+
+<nav class="home-rail" aria-label="首頁段落">
+  <ul class="home-rail__list">
+    {
+      items.map((item) => (
+        <li>
+          <a class="home-rail__link" href={`#${item.id}`}>
+            <span class="home-rail__label">{item.label}</span>
+            <span class="home-rail__tick" aria-hidden="true"></span>
+          </a>
+        </li>
+      ))
+    }
+  </ul>
+</nav>
+
+<script>
+  // 依捲動位置標出目前的段落：取「頂端已經過視窗 40% 線」的最後一段。
+  const rail = document.querySelector<HTMLElement>('.home-rail');
+  if (rail) {
+    const links = new Map<string, HTMLAnchorElement>();
+    for (const link of rail.querySelectorAll<HTMLAnchorElement>('a[href^="#"]')) {
+      links.set(link.getAttribute('href')!.slice(1), link);
+    }
+    const targets = [...links.keys()].map((id) => document.getElementById(id)).filter((el): el is HTMLElement => el !== null);
+
+    let active = '';
+    const update = () => {
+      const line = window.innerHeight * 0.4;
+      let current = targets[0];
+      for (const target of targets) if (target.getBoundingClientRect().top <= line) current = target;
+      if (!current || current.id === active) return;
+      active = current.id;
+      for (const [id, link] of links) {
+        if (id === active) link.setAttribute('aria-current', 'true');
+        else link.removeAttribute('aria-current');
+      }
+    };
+
+    let queued = false;
+    const schedule = () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => {
+        queued = false;
+        update();
+      });
+    };
+    window.addEventListener('scroll', schedule, { passive: true });
+    window.addEventListener('resize', schedule);
+    update();
+  }
+</script>

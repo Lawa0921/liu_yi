@@ -1,0 +1,893 @@
+/*
+ * 首頁「氣聚成人」的版面（標記在 src/components/home/，由 src/pages/index.astro 引入）。
+ *
+ * 版面方向（設計 §7、決定 D17；Task 22b 起版面、海報與引擎取景用同一個寬高比切換）：
+ *   橫向（寬高比 > 4:5：桌機、橫放手機、近方形視窗）：文字在左、光點在右（引擎取景 look.x = −visibleH·aspect·0.13，所以人形落在 63% 處）。
+ *   直向（寬高比 ≤ 4:5：手機直立、直式平板）：文字在下、光點在上（look.y 下移 13% 的可視高度，人形落在約 37% 處）。
+ *   切換點是 `@media (max-aspect-ratio: 4/5)`，引擎端是 `engine/viewport.ts` 的 `isPortrait`（單元測試守住兩邊一致）；
+ *   寬度斷點（60rem）只剩尺寸微調與桌機才有的東西（外框、段落導覽）。
+ * 每個 [data-beat] 高 var(--stage-height)（svh），不用強制 scroll-snap；光點畫布（.home-canvas）是 position: fixed 的背景層
+ * （高度用 lvh：手機網址列伸縮時畫布不跟著變），所以這裡的版面只負責「文字放哪裡、光點的位置留空」。
+ * 靜態圖（.beat__still）只在退回時露出（見下方規則）。
+ *
+ * 顏色：黑底、米白（--color-text）當主字、古金（--color-accent）當線與註解、朱紅只給方印。
+ * 字：TW-Kai 只有 400；不用漸層字、不用外發光。
+ */
+
+[data-home] {
+  /* 內容左右的留白：桌機比頁首的 4.5rem 內縮再多一點，手機用全站的 gutter。 */
+  --home-pad: max(var(--gutter), 5.5vw);
+  /* 文字欄寬：寬螢幕 35rem；窄的橫向視窗（900×600、橫放手機）縮到視窗的 44%，不伸進 63% 處的人形。 */
+  --text-col: min(35rem, 44vw);
+  --beat-title: clamp(2.5rem, 1.6rem + 3.2vw, 4.25rem);
+  overflow-x: clip;
+}
+
+/* 退回靜態圖時，焦點若正在「略過」鈕上，腳本會把它移到 main（fallback.ts）；程式移的焦點不畫整個 main 的外框。 */
+[data-home]:focus {
+  outline: none;
+}
+
+/* ── 光點畫布（Task 19 接上引擎）──────────────────── */
+
+/*
+ * 固定在外框內的視窗上，在所有內容底下：內容（[data-beat]）是 position: relative 且 z-index: 1；
+ * 頁首 50、外框 60、段落導覽 45 都在它上面。畫布不接收指標事件（掌風的指標事件掛在 window）。
+ * 高度用 lvh（大視窗高）：網址列伸縮只改 innerHeight，畫布不變，所以不重新取景。
+ */
+.home-canvas {
+  position: fixed;
+  inset: var(--frame-top) var(--frame-inset) auto;
+  /* 可替換元素的 inset 不會把寬度撐開，所以寬度明寫。 */
+  width: calc(100% - 2 * var(--frame-inset));
+  height: calc(100% - var(--frame-top) - var(--frame-bottom));
+  z-index: 0;
+  display: block;
+  pointer-events: none;
+}
+
+@supports (height: 100lvh) {
+  .home-canvas {
+    height: calc(100lvh - var(--frame-top) - var(--frame-bottom));
+  }
+}
+
+/* 沒有 JS 或引擎退回靜態圖時，畫布不佔位。 */
+html:not(.js) .home-canvas,
+html.qi-static .home-canvas {
+  display: none;
+}
+
+[data-beat] {
+  z-index: 1;
+}
+
+/* ── 靜態圖：引擎在跑時整張隱藏；減少動態、沒有 WebGL（html.qi-static）、沒有 JS 時才露出 ── */
+
+html.js:not(.qi-static) .beat__still {
+  display: none;
+}
+
+.beat__still {
+  width: 100%;
+  height: auto;
+  max-height: calc(var(--stage-height) - 6rem);
+  object-fit: contain;
+}
+
+/* ── 開場 ─────────────────────────────────────────── */
+
+.opening {
+  /*
+   * 海報人形的大小與位置：要與引擎的 `land`（取景見 engine/stage.ts 的 `fit`）疊得起來，交叉淡化時才不會「跳」一下。
+   * 引擎依視窗寬高比選取景（≤ 4:5 直向、否則橫向；`engine/viewport.ts` 的 `isPortrait`），與視窗寬度（60rem 斷點）無關，
+   * 所以這裡的算式也用同一個條件切換：橫向在這裡、直向在下方的 `@media (max-aspect-ratio: 4/5)`（與 Opening.astro 的 <source media> 同源）。
+   * 數字由 e2e（home-fallback.spec 的「海報人形與引擎 land 的外框對齊」，十二個尺寸，含橫放手機、直式平板與近方形）量測：
+   *   - 海報圖裡的人形外框占圖高 81%（取景 80% ＋ 光暈），所以 --poster-h ＝ 引擎人形高 ÷ 0.81。
+   *   - 畫布 ＝ 視窗扣掉外框的 inset／上／下；引擎的可視高有下限 3.4，所以人形高 ＝ 0.588 × 畫布高，
+   *     可視高超過下限時改由畫布寬決定（橫向 0.339、直向 0.727 × 畫布寬）；兩者取小。
+   *   - 橫向：人形中心在畫布寬 63% 處、畫布高 51.2% 處（引擎把鏡頭往左移，人形偏右）。
+   *   - 直向：中心在畫布寬 50% 處、畫布高 37.8% 處（鏡頭往下移，人形偏上）。
+   * 高度一律用視窗單位（--poster-vh：lvh，與畫布同一把尺），不用 %：橫放手機上 .opening 比視窗高，% 會跟著變大。
+   * --poster-x／--poster-y 是人形中心，量自海報盒子的左上角（盒子的上緣與視窗上緣重合）。
+   */
+  --poster-vh: 100%;
+  --poster-h: min(
+    0.724 * (var(--poster-vh) - var(--frame-top) - var(--frame-bottom)),
+    0.4188 * (100vw - 2 * var(--frame-inset))
+  );
+  --poster-x: calc(var(--frame-inset) + 0.63 * (100% - 2 * var(--frame-inset)));
+  --poster-y: calc(var(--frame-top) + 0.512 * (var(--poster-vh) - var(--frame-top) - var(--frame-bottom)));
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  align-items: center;
+  min-height: var(--stage-height);
+  padding: var(--space-6) var(--home-pad);
+}
+
+@supports (height: 100lvh) {
+  .opening {
+    --poster-vh: 100lvh;
+  }
+}
+
+@media (max-aspect-ratio: 4/5) {
+  .opening {
+    --poster-h: min(
+      0.724 * (var(--poster-vh) - var(--frame-top) - var(--frame-bottom)),
+      0.899 * (100vw - 2 * var(--frame-inset))
+    );
+    --poster-x: 50%;
+    --poster-y: calc(var(--frame-top) + 0.378 * (var(--poster-vh) - var(--frame-top) - var(--frame-bottom)));
+  }
+}
+
+/* 海報（hero 靜態圖）：蓋滿整個視窗（含頁首與頁尾底下），人形的位置與大小對應引擎的取景。 */
+.opening__poster {
+  position: absolute;
+  z-index: -1;
+  inset: calc(-1 * var(--frame-top)) calc(-1 * var(--frame-inset)) calc(-1 * var(--frame-bottom));
+  max-width: none; /* 全站的 picture { max-width: 100% } 會把盒子縮回內容寬，少掉兩側的 inset，人形就偏了 */
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.opening__poster img {
+  position: absolute;
+  left: var(--poster-x);
+  top: var(--poster-y);
+  width: auto;
+  height: var(--poster-h);
+  max-width: none;
+  transform: translate(-50%, -50%);
+}
+
+/* 引擎接手後海報淡出（交叉淡化；這 0.6 秒就是開場時間軸的 handoff 階段）。 */
+html[data-qi-ready] .opening__poster {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .opening__poster {
+    transition: opacity 0.6s var(--ease-out);
+  }
+}
+
+.opening__lockup {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: flex-end;
+  justify-self: start;
+  gap: clamp(var(--space-3), 1.4vw, var(--space-5));
+}
+
+.opening__title {
+  margin: 0;
+  writing-mode: vertical-rl;
+  font-size: min(8.5rem, 15.5vh);
+  line-height: 1.1;
+  letter-spacing: 0.06em;
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.opening__sub {
+  margin: 0;
+  padding-inline-end: clamp(var(--space-3), 1.2vw, var(--space-4));
+  border-right: var(--line) solid var(--color-line);
+  writing-mode: vertical-rl;
+  font-size: clamp(1rem, 2.4vh, 1.375rem);
+  letter-spacing: 0.5em;
+  color: var(--color-accent-strong);
+  white-space: nowrap;
+}
+
+/* 往下捲提示：桌機的外框下緣已有「向下捲動」，所以只在手機顯示。 */
+.opening__hint {
+  position: absolute;
+  inset: auto 0 var(--space-4);
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  letter-spacing: 0.5em;
+  text-indent: 0.5em;
+  pointer-events: none;
+}
+
+.opening__hint-line {
+  width: 1px;
+  height: 2.25rem;
+  background: linear-gradient(var(--color-accent), transparent);
+  transform-origin: top;
+}
+
+/* 略過開場（演出時才由腳本取消 hidden）。 */
+.opening__skip {
+  position: absolute;
+  right: var(--home-pad);
+  bottom: var(--space-5);
+  min-height: 2.5rem;
+  padding: var(--space-1) var(--space-5);
+  border: var(--line) solid var(--color-line);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  letter-spacing: 0.3em;
+  text-indent: 0.3em;
+  cursor: pointer;
+}
+
+.opening__skip[hidden] {
+  display: none;
+}
+
+.opening__skip:hover,
+.opening__skip:focus-visible {
+  color: var(--color-text);
+  border-color: var(--color-accent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html.js .opening__lockup > * {
+    animation: opening-in 0.9s var(--ease-out) both;
+  }
+
+  html.js .opening__sub {
+    animation-delay: 0.15s;
+  }
+
+  .opening__hint-line {
+    animation: hint-drop 2.2s var(--ease-in-out) infinite;
+  }
+}
+
+@keyframes opening-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 1rem, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes hint-drop {
+  0% {
+    transform: scaleY(0);
+  }
+  55% {
+    transform: scaleY(1);
+  }
+  100% {
+    transform: scaleY(1);
+    opacity: 0;
+  }
+}
+
+/* ── beat 共用 ────────────────────────────────────── */
+
+.beat {
+  position: relative;
+  display: grid;
+  align-items: center;
+  min-height: var(--stage-height);
+  padding: var(--space-7) var(--home-pad);
+}
+
+.beat__panel {
+  position: relative;
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(0, var(--text-col)) minmax(0, 1fr);
+  align-items: center;
+  column-gap: var(--space-7);
+}
+
+.beat__text {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+}
+
+.beat__still {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+/* 沒有 JS 時兩個對象的面板都顯示：疊在一起，各有一個小標；有切換鈕後只剩一組，小標隱藏。 */
+.beat__audience {
+  display: none;
+}
+
+html:not([data-audience]) .beat__audience {
+  display: block;
+  margin: 0 0 var(--space-3);
+  color: var(--color-accent-strong);
+  font-size: var(--text-sm);
+  letter-spacing: 0.5em;
+}
+
+html:not([data-audience]) .beat--course {
+  align-content: center;
+  gap: var(--space-8);
+}
+
+/* 對象切換時，新那一組的文字輕輕升起（只動 transform 與 opacity）。 */
+@media (prefers-reduced-motion: no-preference) {
+  html.js .beat--course .beat__text {
+    animation: beat-text-in 0.7s var(--ease-out) both;
+  }
+}
+
+@keyframes beat-text-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 0.9rem, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.beat__title {
+  margin: 0 0 var(--space-3);
+  font-size: var(--beat-title);
+  line-height: 1.1;
+  letter-spacing: 0.1em;
+  color: var(--color-text);
+}
+
+.beat__summary {
+  margin: 0 0 var(--space-5);
+  color: var(--color-text-muted);
+  font-size: var(--text-lg);
+  letter-spacing: 0.04em;
+}
+
+.beat__heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin: 0 0 var(--space-4);
+  font-size: var(--beat-title);
+  line-height: 1.1;
+  letter-spacing: 0.3em;
+  color: var(--color-text);
+}
+
+/* 標題後面拉出一小段金線。 */
+.beat__heading::after {
+  content: '';
+  flex: none;
+  width: clamp(2rem, 6vw, 4.5rem);
+  height: var(--line);
+  background: var(--color-accent);
+}
+
+.beat__lead {
+  margin: 0 0 var(--space-5);
+  max-width: var(--measure);
+  color: var(--color-text-muted);
+  font-size: var(--text-lg);
+  letter-spacing: 0.04em;
+}
+
+.beat__more {
+  margin: var(--space-5) 0 0;
+}
+
+.beat__link {
+  margin-top: var(--space-2);
+}
+
+/* 一式的註解：朱印序號＋名稱，下面一到兩行。 */
+.beat__move {
+  margin: 0 0 var(--space-5);
+  padding-inline-start: var(--space-4);
+  border-left: 2px solid var(--color-accent);
+}
+
+.beat__move-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-2);
+}
+
+.beat__no {
+  font-size: 1rem;
+}
+
+.beat__move-name {
+  color: var(--color-accent-strong);
+  font-size: var(--text-xl);
+  letter-spacing: 0.3em;
+}
+
+.beat__move-line {
+  margin: 0;
+  color: var(--color-text);
+  letter-spacing: 0.04em;
+}
+
+/* 單獨成為這個 beat 主角的招式（格鬥第二式、兵器第二、三件）：名稱放大當標題。 */
+.beat__move--solo {
+  padding-inline-start: 0;
+  border-left: 0;
+}
+
+.beat__move--solo .beat__move-head {
+  gap: var(--space-4);
+  margin-bottom: var(--space-3);
+}
+
+.beat__move--solo .beat__no {
+  font-size: 1.5rem;
+}
+
+.beat__move--solo .beat__move-name {
+  color: var(--color-text);
+  font-size: var(--beat-title);
+  line-height: 1.1;
+  letter-spacing: 0.12em;
+}
+
+.beat__move--solo .beat__move-line {
+  color: var(--color-text-muted);
+  font-size: var(--text-xl);
+}
+
+/* ── 其他課程 ─────────────────────────────────────── */
+
+.others__list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.others__item {
+  padding-block: var(--space-4);
+  border-top: var(--line) solid var(--color-line-faint);
+}
+
+.others__list > li:last-child .others__item {
+  border-bottom: var(--line) solid var(--color-line-faint);
+}
+
+.others__title {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-2xl);
+  letter-spacing: 0.16em;
+}
+
+.others__title a {
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.others__title a:hover,
+.others__title a:focus-visible {
+  color: var(--color-accent-strong);
+}
+
+.others__summary {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+/* ── 師資 ─────────────────────────────────────────── */
+
+.coach-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.coach-entry {
+  position: relative;
+  height: 100%;
+  padding: var(--space-4) var(--space-4) var(--space-3);
+  border: var(--line) solid var(--color-line-faint);
+  background: color-mix(in srgb, var(--color-bg) 70%, transparent);
+}
+
+.coach-entry::before {
+  content: '';
+  position: absolute;
+  inset: -1px auto auto -1px;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-top: 2px solid var(--color-accent);
+  border-left: 2px solid var(--color-accent);
+  pointer-events: none;
+}
+
+.coach-entry__name {
+  margin: 0;
+  font-size: var(--text-2xl);
+  letter-spacing: 0.14em;
+  line-height: 1.2;
+  color: var(--color-text);
+}
+
+.coach-entry__role {
+  margin: var(--space-1) 0 var(--space-2);
+  color: var(--color-accent-strong);
+  font-size: var(--text-sm);
+  letter-spacing: 0.12em;
+}
+
+.coach-entry__teaches {
+  margin: 0 0 var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+
+/* 課名不在中間斷行（只在「、」處換行）。 */
+.coach-entry__course {
+  white-space: nowrap;
+}
+
+.coach-entry__link {
+  margin-top: 0;
+  font-size: var(--text-sm);
+}
+
+/* ── 收費與課表 ───────────────────────────────────── */
+
+.pricing__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pricing__facility {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-4);
+  margin: var(--space-6) 0 0;
+  padding-top: var(--space-4);
+  border-top: var(--line) solid var(--color-line-faint);
+  color: var(--color-text-muted);
+}
+
+.pricing__facility .beat__link {
+  margin-top: 0;
+}
+
+/* ── 預約 ─────────────────────────────────────────── */
+
+/*
+ * 朱印的靜態圖與蓋在它上面的點擊區包在同一個盒子裡，兩者才有同一個座標系。
+ * 靜態圖是 4:3、高度不超過一段的可用高（與 .beat__still 的 max-height 同一把尺），所以盒子的寬度由高度反推：
+ * 圖剛好填滿盒子，沒有 object-fit 留白，點擊區用百分比對圖就準。
+ */
+.seal-stage {
+  position: relative;
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: center;
+  width: min(100%, calc((var(--stage-height) - 6rem) * 4 / 3));
+}
+
+.seal-stage .beat__still {
+  display: block;
+}
+
+/*
+ * 蓋在朱印上的透明點擊區（<a>，aria-hidden、tabindex -1：鍵盤與讀屏用旁邊的按鈕）。
+ * 靜態圖（沒有 JS、減少動態、沒有 WebGL）：對齊圖上的印。靜態圖產線（scripts/qi/render-stills.ts）把印置中、取 80% 圖高，
+ * 加上光暈外擴一點，實測紅色外框是圖寬的 19.5%–80.5%、圖高的 9.3%–90.5%（e2e 量圖上的紅色像素驗證）。
+ */
+.seal-hit {
+  position: absolute;
+  inset: 9.5% 19.5%;
+  cursor: pointer;
+}
+
+/*
+ * 引擎在跑：朱印畫在光點裡，沒有印的矩形（光點還沒聚合、或不在預約段）就不可點——不是一塊空白的隱形按鈕。
+ * 引擎量到矩形後，腳本寫 --seal-*（視窗座標）並標 data-placed，這時才顯示、定位在印上。
+ * 退回靜態圖（html.qi-static）後這組規則不再適用，上面對齊靜態圖的規則接手。
+ */
+html.js:not(.qi-static) .seal-hit {
+  position: fixed;
+  inset: var(--seal-y, 0) auto auto var(--seal-x, 0);
+  width: var(--seal-w, 0);
+  height: var(--seal-h, 0);
+  display: none;
+}
+
+html.js:not(.qi-static) .seal-hit[data-placed] {
+  display: block;
+}
+
+/* ── 大人｜小孩切換鈕 ─────────────────────────────── */
+
+/* 切換鈕的內層是絕對定位、會垂到容器底下：容器邊界之外裁掉，離開課程段時它才會跟著收起來。 */
+.courses-run {
+  overflow: clip;
+}
+
+.audience-switch {
+  position: sticky;
+  top: calc(var(--frame-top) + 0.75rem);
+  z-index: 30;
+  height: 0;
+  pointer-events: none;
+}
+
+.audience-switch__inner {
+  position: absolute;
+  top: 0;
+  left: var(--home-pad);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 4px;
+  border: var(--line) solid var(--color-line);
+  background: color-mix(in srgb, var(--color-bg) 86%, transparent);
+  pointer-events: auto;
+}
+
+.audience-switch__inner::before {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border: var(--line) solid var(--color-line-faint);
+  pointer-events: none;
+}
+
+.audience-switch__thumb {
+  position: absolute;
+  inset: 4px auto 4px 4px;
+  width: calc(50% - 4px);
+  background: var(--color-accent);
+  transition: transform 0.55s var(--ease-out);
+}
+
+html[data-audience='kid'] .audience-switch__thumb {
+  transform: translate3d(100%, 0, 0);
+}
+
+.audience-switch__option {
+  position: relative;
+  min-width: 6.5rem;
+  min-height: 2.5rem;
+  padding: var(--space-1) var(--space-4);
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 400;
+  letter-spacing: 0.5em;
+  text-indent: 0.5em;
+  cursor: pointer;
+  transition: color 0.4s;
+}
+
+.audience-switch__option:hover {
+  color: var(--color-text);
+}
+
+html[data-audience='adult'] [data-audience-option='adult'],
+html[data-audience='kid'] [data-audience-option='kid'] {
+  color: var(--color-on-accent);
+}
+
+/* ── 段落跳轉（桌機右緣） ─────────────────────────── */
+
+.home-rail {
+  display: none;
+}
+
+/* 段落導覽是錨點連結，不需要 JS：沒有 JS 時桌機（下方 min-width: 60rem）照樣顯示、連結照樣能跳；只有「目前所在段」的標示是腳本的事。 */
+
+/* ── 直向（寬高比 ≤ 4:5）：文字在下、光點在上 ───────── */
+
+/*
+ * 與引擎取景、海報（上面的 .opening 直向算式、Opening.astro 的 <source media>）同一個切換點：手機直立、直式平板在這裡；
+ * 橫放手機、900×600 的小筆電、近方形視窗（1000×1000）都是橫向，文字在左、光點在右。
+ */
+@media (max-aspect-ratio: 4/5) {
+  .opening {
+    align-items: end;
+    padding-block: var(--space-5) 6rem;
+  }
+
+  /* 人形在正中央，站名與副標成一組置中放在它的下方。 */
+  .opening__lockup {
+    justify-self: center;
+  }
+
+  .opening__title {
+    font-size: clamp(3.25rem, 17vw, 4.5rem);
+  }
+
+  .opening__sub {
+    font-size: 0.875rem;
+    letter-spacing: 0.3em;
+  }
+
+  .beat {
+    align-items: end;
+    padding-block: var(--space-6) var(--space-7);
+  }
+
+  .beat__panel {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: var(--space-5);
+  }
+
+  .beat__text {
+    grid-row: 2;
+  }
+
+  .beat__still {
+    grid-column: 1;
+    grid-row: 1;
+    max-height: 38svh;
+  }
+
+  .seal-stage {
+    grid-column: 1;
+    width: min(100%, calc(38svh * 4 / 3));
+  }
+}
+
+/*
+ * 站名（直書）不壓到人形：字級依「人形下緣到開場區底」的空間縮放。
+ *   人形下緣 ＝ 海報人形中心（--poster-y）＋ 0.405 個海報圖高（人形外框占圖高 81%，見 .opening 的說明）；
+ *   開場區底 ＝ 視窗底（100svh）扣外框下緣與留給「往下捲」提示的 6rem；站名高 ＝ 4 字 × (1em ＋ 0.06em 字距) ＝ 4.24em。
+ * 字級取原本的大小與「放得下的最大值」中較小的，下限 2.5rem；人形的位置用 lvh、這裡的底用 svh，網址列展開時（svh 較小）空間更小，
+ * 算式自然縮得更小，不會壓到。
+ */
+@supports (height: 100svh) and (height: 100lvh) {
+  @media (max-aspect-ratio: 4/5) {
+    .opening__title {
+      --title-room: calc(100svh - var(--frame-bottom) - 6rem - var(--poster-y) - 0.405 * var(--poster-h) - 0.75rem);
+      font-size: min(clamp(3.25rem, 17vw, 4.5rem), max(2.5rem, var(--title-room) / 4.24));
+    }
+  }
+}
+
+/*
+ * 太矮的直立手機（≤ 720px 高，如 375×667、360×640）：人形下緣之下放不下直書站名，改成橫書的一組（站名在上、副標在下），
+ * 仍置中在人形下方、不壓到人形。
+ */
+@media (max-aspect-ratio: 4/5) and (max-height: 720px) {
+  .opening__lockup {
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .opening__title {
+    writing-mode: horizontal-tb;
+    font-size: 2.5rem;
+    line-height: 1.1;
+  }
+
+  .opening__sub {
+    writing-mode: horizontal-tb;
+    padding: var(--space-1) 0 0;
+    border-right: 0;
+    border-top: var(--line) solid var(--color-line);
+    letter-spacing: 0.3em;
+    text-indent: 0.3em;
+  }
+}
+
+/* ── 窄螢幕（< 60rem）：尺寸微調（版面方向看上面的寬高比，不看寬度） ───── */
+
+@media (max-width: 59.999rem) {
+  .opening__skip {
+    bottom: 4.25rem;
+  }
+
+  /*
+   * 切換鈕靠右：窄螢幕（含橫放手機）的招式文字從左邊起，切換鈕（sticky、捲動時一直在視窗上緣）若在左邊會蓋住拳術段與兵器段的標題與朱印。
+   * 這條跟版面方向（寬高比）無關，所以放在寬度斷點，不放在直向的區塊。
+   */
+  .audience-switch__inner {
+    left: auto;
+    right: var(--gutter);
+  }
+
+  .audience-switch__option {
+    min-width: 5rem;
+    min-height: 2.25rem;
+    font-size: var(--text-base);
+  }
+
+  .coach-list {
+    gap: var(--space-3);
+  }
+
+  .coach-entry {
+    padding: var(--space-3);
+  }
+
+  .coach-entry__name {
+    font-size: var(--text-xl);
+  }
+}
+
+/* ── 桌機（≥ 60rem）：段落導覽 ───────────────────── */
+
+@media (min-width: 60rem) {
+  .opening__hint {
+    display: none;
+  }
+
+  .home-rail {
+    display: block;
+    position: fixed;
+    z-index: 45;
+    top: 50%;
+    right: calc(var(--frame-inset) + 1.5rem);
+    transform: translateY(-50%);
+  }
+
+  .home-rail__list {
+    display: grid;
+    gap: var(--space-5);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .home-rail__link {
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+    letter-spacing: 0.3em;
+    text-decoration: none;
+    transition: color 0.3s;
+  }
+
+  .home-rail__label {
+    writing-mode: vertical-rl;
+  }
+
+  .home-rail__tick {
+    width: var(--line);
+    height: 1.25rem;
+    margin-top: 0.15rem;
+    background: var(--color-line-faint);
+    transition:
+      height 0.5s var(--ease-out),
+      background-color 0.3s;
+  }
+
+  .home-rail__link:hover,
+  .home-rail__link[aria-current='true'] {
+    color: var(--color-accent-strong);
+  }
+
+  .home-rail__link:hover .home-rail__tick,
+  .home-rail__link[aria-current='true'] .home-rail__tick {
+    height: 2.5rem;
+    background: var(--color-accent);
+  }
+}

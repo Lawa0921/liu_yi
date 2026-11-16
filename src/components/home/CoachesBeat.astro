@@ -1,0 +1,50 @@
+---
+// 師資（beat: coaches）：只顯示已發布的教練。光點聚成抱拳行禮的剪影（教練照片取得同意前的通用退路，設計 §9）。
+// 「專長」是該教練任教的已發布課程名（決定 D23），由 buildHomeModel 算好。
+import Still from './Still.astro';
+import type { Coach } from '../../lib/content';
+import { url } from '../../lib/url';
+
+interface Props {
+  coaches: (Coach & { teaches: string[] })[];
+}
+
+const { coaches } = Astro.props;
+---
+
+<section id="coaches" class="beat beat--plain beat--coaches" data-beat="coaches" aria-labelledby="coaches-heading">
+  <div class="beat__panel beat__panel--plain">
+    <div class="beat__text">
+      <h2 id="coaches-heading" class="beat__heading">師資</h2>
+      <ul class="coach-list">
+        {
+          coaches.map((coach) => (
+            <li>
+              <article class="coach-entry" data-coach={coach.id}>
+                <h3 class="coach-entry__name">{coach.data.name}</h3>
+                <p class="coach-entry__role">{coach.data.role}</p>
+                {
+                  coach.teaches.length > 0 && (
+                    <p class="coach-entry__teaches">
+                      專長：
+                      {coach.teaches.map((name, index) => (
+                        <>
+                          {index > 0 && '、'}
+                          <span class="coach-entry__course">{name}</span>
+                        </>
+                      ))}
+                    </p>
+                  )
+                }
+                <a class="text-link beat__link coach-entry__link" href={url(`/coaches/${coach.id}/`)}>
+                  看教練<span class="visually-hidden">：{coach.data.name}</span>
+                </a>
+              </article>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+    <Still name="salute" />
+  </div>
+</section>

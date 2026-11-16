@@ -1,0 +1,22 @@
+---
+// 一式的註解：朱印序號＋名稱，下面一到兩行說明。課程 beat 與兵器子項共用。
+// 兵器的三個 beat 各是一個 [data-sub-item]（測試與 SEO 的約定，請保留）。
+interface Props {
+  no: string;
+  name: string;
+  lines: string[];
+  /** 放在課程文章裡（接在 summary 後面），或單獨成為這個 beat 的主角。 */
+  solo?: boolean;
+  subItem?: boolean;
+}
+
+const { no, name, lines, solo = false, subItem = false } = Astro.props;
+---
+
+<div class:list={['beat__move', { 'beat__move--solo': solo }]} data-sub-item={subItem ? '' : undefined}>
+  <p class="beat__move-head">
+    <span class="seal beat__no" aria-hidden="true"><span>{no}</span></span>
+    <span class="beat__move-name">{name}</span>
+  </p>
+  {lines.map((line) => <p class="beat__move-line">{line}</p>)}
+</div>

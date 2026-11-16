@@ -1,0 +1,96 @@
+---
+// 「氣」光點引擎的測試用 harness（D26：/lab/ 試作已刪除，這一頁取代它在引擎 e2e 裡的角色）：只有一張全螢幕畫布與一支腳本，
+// 給引擎 e2e（tests/e2e/qi-engine.spec.ts、qi-effects.spec.ts）直接操作 QiStage 用。
+// 只在測試建置時才有這一頁：integrations/qi-harness.ts 要 QI_HARNESS=1 才會註冊路由（npm run build:harness，輸出到 dist-harness），
+// 一般建置（含部署）不會產出，也不在 src/pages 底下；sitemap 另外排除 /__test/，並加 noindex，雙重保險。
+//   ?qi-tier=high|mid|low|min  覆寫光點數分級（沒給或不認得就依視窗判斷）
+//   ?qi-debug=1                暴露 stage.debug（讀回、虛擬時間餵調速器）
+//   ?qi-no-onfailure=1         掛引擎時不給 onFailure（測引擎自己的 console.error 後備）
+// 引擎依實測 fps 自動降級時發 window 的 `qi:tier`；這裡把它鏡射到 html[data-qi-tier]（和正式首頁一樣的屬性）。
+import { SITE } from '../../src/lib/site';
+---
+
+<!doctype html>
+<html lang={SITE.lang}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>qi harness</title>
+    <meta name="theme-color" content="#0b0a09" />
+  </head>
+  <body>
+    <canvas id="qi-canvas" aria-hidden="true"></canvas>
+
+    <script>
+      import { initialTier } from '../../src/qi/engine/tiers';
+      import { fetchBytes } from '../../src/qi/shapes/fetch';
+      import { createShapeLoader } from '../../src/qi/shapes/loader';
+      import { resolveShapeUrl } from '../../src/qi/shapes/urls';
+      import type { QiStage } from '../../src/qi/engine/qi-stage';
+
+      // 引擎是動態載入的 chunk（和正式首頁一樣）：載入、掛上 stage、再通知測試。
+      const root = document.documentElement;
+      const canvas = document.querySelector<HTMLCanvasElement>('#qi-canvas')!;
+      const params = new URLSearchParams(location.search);
+      const tier = initialTier({
+        touch: matchMedia('(pointer: coarse)').matches,
+        width: innerWidth,
+        override: params.get('qi-tier'),
+      });
+      const loader = createShapeLoader({ fetch: fetchBytes, resolveUrl: resolveShapeUrl });
+      const failures: string[] = [];
+      (window as unknown as { __qiFailures: string[] }).__qiFailures = failures;
+      root.dataset.qiTier = tier;
+      addEventListener('qi:tier', (event) => {
+        root.dataset.qiTier = (event as CustomEvent<string>).detail;
+      });
+
+      async function start(): Promise<void> {
+        const { mountQiStage } = await import('../../src/qi/engine/qi-stage');
+        const stage: QiStage = await mountQiStage({
+          canvas,
+          tier,
+          loader,
+          reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
+          debug: params.get('qi-debug') === '1',
+          // 引擎中途出錯（自動降級重建失敗）時通知這裡；正式首頁在這裡退回靜態圖，harness 只記下來給測試讀。
+          // ?qi-no-onfailure=1 不給這個回呼，測「呼叫端沒接時引擎自己至少 console.error」。
+          ...(params.get('qi-no-onfailure') === '1'
+            ? {}
+            : {
+                onFailure: (error: unknown) => {
+                  failures.push(String(error));
+                },
+              }),
+        });
+        (window as unknown as { __qiStage: QiStage }).__qiStage = stage;
+        addEventListener('resize', () => stage.resize(innerWidth, innerHeight));
+        root.dataset.harness = 'ready';
+      }
+
+      start().catch((error: unknown) => {
+        console.error(error);
+        root.dataset.harness = 'error';
+      });
+    </script>
+
+    <style is:global>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #0b0a09;
+        overflow: hidden;
+      }
+
+      #qi-canvas {
+        position: fixed;
+        inset: 0;
+        width: 100vw;
+        height: 100vh;
+        display: block;
+      }
+    </style>
+  </body>
+</html>

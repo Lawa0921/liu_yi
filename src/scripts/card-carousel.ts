@@ -12,7 +12,7 @@
 import { carouselMode, createCarousel } from '../lib/carousel';
 
 /** 視窗上下各扣掉 35%，只剩中央 30% 的帶狀區域算「在畫面中央」。 */
-const CENTER_BAND_MARGIN = '-35% 0px -35% 0px';
+export const CENTER_BAND_MARGIN = '-35% 0px -35% 0px';
 
 export function initCardCarousels(): void {
   const canHover = window.matchMedia('(hover: hover)').matches;

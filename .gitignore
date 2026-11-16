@@ -4,11 +4,24 @@ node_modules/
 # build output
 dist/
 dist-root/
+dist-harness/
+dist-ph/
 .astro/
+
+# 剪影的臨時佔位檔（只給開發與版面檢查用；正式素材在 src/assets/silhouettes/）
+src/assets/_placeholder-silhouettes/
+
+# 開發者本機快取（TW-Kai 原檔等，不進 git）與建置時生成的素材
+.cache/
+src/assets/generated/
+
+# 本機 Python 工具（tools/）的位元組碼快取
+__pycache__/
 
 # tests
 playwright-report/
 test-results/
+.vitest/
 
 # env / logs / OS
 .env

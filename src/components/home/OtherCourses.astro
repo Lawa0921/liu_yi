@@ -1,0 +1,39 @@
+---
+// 其他課程（beat: others）：category 為 other 且已發布的課。光點淡成一列小形體，不搶戲。
+// 「所有課程」連到課程總覽頁，守住「每門已發布課程都有 DOM 標題與連結」。
+import Still from './Still.astro';
+import type { Course } from '../../lib/content';
+import { url } from '../../lib/url';
+import { COPY } from '../../qi/config/copy';
+
+interface Props {
+  courses: Course[];
+}
+
+const { courses } = Astro.props;
+---
+
+<section id="others" class="beat beat--plain" data-beat="others" aria-labelledby="others-heading">
+  <div class="beat__panel beat__panel--plain">
+    <div class="beat__text">
+      <h2 id="others-heading" class="beat__heading">其他課程</h2>
+      <p class="beat__lead">{COPY.others.lead}</p>
+      <ul class="others__list">
+        {
+          courses.map((course) => (
+            <li>
+              <article class="others__item" data-course={course.id}>
+                <h3 class="others__title">
+                  <a href={url(`/courses/${course.id}/`)}>{course.data.title}</a>
+                </h3>
+                <p class="others__summary">{course.data.summary}</p>
+              </article>
+            </li>
+          ))
+        }
+      </ul>
+      <p class="beat__more"><a class="text-link beat__link" href={url('/courses/')}>{COPY.others.all}</a></p>
+    </div>
+    <Still name="others" />
+  </div>
+</section>

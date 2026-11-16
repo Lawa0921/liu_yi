@@ -84,37 +84,14 @@ test.describe('預約體驗', () => {
   });
 });
 
-test.describe('減少動態', () => {
-  test.use({ reducedMotion: 'reduce' });
-
-  test('內容全部可見', async ({ page }) => {
-    await page.goto('./');
-    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-    const headings = page.locator('main h2');
-    expect(await headings.count()).toBeGreaterThanOrEqual(5);
-    for (const heading of await headings.all()) await expect(heading).toBeVisible();
-    for (const card of await cardTitles(page, 'adult').all()) await expect(card).toBeVisible();
-
-    const hiddenByStyle = await page.evaluate(() =>
-      Array.from(document.querySelectorAll('main section'))
-        .filter((el) => {
-          const style = getComputedStyle(el);
-          return style.opacity === '0' || style.visibility === 'hidden';
-        })
-        .map((el) => el.id || el.className),
-    );
-    expect(hiddenByStyle).toEqual([]);
-
-    await page.getByRole('button', { name: '小孩' }).click();
-    for (const card of await cardTitles(page, 'kid').all()) await expect(card).toBeVisible();
-  });
-});
+// 減少動態下「首頁內容全部可見」改寫在 home.spec.ts；首頁沒有 JavaScript 的版本在 home-fallback.spec.ts。
 
 test.describe('沒有 JavaScript', () => {
   test.use({ javaScriptEnabled: false, viewport: { width: 390, height: 844 } });
 
-  test('內容仍看得到、連結都能點', async ({ page, baseURL }) => {
-    await page.goto('./');
+  // 卡片、切換鈕與導覽的無 JS 行為由課程總覽頁驗（首頁已改成 beat 版面）。
+  test('內容仍看得到、連結都能點（課程總覽）', async ({ page, baseURL }) => {
+    await page.goto('./courses/');
 
     // 兩個對象的卡片都顯示；切換按鈕沒有作用所以不顯示。
     await expect(cardTitles(page, 'adult')).toHaveText(ADULT_COURSES.map((c) => c.title));

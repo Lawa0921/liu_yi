@@ -1,0 +1,147 @@
+import { readFileSync } from 'node:fs';
+import { describe, expect, it } from 'vitest';
+import { isPortrait, PORTRAIT_ASPECT } from '../../src/qi/engine/viewport';
+
+/**
+ * 首頁樣式的守則（Task 19）：畫布與各 beat 的高度用 `lvh`／`svh`，不用會隨網址列抖動的 `vh`，也不用強制 scroll-snap。
+ * 檔案內容先去掉註解再比對：說明文字裡提到這些詞不算。
+ */
+const css = readFileSync(new URL('../../src/styles/home.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+
+/** 所有 `@media <query> { … }` 區塊的內容（依大括號配對，不靠換行），多個同條件的區塊接在一起。 */
+function mediaBody(query: string): string {
+  const head = `@media ${query}`;
+  const bodies: string[] = [];
+  for (let at = css.indexOf(head); at !== -1; at = css.indexOf(head, at + head.length)) {
+    const open = css.indexOf('{', at);
+    let depth = 0;
+    let end = open;
+    for (; end < css.length; end++) {
+      if (css[end] === '{') depth++;
+      else if (css[end] === '}' && --depth === 0) break;
+    }
+    bodies.push(css.slice(open + 1, end));
+  }
+  return bodies.join('\n');
+}
+
+describe('home.css 的高度與捲動守則', () => {
+  it('畫布高度用 100lvh（大視窗高：網址列伸縮時畫布不跟著變）', () => {
+    expect(css).toMatch(/100lvh/);
+  });
+
+  it('beat 高度用 --stage-height（svh）', () => {
+    expect(css).toMatch(/var\(--stage-height\)/);
+  });
+
+  it('不使用 100vh', () => {
+    expect(css).not.toMatch(/100vh/);
+  });
+
+  it('不使用強制 scroll-snap（只有 none 可以）', () => {
+    const types = [...css.matchAll(/scroll-snap-type\s*:\s*([^;}]*)/g)].map((m) => m[1]!.trim());
+    expect(types.filter((value) => value !== 'none')).toEqual([]);
+  });
+
+  it('畫布固定在視窗、不接收指標事件、在內容底下（z-index 0）', () => {
+    const rule = /\.home-canvas\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(rule).toMatch(/position\s*:\s*fixed/);
+    expect(rule).toMatch(/z-index\s*:\s*0\b/);
+    expect(rule).toMatch(/pointer-events\s*:\s*none/);
+  });
+});
+
+describe('home.css 的退回與海報規則（Task 20）', () => {
+  it('海報盒子要 max-width: none：全站的 picture { max-width: 100% } 會把盒子縮回內容寬，兩側的 inset 就沒了、人形偏位', () => {
+    const rule = /\.opening__poster\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(rule).toMatch(/max-width\s*:\s*none/);
+  });
+
+  it('引擎接手後海報淡出（data-qi-ready），退回時拿掉那個屬性海報就回來（不另寫 qi-static 規則）', () => {
+    expect(css).toMatch(/html\[data-qi-ready\]\s+\.opening__poster\s*\{[^}]*opacity\s*:\s*0/);
+    expect(css).not.toMatch(/qi-static[^{]*\.opening__poster/);
+  });
+
+  it('靜態圖只在 html.js 且非 qi-static 時隱藏（沒有 JS、減少動態、沒有 WebGL 都露出）', () => {
+    expect(css).toMatch(/html\.js:not\(\.qi-static\)\s+\.beat__still\s*\{[^}]*display\s*:\s*none/);
+  });
+
+  it('段落導覽沒有 JS 也可見（錨點連結不需要 JS）：不再有 html:not(.js) 隱藏它的規則；桌機（≥ 60rem）顯示、手機預設不顯示', () => {
+    expect(css).not.toMatch(/html:not\(\.js\)\s+\.home-rail/);
+    expect(/(?:^|\})\s*\.home-rail\s*\{([^}]*)\}/m.exec(css)?.[1] ?? '').toMatch(/display\s*:\s*none/); // 手機預設
+    const desktop = /@media \(min-width: 60rem\)\s*\{([\s\S]*)$/.exec(css)?.[1] ?? '';
+    expect(/\.home-rail\s*\{([^}]*)\}/.exec(desktop)?.[1] ?? '').toMatch(/display\s*:\s*block/);
+  });
+
+  it('海報人形的位置與大小是依引擎取景推出的算式（橫向與直向各一組），不是寫死的百分比', () => {
+    const landscape = /\.opening\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(landscape).toMatch(/--poster-h\s*:\s*min\(/);
+    expect(landscape).toMatch(/--poster-x\s*:\s*calc\(/);
+    expect(landscape).toMatch(/--poster-y\s*:\s*calc\(/);
+    const portrait = /@media \(max-aspect-ratio: 4\/5\)\s*\{\s*\.opening\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(portrait).toMatch(/--poster-h\s*:\s*min\(/);
+    expect(portrait).toMatch(/--poster-x\s*:\s*50%/);
+    expect(portrait).toMatch(/--poster-y\s*:\s*calc\(/);
+  });
+
+  it('版面與海報的橫向／直向切換是同一個寬高比條件（4:5，與引擎的 isPortrait 同源），不是寬度斷點（60rem）', () => {
+    // 引擎（engine/viewport.ts 的 isPortrait）與這裡都用「寬 ≤ 高 × 4/5 才是直向」：橫放手機、直式平板、近方形視窗才不會錯位。
+    expect(css).not.toMatch(/max-aspect-ratio\s*:\s*1\/1/);
+    const stacked = mediaBody('(max-aspect-ratio: 4/5)');
+    expect(stacked, '海報人形的直向算式在 @media (max-aspect-ratio: 4/5)').toMatch(/\.opening\s*\{[^}]*--poster-h\s*:/);
+    // 文字在下、光點在上的堆疊版面也在這個條件裡，而不是寬度斷點
+    expect(stacked).toMatch(/\.beat__panel\s*\{[^}]*grid-template-columns\s*:\s*minmax\(0,\s*1fr\)/);
+    expect(stacked).toMatch(/\.beat__text\s*\{[^}]*grid-row\s*:\s*2/);
+    // 寬度斷點只留尺寸微調，不再決定版面方向，也不碰海報算式
+    const widthBlock = mediaBody('(max-width: 59.999rem)');
+    expect(widthBlock).not.toMatch(/--poster-/);
+    expect(widthBlock).not.toMatch(/\.beat__panel\s*\{/);
+    expect(widthBlock).not.toMatch(/\.beat__text\s*\{/);
+    // 切換鈕靠右是窄螢幕（含橫放手機）的事，不是直向的事：放在直向區塊裡，橫放手機（寬 < 60rem、橫向）就會被排除而蓋住文字
+    expect(widthBlock).toMatch(/\.audience-switch__inner\s*\{[^}]*left\s*:\s*auto[^}]*right\s*:\s*var\(--gutter\)/);
+    expect(stacked).not.toMatch(/\.audience-switch__inner/);
+    // 海報圖的 <source media> 也是同一個條件
+    const opening = readFileSync(new URL('../../src/components/home/Opening.astro', import.meta.url), 'utf8');
+    expect(opening).toContain('max-aspect-ratio: ${PORTRAIT_ASPECT}');
+    expect(PORTRAIT_ASPECT, '引擎端的常數與 CSS 寫死的 4/5 是同一個數字').toBe('4/5');
+    expect(isPortrait(800, 1000)).toBe(true); // 4:5 恰在直向這邊（媒體查詢的 max-aspect-ratio 含等號）
+    expect(opening).not.toMatch(/max-aspect-ratio: 1\/1/);
+  });
+
+  it('直向版面的站名依人形下緣縮放（--poster-h、--poster-y），站名不壓到人形（手機首屏）', () => {
+    const stacked = mediaBody('(max-aspect-ratio: 4/5)');
+    const titleRules = [...stacked.matchAll(/\.opening__title\s*\{([^}]*)\}/g)].map((m) => m[1]!);
+    const adaptive = titleRules.find((rule) => /--title-room/.test(rule)) ?? '';
+    expect(adaptive).toMatch(/font-size\s*:[^;]*var\(--title-room\)/);
+    const room = /--title-room\s*:\s*([^;]*);/.exec(adaptive)?.[1] ?? '';
+    expect(room).toContain('var(--poster-y)');
+    expect(room).toContain('var(--poster-h)');
+  });
+
+  it('程式移到 main 的焦點不畫外框（退回時焦點在略過鈕上，先移到 main）', () => {
+    expect(css).toMatch(/\[data-home\]:focus\s*\{[^}]*outline\s*:\s*none/);
+  });
+});
+
+describe('home.css 的朱印點擊區規則（Task 21）', () => {
+  it('引擎在跑（html.js:not(.qi-static)）時 .seal-hit 預設 display:none，要等腳本標 data-placed 才顯示、定位在 --seal-* 上', () => {
+    const base = /html\.js:not\(\.qi-static\)\s+\.seal-hit\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(base).toMatch(/position\s*:\s*fixed/);
+    expect(base).toMatch(/display\s*:\s*none/);
+    for (const name of ['--seal-x', '--seal-y', '--seal-w', '--seal-h']) expect(base).toContain(`var(${name}`);
+    expect(css).toMatch(/html\.js:not\(\.qi-static\)\s+\.seal-hit\[data-placed\]\s*\{[^}]*display\s*:\s*block/);
+  });
+
+  it('靜態圖（其餘情況）時 .seal-hit 絕對定位在朱印靜態圖的盒子裡、對齊圖上的印，不是隱藏也不是 pointer-events:none', () => {
+    const rule = /(?:^|\})\s*\.seal-hit\s*\{([^}]*)\}/m.exec(css)?.[1] ?? '';
+    expect(rule).toMatch(/position\s*:\s*absolute/);
+    expect(rule).toMatch(/inset\s*:/);
+    expect(rule).not.toMatch(/display\s*:\s*none|pointer-events\s*:\s*none/);
+    expect(/\.seal-stage\s*\{([^}]*)\}/.exec(css)?.[1] ?? '').toMatch(/position\s*:\s*relative/);
+  });
+
+  it('BookingBeat 把靜態圖與 .seal-hit 包在同一個 .seal-stage 裡（同一個座標系），.seal-hit 對讀屏與 Tab 隱藏', () => {
+    const booking = readFileSync(new URL('../../src/components/home/BookingBeat.astro', import.meta.url), 'utf8');
+    expect(booking).toMatch(/<div class="seal-stage">\s*<Still name="seal" \/>\s*<a class="seal-hit"[^>]*tabindex="-1"[^>]*aria-hidden="true"/);
+  });
+});

@@ -102,10 +102,8 @@ const { name, role } = coach.data;
     padding-inline-start: 0.14em;
     line-height: 1.2;
     white-space: nowrap;
-    background: linear-gradient(170deg, var(--color-text) 15%, var(--color-accent-strong) 60%, var(--color-accent));
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+    /* 平面古金（設計 §4 反目標：不做金色漸層立體字）。 */
+    color: var(--color-accent);
     transition: transform 0.9s var(--ease-out);
   }
 

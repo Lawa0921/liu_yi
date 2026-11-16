@@ -1,7 +1,7 @@
 /*
  * 全站基本排版與共用樣式。
  * 元件專屬樣式寫在各 .astro 檔的 <style> 裡；這裡只放 reset、排版、共用的 class。
- * 紋樣、匾額、方印、顆粒、進場效果在 ornament.css；固定外框在 chrome.css；3D 兵器、刀光、震腳在 arsenal.css。
+ * 紋樣、匾額、方印、顆粒、進場效果在 ornament.css；固定外框在 chrome.css；3D 兵器在 arsenal.css。
  */
 
 @import './tokens.css';
@@ -17,6 +17,8 @@
 
 html {
   color-scheme: dark;
+  /* TW-Kai 只有一種粗細（400）：不讓瀏覽器把它合成假粗體或假斜體。 */
+  font-synthesis: none;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
   scroll-padding-top: calc(var(--header-height) + var(--space-4));
@@ -40,6 +42,14 @@ main {
   flex: 1;
 }
 
+/* 表單控制項預設用系統字型，不會自己繼承；全站都用 TW-Kai。 */
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
 img,
 picture,
 svg {
@@ -54,7 +64,7 @@ h3,
 h4 {
   margin: 0 0 var(--space-4);
   font-family: var(--font-display);
-  font-weight: 700;
+  font-weight: 400;
   line-height: var(--leading-tight);
   letter-spacing: var(--tracking-display);
   text-wrap: balance;
@@ -194,7 +204,7 @@ hr {
   color: var(--color-accent-strong);
   font-family: var(--font-display);
   font-size: var(--text-base);
-  font-weight: 700;
+  font-weight: 400;
   letter-spacing: 0.28em;
   text-indent: 0.28em;
   text-decoration: none;
@@ -260,7 +270,7 @@ hr {
   padding-block: var(--space-1);
   color: var(--color-accent-strong);
   font-family: var(--font-display);
-  font-weight: 700;
+  font-weight: 400;
   letter-spacing: 0.2em;
   text-decoration: none;
 }
@@ -321,6 +331,13 @@ hr {
 
 .skip-link:focus {
   transform: none;
+}
+
+/* 依 <html data-audience> 隱藏另一組面板（課程總覽的卡片組、首頁各 beat 的面板共用）。
+   沒有 JS 時 <html> 沒有 data-audience，兩組都顯示。 */
+html[data-audience='adult'] [data-audience-panel='kid'],
+html[data-audience='kid'] [data-audience-panel='adult'] {
+  display: none;
 }
 
 /* 沒有 JavaScript 時，只有 JS 才有用的控制項不顯示（<html> 的 js class 由 BaseLayout 的行內腳本加上）。 */

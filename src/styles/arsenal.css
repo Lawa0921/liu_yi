@@ -1,5 +1,5 @@
 /*
- * 第二版的共用樣式（設計文件 §15）：3D 兵器的畫布、刀光層、震腳。
+ * 第二版的共用樣式（設計文件 §15）：3D 兵器的畫布與線稿退場。刀光層與震腳隨舊首頁移除（Task 22）。
  * 約定：
  *   [data-weapon3d]                           3D 兵器的宿主（src/scripts/weapons3d.ts）
  *   [data-weapon3d-scope]                     包住宿主與它的線稿退路、操作列的範圍
@@ -36,37 +36,4 @@
 
 [data-weapon3d-scope]:not([data-weapon3d-state='ready']) [data-weapon3d-controls] {
   display: none;
-}
-
-/* ── 刀光層：整個視窗的一張畫布，純視覺 ─────────────── */
-
-.slash-layer {
-  position: fixed;
-  inset: 0;
-  z-index: 80;
-  width: 100%;
-  height: 100%;
-  /* 不擋點擊、不攔截捲動。 */
-  pointer-events: none;
-}
-
-/* 揮刀的那一下不反白文字（src/scripts/slash.ts 在快速拖曳時加上、放開就拿掉）。 */
-html.is-slashing,
-html.is-slashing * {
-  user-select: none;
-}
-
-/* ── 震腳：八方紋震開的圈 ───────────────────────────── */
-
-.stomp-ring {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: var(--emblem, 20rem);
-  height: var(--emblem, 20rem);
-  max-width: none;
-  margin: calc(var(--emblem, 20rem) / -2) 0 0 calc(var(--emblem, 20rem) / -2);
-  color: var(--color-accent-strong);
-  pointer-events: none;
-  opacity: 0;
 }

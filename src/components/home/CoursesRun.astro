@@ -1,0 +1,23 @@
+---
+// 課程段：拳 → 格鬥 → 兵器，共六個 beat（拳 1、格鬥 2、兵器 3）。每個 beat 一個姿勢，
+// 兩個對象的面板都在 DOM 裡，顯示哪一組由 <html data-audience> 決定（規則在 global.css）。
+// 切換鈕放在 .courses-run 的最前面（sticky、高度 0），所以只在課程段期間黏在畫面上方。
+import AudienceSwitch from './AudienceSwitch.astro';
+import CourseBeat from './CourseBeat.astro';
+import type { Course } from '../../lib/content';
+import type { StepModel } from '../../lib/home';
+
+interface Props {
+  steps: StepModel<Course>[];
+}
+
+const { steps } = Astro.props;
+---
+
+<section id="courses" class="courses" aria-labelledby="courses-heading">
+  <h2 id="courses-heading" class="visually-hidden">課程</h2>
+  <div class="courses-run">
+    <AudienceSwitch />
+    {steps.flatMap((step) => step.beats.map((beat, index) => <CourseBeat beat={beat} step={step} lead={index === 0} />))}
+  </div>
+</section>

@@ -65,9 +65,11 @@
   --color-void: #000; /* 純黑：只給「黑底圖片以混色模式融進底色」這類技術用途 */
 
   /* ── 字體 ─────────────────────────────────────────── */
-  /* --font-noto-serif-tc 由 Astro 字型功能注入（astro.config.mjs 的 fonts），只載 700 一個字重。 */
-  --font-display: var(--font-noto-serif-tc), 'Songti TC', 'PMingLiU', serif;
-  --font-body: system-ui, -apple-system, 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans TC', sans-serif;
+  /* --font-twkai 由 Astro 字型功能注入（astro.config.mjs 的 fonts）：TW-Kai 楷體的子集，只有 400 一個字重。
+     標題與內文都用它，所以兩個 token 同值；全站不得再用其他字重（font-synthesis: none，tests/unit/style-guard.test.ts 守住）。
+     後備字型只在子集沒收到的字（守門會擋）或載入前使用。 */
+  --font-display: var(--font-twkai), 'Songti TC', 'PMingLiU', serif;
+  --font-body: var(--font-twkai), 'Songti TC', 'PMingLiU', serif;
 
   --text-sm: 0.875rem;
   --text-base: 1rem;

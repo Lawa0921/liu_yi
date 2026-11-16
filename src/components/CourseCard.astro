@@ -340,12 +340,10 @@ const glyph = category === 'other' ? undefined : CATEGORY_GLYPH[category];
     position: relative;
     font-family: var(--font-display);
     font-size: clamp(6rem, 11vw, 8.5rem);
-    font-weight: 700;
+    font-weight: 400;
     line-height: 1;
-    background: linear-gradient(170deg, var(--color-text) 10%, var(--color-accent-strong) 48%, var(--color-accent) 85%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+    /* 平面古金（設計 §4 反目標：不做金色漸層立體字）。 */
+    color: var(--color-accent);
     /* 字後面墊一圈底色，讓紋樣的線不穿過筆畫。 */
     filter: drop-shadow(0 0 14px var(--color-bg)) drop-shadow(0 0 6px var(--color-bg));
     transition: transform 1.4s var(--ease-out);
@@ -379,7 +377,7 @@ const glyph = category === 'other' ? undefined : CATEGORY_GLYPH[category];
     color: var(--color-accent-strong);
     font-family: var(--font-display);
     font-size: var(--text-sm);
-    font-weight: 700;
+    font-weight: 400;
     letter-spacing: 0.4em;
   }
 
