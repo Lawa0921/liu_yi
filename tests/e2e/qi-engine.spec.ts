@@ -722,6 +722,179 @@ test.describe('依 fps 自動降級', () => {
     expect(await page.evaluate(() => stageOf().debug.pose())).toBe('land');
   });
 
+  // ── 開場期間延後降級（Task 22，Task 17 審查轉來）──────────────────────────
+  // 降級＝重建 GPGPU、光點直接落在目標上。開場正在演（散開、吸氣流線）時重建，會把整段演出瞬移抹掉；
+  // 所以開場期間調速器說「該降」只記下來，等開場結束（演完、被略過、被別的姿勢打斷）的下一格才真的降。
+  /** 等開場真的開始計時（形體是真的 fetch，不受假時鐘控制；`uIntroT` ≥ 0 才算開始）。 */
+  const waitIntroStarted = (page: Page) =>
+    expect
+      .poll(async () => {
+        await run(page, 50);
+        return (await uniforms(page)).uIntroT;
+      }, { timeout: 30_000 })
+      .toBeGreaterThanOrEqual(0);
+
+  test('開場正在演：慢幀只記下來、不重建（開場不被瞬移抹掉）；演完的下一格才降一次，姿勢停在 land', async ({ page }) => {
+    await open(page, LOW);
+    await setPose(page, 'land');
+    await run(page, 16);
+    const before = await generation(page);
+    await page.evaluate(() => stageOf().playIntro());
+    await waitIntroStarted(page);
+    const introT = (await uniforms(page)).uIntroT!;
+
+    const fed = await feed(page, 40, 20_000); // 單一 evaluate 迴圈：模擬沒有前進，開場時間軸原地不動
+    expect(fed.events, '開場期間不降級').toEqual([]);
+    expect(fed.tier).toBe('low');
+    expect(fed.generation, '沒有重建（重建會把光點直接放回目標上，抹掉散開與吸氣）').toBe(before);
+    expect((await uniforms(page)).uIntroT, '開場時間軸沒有被歸零').toBe(introT);
+
+    await run(page, 5000); // 開場約 3.4 s：演完
+    expect((await uniforms(page)).uIntroT).toBe(-1);
+    expect(await page.evaluate(() => stageOf().debug.tier()), '演完之後才降').toBe('min');
+    expect(await generation(page)).toBe(before + 1);
+    expect(await page.evaluate(() => document.documentElement.dataset.qiTier)).toBe('min');
+    expect(await page.evaluate(() => stageOf().debug.pose())).toBe('land');
+    await run(page, 2500);
+    expect(await meanError(page)).toBeLessThan(0.05);
+  });
+
+  test('開場期間記下的降級，在開場被略過時同樣照做（只降一次）', async ({ page }) => {
+    await open(page, LOW);
+    await setPose(page, 'land');
+    await run(page, 16);
+    const before = await generation(page);
+    await page.evaluate(() => {
+      (window as unknown as { __tiers: string[] }).__tiers = [];
+      window.addEventListener('qi:tier', (event) => (window as unknown as { __tiers: string[] }).__tiers.push((event as CustomEvent<string>).detail));
+      stageOf().playIntro();
+    });
+    await waitIntroStarted(page);
+    await feed(page, 40, 20_000);
+    expect(await generation(page)).toBe(before);
+
+    await page.evaluate(() => stageOf().playIntro({ skip: true }));
+    await run(page, 100);
+    expect(await page.evaluate(() => stageOf().debug.tier())).toBe('min');
+    expect(await generation(page)).toBe(before + 1);
+    expect(await page.evaluate(() => (window as unknown as { __tiers: string[] }).__tiers)).toEqual(['min']);
+    await run(page, 3000);
+    expect(await generation(page), '之後不再重建').toBe(before + 1);
+  });
+
+  test('沒有開場時降級照舊立刻發生（對照組：延後只針對開場）', async ({ page }) => {
+    await open(page, LOW);
+    await setPose(page, 'land');
+    const before = await generation(page);
+    const fed = await feed(page, 40, 20_000);
+    expect(fed.events.map((e) => e.tier)).toEqual(['min']);
+    expect(fed.generation).toBe(before + 1);
+  });
+
+  // ── 分頁回到可見（Task 22，Task 17 審查轉來）───────────────────────────────
+  // 分頁切走期間 rAF 停擺、回來時 GPU 與計時器要一下子才醒，頭幾格會又慢又亂；調速器若照單全收，會把「剛回來」誤判成「這台機器太慢」。
+  // 轉為可見時重建調速器（從目前的 tier 重新暖機 2 s、再兩個差視窗），那一段不計。
+  test('分頁轉為可見：調速器重新暖機（切走前累積的差視窗與回來後頭幾格的慢幀都不算）', async ({ page }) => {
+    const step = (ms: number) => feed(page, 40, ms);
+    const tierNow = () => page.evaluate(() => stageOf().debug.tier());
+    const visible = () => page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+
+    await open(page, LOW);
+    await setPose(page, 'land');
+    await step(3500); // 暖機 2 s 之後的第一個差視窗已記一次，第二個還沒結束
+    expect(await tierNow(), '前置條件：還沒降').toBe('low');
+    await visible();
+    await step(3000); // 沒重新暖機的話，第二個差視窗在這裡結束就降了
+    expect(await tierNow(), '重新暖機：回來後 3 s 內不降').toBe('low');
+    await step(3000);
+    expect(await tierNow(), '調速器仍然運作：重新暖機之後照常降').toBe('min');
+  });
+
+  test('對照組：同一組幀序列沒有 visibilitychange 就會降', async ({ page }) => {
+    await open(page, LOW);
+    await setPose(page, 'land');
+    await feed(page, 40, 3500);
+    await feed(page, 40, 3000);
+    expect(await page.evaluate(() => stageOf().debug.tier())).toBe('min');
+  });
+
+  test('visibilitychange 但文件不是可見（切走）：不重建調速器', async ({ page }) => {
+    await open(page, LOW);
+    await setPose(page, 'land');
+    await feed(page, 40, 3500);
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await feed(page, 40, 3000);
+    expect(await page.evaluate(() => stageOf().debug.tier()), '切走不是「回來」：差視窗照算').toBe('min');
+  });
+
+  test('dispose 之後 visibilitychange 不再動作（監聽器已移除）、也不報錯', async ({ page }) => {
+    await open(page, LOW);
+    await setPose(page, 'land');
+    await page.evaluate(() => stageOf().dispose());
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    await run(page, 100);
+  });
+
+  // ── 自動降級時重建丟錯（Task 22，Task 17 審查轉來）─────────────────────────
+  // 重建一開始就把舊的 sim 與貼圖放掉；中途丟錯（顯示卡記憶體不足、著色器編不出來）會留下一個沒有 sim 的引擎，畫面停在空白。
+  // 引擎不自己決定怎麼收場：停掉自己的迴圈、呼叫 `onFailure` 一次，由呼叫端 dispose 並退回靜態圖（首頁會 enterStatic）。
+  test('降級時重建丟錯：onFailure 恰好一次、不丟未捕捉的錯、不再排幀、不再重試；dispose 無妨', async ({ page }) => {
+    await page.addInitScript(() => {
+      const proto = WebGL2RenderingContext.prototype;
+      const original = proto.createFramebuffer;
+      proto.createFramebuffer = function (this: WebGL2RenderingContext) {
+        if ((window as unknown as { __failFramebuffers?: boolean }).__failFramebuffers) throw new Error('forced framebuffer failure');
+        return original.call(this);
+      };
+    });
+    await open(page, LOW);
+    await setPose(page, 'land');
+    await run(page, 100);
+    const failures = () => page.evaluate(() => (window as unknown as { __qiFailures: string[] }).__qiFailures);
+    expect(await failures()).toEqual([]);
+    const before = await generation(page);
+
+    await page.evaluate(() => ((window as unknown as { __failFramebuffers: boolean }).__failFramebuffers = true));
+    const fed = await feed(page, 40, 20_000); // 說「該降」的那一格重建就會丟錯；feedFrameTime 不能把錯丟回呼叫端
+    expect(fed.events, '沒有成功換級，不發 qi:tier').toEqual([]);
+    const reported = await failures();
+    expect(reported).toHaveLength(1);
+    expect(reported[0]).toMatch(/forced framebuffer failure/);
+
+    const drawn = await draws(page);
+    await run(page, 1000);
+    expect(await draws(page), '失敗後不再排 rAF、不再畫').toBe(drawn);
+    expect(await generation(page), '不再重試重建').toBe(before);
+    expect((await feed(page, 40, 20_000)).events).toEqual([]);
+    expect(await failures(), '只通知一次').toHaveLength(1);
+
+    await page.evaluate(() => ((window as unknown as { __failFramebuffers: boolean }).__failFramebuffers = false));
+    await page.evaluate(() => stageOf().dispose());
+    await page.evaluate(() => stageOf().dispose()); // 重複呼叫無妨
+  });
+
+  test('手動 setTier 重建失敗：照舊 reject 給呼叫端（不走 onFailure，呼叫端自己知道）', async ({ page }) => {
+    await page.addInitScript(() => {
+      const proto = WebGL2RenderingContext.prototype;
+      const original = proto.createFramebuffer;
+      proto.createFramebuffer = function (this: WebGL2RenderingContext) {
+        if ((window as unknown as { __failFramebuffers?: boolean }).__failFramebuffers) throw new Error('forced framebuffer failure');
+        return original.call(this);
+      };
+    });
+    await open(page, LOW);
+    await setPose(page, 'land');
+    await page.evaluate(() => ((window as unknown as { __failFramebuffers: boolean }).__failFramebuffers = true));
+    const result = await page.evaluate(() => stageOf().setTier('min').then(() => 'ok', (e: Error) => e.message));
+    expect(result).toMatch(/forced framebuffer failure/);
+    expect(await page.evaluate(() => (window as unknown as { __qiFailures: string[] }).__qiFailures)).toEqual([]);
+    await page.evaluate(() => ((window as unknown as { __failFramebuffers: boolean }).__failFramebuffers = false));
+    await page.evaluate(() => stageOf().dispose());
+  });
+
   test.describe('減少動態', () => {
     test.use({ reducedMotion: 'reduce' });
 

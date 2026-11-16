@@ -876,6 +876,31 @@ test.describe('依 fps 自動降級（桌機 960×600，起於 high）', () => {
     await expect(html(page)).toHaveAttribute('data-qi-tier', 'min');
   });
 
+  test('開場還在演：降級先記下來（不重建、開場時間軸不歸零），開場演完的下一格才降；屬性與 window.__qi.tier 一起變、姿勢停在 land（Task 22）', async ({ page }) => {
+    await open(page, { url: './?qi-tier=low&qi-debug=1', intro: 'fresh' });
+    await expect(html(page)).toHaveAttribute('data-qi-intro', 'playing');
+    const introT = () => page.evaluate(() => (window as unknown as W).__qi.debug.uniforms().uIntroT!);
+    await expect.poll(async () => { await run(page, 50); return introT(); }, { timeout: 30_000 }).toBeGreaterThanOrEqual(0);
+    const startedAt = await introT();
+    const before = await generation(page);
+
+    const steps = await feedSlow(page, 40, 20_000);
+    expect(steps.map((s) => [s.attr, s.global]), '開場期間屬性不變').toEqual([['low', 'low']]);
+    expect(await generation(page), '沒有重建').toBe(before);
+    expect(await introT(), '開場時間軸原地不動').toBe(startedAt);
+    await expect(html(page)).toHaveAttribute('data-qi-intro', 'playing');
+
+    await run(page, 5000); // 開場約 3.4 s
+    await expect(html(page)).toHaveAttribute('data-qi-intro', 'done');
+    expect(await introT()).toBe(-1);
+    await expect(html(page)).toHaveAttribute('data-qi-tier', 'min');
+    expect(await page.evaluate(() => (window as unknown as W).__qi.tier)).toBe('min');
+    expect(await generation(page)).toBe(before + 1);
+    await expect(html(page)).toHaveAttribute('data-qi-pose', 'land');
+    await run(page, 2500);
+    expect(await page.evaluate(() => (window as unknown as W).__qi.debug.meanError())).toBeLessThan(0.05);
+  });
+
   test('16 ms 的幀 20 秒：不降級，屬性與 window.__qi.tier 都不變', async ({ page }) => {
     await open(page, { url: HIGH_HOME });
     const before = await generation(page);

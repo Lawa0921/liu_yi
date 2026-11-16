@@ -596,6 +596,57 @@ test.describe('RF5：context 中途遺失', () => {
   });
 });
 
+// ── 自動降級時重建失敗（Task 22）──────────────────────────────────
+// 降級＝重建 GPGPU，一開始就把舊的 sim 放掉；中途丟錯（顯示卡記憶體不足、著色器編不出來）就沒有東西可畫。
+// 停在空白畫布比靜態圖糟：引擎通知首頁、首頁退回靜態圖（reason `tier-failed`），DOM 內容不變。
+
+test.describe('自動降級時重建失敗（tier-failed）', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+  const LOW_HOME = './?qi-tier=low&qi-debug=1';
+
+  test('feedFrameTime 餵慢幀、降級的重建丟錯：退回靜態圖、warn 一次、不報錯、釋放 GL context、DOM 不變、迴圈停止', async ({ page }) => {
+    const log = watch(page);
+    log.allowWarnings.push(/The qi engine failed while lowering its tier/);
+    await open(page, {
+      url: LOW_HOME,
+      before: (p) =>
+        p.addInitScript(() => {
+          const proto = WebGL2RenderingContext.prototype;
+          const original = proto.createFramebuffer;
+          proto.createFramebuffer = function (this: WebGL2RenderingContext) {
+            if ((window as unknown as { __failFramebuffers?: boolean }).__failFramebuffers) throw new Error('forced framebuffer failure');
+            return original.call(this);
+          };
+        }),
+    });
+    await expect(html(page)).toHaveAttribute('data-qi-tier', 'low');
+    const before = await domContent(page);
+
+    await page.evaluate(() => {
+      (window as unknown as { __failFramebuffers: boolean }).__failFramebuffers = true;
+      const { debug } = (window as unknown as W).__qi;
+      for (let at = 0; at < 20_000; at += 40) debug.feedFrameTime(40);
+    });
+    await page.evaluate(() => ((window as unknown as { __failFramebuffers: boolean }).__failFramebuffers = false));
+
+    await expect(html(page)).toHaveAttribute('data-qi-mode', 'static', { timeout: 1000 });
+    await expect(html(page)).toHaveAttribute('data-qi-reason', 'tier-failed');
+    await expect(html(page)).toHaveClass(/qi-static/);
+    await expect(html(page)).not.toHaveAttribute('data-qi-ready', /.*/);
+    await expect(page.locator('.opening__poster')).toHaveCSS('opacity', '1');
+    await expect(page.locator('canvas[data-qi-canvas]')).toBeHidden();
+    expect(await domContent(page), 'DOM 文字、連結、標題都不變').toEqual(before);
+    expect(await page.evaluate(() => (window as unknown as W).__qi.mode)).toBe('static');
+    expect(log.warnings.filter((w) => /lowering its tier/.test(w)), '只 warn 一次').toHaveLength(1);
+    expect(await page.evaluate(() => document.querySelector<HTMLCanvasElement>('canvas[data-qi-canvas]')!.getContext('webgl2')?.isContextLost())).toBe(true);
+
+    const stopped = await frames(page);
+    await run(page, 1000);
+    expect(await frames(page)).toBe(stopped);
+    await expectStillsLoaded(page);
+  });
+});
+
 // ── 沒有 JavaScript ───────────────────────────────────────────────
 
 for (const device of DEVICES) {

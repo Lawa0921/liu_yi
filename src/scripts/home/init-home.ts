@@ -154,6 +154,11 @@ export async function initHome(): Promise<void> {
       loader,
       debug: params.get('qi-debug') === '1',
       onContextLost: () => enterStatic('context-lost'), // RF5：靜態圖接手，DOM 內容不變
+      onFailure: (error) => {
+        // 自動降級時重建丟錯：引擎已沒有 sim 可畫，停在空白畫布比靜態圖糟；退回靜態圖（shutdown 會 dispose 引擎）
+        console.warn('The qi engine failed while lowering its tier; showing still images.', error);
+        enterStatic('tier-failed');
+      },
     });
   } catch (error) {
     console.warn('The qi engine could not start; showing still images.', error);

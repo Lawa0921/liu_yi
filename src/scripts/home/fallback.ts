@@ -1,4 +1,5 @@
-// 首頁退回靜態圖（D20）：減少動態、沒有 WebGL2、引擎掛不上、WebGL context 中途遺失、離開頁面（引擎釋放），都走同一個 `enterStatic`。
+// 首頁退回靜態圖（D20）：減少動態、沒有 WebGL2、引擎掛不上、WebGL context 中途遺失、自動降級時重建失敗（`tier-failed`）、
+// 離開頁面（引擎釋放），都走同一個 `enterStatic`。
 //
 //   - `<head>` 的行內腳本（BaseLayout）在首繪前先加 `html.qi-static`（減少動態或探測不到 WebGL2）；靜態圖是否顯示只由 CSS 決定。
 //   - 這裡補上腳本能做的部分：`data-qi-mode="static"` 與 `data-qi-reason`、拿掉 `data-qi-ready`（海報淡出的條件，拿掉它海報才會回來）、
@@ -7,7 +8,7 @@
 //   - 只進一次：第二次呼叫沒有作用，原因以第一次為準。
 // 這個檔案會被打進首頁的腳本：程式字串與錯誤訊息只用英文（字型守門會掃 JS 裡的中文字）。
 
-export type StaticReason = 'reduced-motion' | 'no-webgl' | 'context-lost' | 'init-failed' | 'page-hide';
+export type StaticReason = 'reduced-motion' | 'no-webgl' | 'context-lost' | 'init-failed' | 'tier-failed' | 'page-hide';
 
 type Listener = (reason: StaticReason) => void;
 

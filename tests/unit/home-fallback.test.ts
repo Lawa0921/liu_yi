@@ -76,8 +76,8 @@ describe('enterStatic', () => {
     expect(env.buttons.map((button) => button.hidden)).toEqual([true, true]);
   });
 
-  it('五種原因都收：reduced-motion、no-webgl、context-lost、init-failed、page-hide', async () => {
-    for (const reason of ['reduced-motion', 'no-webgl', 'context-lost', 'init-failed', 'page-hide'] as const) {
+  it('六種原因都收：reduced-motion、no-webgl、context-lost、init-failed、tier-failed、page-hide', async () => {
+    for (const reason of ['reduced-motion', 'no-webgl', 'context-lost', 'init-failed', 'tier-failed', 'page-hide'] as const) {
       const env = fakeDocument();
       vi.stubGlobal('document', env.document);
       const { enterStatic } = await load();

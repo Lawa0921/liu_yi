@@ -38,6 +38,8 @@ import { SITE } from '../../src/lib/site';
         override: params.get('qi-tier'),
       });
       const loader = createShapeLoader({ fetch: fetchBytes, resolveUrl: resolveShapeUrl });
+      const failures: string[] = [];
+      (window as unknown as { __qiFailures: string[] }).__qiFailures = failures;
       root.dataset.qiTier = tier;
       addEventListener('qi:tier', (event) => {
         root.dataset.qiTier = (event as CustomEvent<string>).detail;
@@ -51,6 +53,10 @@ import { SITE } from '../../src/lib/site';
           loader,
           reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
           debug: params.get('qi-debug') === '1',
+          // 引擎中途出錯（自動降級重建失敗）時通知這裡；正式首頁在這裡退回靜態圖，harness 只記下來給測試讀。
+          onFailure: (error) => {
+            failures.push(String(error));
+          },
         });
         (window as unknown as { __qiStage: QiStage }).__qiStage = stage;
         addEventListener('resize', () => stage.resize(innerWidth, innerHeight));

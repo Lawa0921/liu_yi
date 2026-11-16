@@ -9,6 +9,10 @@
  *   - 自動降級（Task 17）：每個 rAF 以 `performance.now()` 餵 `createGovernor`（D16）；它說該降級了就 `setTier` 到下一級（保留目前姿勢、
  *     光點直接落在目標上），給一次輕衝量遮住重建的跳動，並在 `window` 上發 `qi:tier`（`detail` 是新的 tier；手動 `setTier` 換了級也發）。
  *     首頁腳本聽這個事件更新 `html[data-qi-tier]` 與 `window.__qi.tier`；引擎本身不碰 DOM 屬性。減少動態沒有 rAF，也就沒有降級。
+ *     （Task 22）開場正在演時調速器說「該降」只記下來，開場結束（演完、被略過、被別的姿勢打斷）的下一格才降——重建會把光點直接放回目標上，
+ *     演到一半降會把散開與吸氣瞬移抹掉。分頁轉為可見（`visibilitychange`）時調速器重建、重新暖機：切走期間的計時與回來後頭幾格的慢幀不算。
+ *     自動降級的重建若丟錯（記憶體不足、著色器編不出來），引擎已沒有 sim 可畫：停掉自己的迴圈、呼叫 `onFailure` 一次，由呼叫端 `dispose()` 並退回靜態圖
+ *     （不讓畫面停在空白畫布）。手動 `setTier` 的錯照舊 reject 給呼叫端。
  *   - 減少動態（`reducedMotion`）：不跑模擬、不收指標、不排 rAF；光點直接畫在目標上，狀態改變時畫一格。
  *   - 武器的擺放依視窗寬窄（D13）：寬窄翻轉時重展開武器的目標，姿勢不變。
  *   - 補強（Task 16）：換招拖尾（`uStreak`，由衝量的包絡決定）、落地演出（`playLanding`：雙圈衝擊波、白閃、鏡頭震）、
@@ -52,6 +56,11 @@ export interface QiStageOptions {
    * `dispose` 之後遺失的不呼叫。
    */
   onContextLost?: () => void;
+  /**
+   * 引擎中途出錯、無法繼續畫時呼叫一次：目前只有「依 fps 自動降級時重建 GPGPU 丟錯」。這時引擎已停掉自己的迴圈、不再降級，
+   * 呼叫端應 `dispose()` 並退回靜態圖（首頁 `enterStatic`）。`dispose` 之後發生的不呼叫。
+   */
+  onFailure?: (error: unknown) => void;
 }
 
 export interface QiStage {
@@ -257,6 +266,8 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
   let virtualMs = 0;
   let governor: Governor = createGovernor({ start: tier });
   let virtualClock = false; // `feedFrameTime` 用過：調速器只吃虛擬時間
+  let deferredTier: TierId | null = null; // 開場期間調速器說該降的 tier：開場結束後的下一格才降（調速器自己已往下走了一級）
+  let failed = false; // 自動降級的重建丟錯：引擎沒有 sim 了，不再排幀、不再降級、已通知呼叫端
   let disposed = false;
 
   const fire = (burst: Burst): void => {
@@ -392,15 +403,47 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
       apply(pose, makeTarget(pose), false);
       if (auto) fire(PULSE); // 不增加 pulseCount：那是「呼叫端要求的氣息」
     }
-    if (!auto) governor = createGovernor({ start: next });
+    if (!auto) {
+      governor = createGovernor({ start: next });
+      deferredTier = null; // 呼叫端明確指定了級：先前記下的降級作廢
+    }
     redraw(); // 重建清掉了緩衝
     if (changed) window.dispatchEvent(new CustomEvent('qi:tier', { detail: next }));
   };
 
-  /** 調速器吃一格（`nowMs` 與它之前收到的同一條時間軸）；它說該降級就降。 */
+  /** 開場正在演（或在等開場要用的形體）：這時重建會把演出瞬移抹掉。 */
+  const introActive = (): boolean => introT >= 0 || introPending;
+
+  /**
+   * 自動降級一級。重建丟錯時引擎已沒有 sim 可畫（`rebuild` 一開頭就放掉舊的）：停掉自己的迴圈、通知呼叫端一次，
+   * 由它 `dispose()` 並退回靜態圖；不能把錯丟回 rAF（畫面會停在空白畫布），也不能再重試。
+   */
+  const downgrade = (next: TierId): void => {
+    try {
+      changeTier(next, true);
+    } catch (error) {
+      failed = true;
+      deferredTier = null;
+      cancelAnimationFrame(rafId);
+      rafId = 0;
+      o.onFailure?.(error);
+    }
+  };
+
+  /** 記下來的降級，開場結束就補上（每格都問一次；沒有記下來的就什麼都不做）。 */
+  const applyDeferredTier = (): void => {
+    if (failed || disposed || !deferredTier || introActive()) return;
+    const next = deferredTier;
+    deferredTier = null;
+    downgrade(next);
+  };
+
+  /** 調速器吃一格（`nowMs` 與它之前收到的同一條時間軸）；它說該降級就降（開場期間先記下來）。 */
   const governFrame = (nowMs: number): void => {
+    if (failed || disposed) return;
     const lower = governor.frame(nowMs);
-    if (lower) changeTier(lower, true);
+    if (lower) deferredTier = lower; // 調速器的階梯是單向的：後來的一定不比先記下的高
+    applyDeferredTier();
   };
 
   stage.setSize(cssWidth, cssHeight);
@@ -450,14 +493,25 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
   };
 
   const frame = (): void => {
+    if (failed) return;
     rafId = requestAnimationFrame(frame);
     const now = performance.now();
     const dt = Math.min(Math.max((now - last) / 1000, 0), MAX_DT);
     last = now;
     if (!virtualClock) governFrame(now); // 降級（重建）在這一格的模擬之前：新的 sim 馬上接手
+    else applyDeferredTier(); // 虛擬時間下調速器不吃 rAF，但開場結束後記下的降級仍要補上
+    if (failed) return; // 降級的重建丟錯：沒有 sim 了，迴圈已停
     advance(dt, now);
   };
   if (!reducedMotion) rafId = requestAnimationFrame(frame);
+
+  // 分頁回到可見：切走期間 rAF 停擺、回來時 GPU 與計時器要一下子才醒，頭幾格會又慢又亂。調速器若照單全收，
+  // 會把「剛回來」誤判成「這台機器太慢」，所以重新暖機（從目前要降到的級起算：開場期間記下的降級還沒做）。
+  const onVisibility = (): void => {
+    if (document.visibilityState !== 'visible' || reducedMotion || failed || disposed) return;
+    governor = createGovernor({ start: deferredTier ?? tier });
+  };
+  document.addEventListener('visibilitychange', onVisibility);
 
   // ── 除錯（?qi-debug=1）─────────────────────────────────────────
   /** 朱印的螢幕矩形；還沒聚合就 null（條件見 `QiStage.getSealRect`）。 */
@@ -681,6 +735,7 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
       if (disposed) return;
       disposed = true;
       cancelAnimationFrame(rafId);
+      document.removeEventListener('visibilitychange', onVisibility);
       canvas.removeEventListener('webglcontextlost', onContextLost);
       pointer?.dispose();
       releaseGeneration();
