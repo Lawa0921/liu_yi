@@ -9,8 +9,10 @@ Run: uv run --no-project --python 3.11 --with pillow --with numpy --with scipy p
   --batch N     selection table: 1 (default) or 2
   --preview     also write gold-on-dark previews to <work>/qa-preview/
 
-The final gate is scripts/qi/silhouette-qa.ts (run by tests/unit/silhouette-assets.test.ts); the QA block
-inside process() is its reference implementation.
+The pass/fail gate is scripts/qi/silhouette-qa.ts (run by tests/unit/silhouette-assets.test.ts on the published
+.png and .webp). Only its haze measure is the same as the QA block inside process(); size/edge/stray/area are the
+gate's own rules. process() just cleans (removes specks < 16 px, or < 300 px and > 40 px from the main body) and
+reports metrics into qa-meta*.json, it never decides pass/fail.
 """
 import argparse, io, json, os, sys
 import numpy as np

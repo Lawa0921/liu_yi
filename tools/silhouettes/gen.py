@@ -14,9 +14,10 @@ Usage:
 
 Every asset is also capped at 3 requests (failed requests count).
 The OpenAI key is read ONLY at run time from %APPDATA%/agent-sprite-forge/config.json and is never printed:
-every message that could echo server text goes through scrub().
+every message that could echo server text goes through scrub()
+(it masks the exact key and any key-shaped token). A missing --work/ref file is detected before a request is reserved.
 """
-import argparse, base64, hashlib, json, os, sys, threading, urllib.request, urllib.error
+import argparse, base64, hashlib, json, os, re, sys, threading, urllib.request, urllib.error
 from concurrent.futures import ThreadPoolExecutor
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -31,8 +32,13 @@ def load_key():
         return json.load(f)["OPENAI_API_KEY"].strip()
 
 
+KEY_SHAPE = re.compile(r"sk-[\w*.-]+")  # any key-shaped token a server message might echo, even if it is not our key
+
+
 def scrub(s, key):
-    return s.replace(key, "***") if key else s
+    if key:
+        s = s.replace(key, "***")
+    return KEY_SHAPE.sub("***", s)
 
 
 def prompt_sha256(prompt):
@@ -85,6 +91,14 @@ def build_prompt(prompts_file, name):
 
 def gen(args, key, model, name):
     prompt, size, ref = build_prompt(args.prompts, name)
+    img = None
+    if ref:  # read the reference image BEFORE reserving, so a missing file never burns a request
+        ref_path = os.path.join(args.work, ref)
+        try:
+            with open(ref_path, "rb") as f:
+                img = f.read()
+        except OSError as e:
+            return f"{name}: cannot read ref {ref_path}: {type(e).__name__}"
     try:
         v = reserve(args.count_file, args.cap, name)
     except RuntimeError as e:
@@ -93,8 +107,6 @@ def gen(args, key, model, name):
     if ref:  # reference image -> /images/edits (multipart); ref path is relative to --work
         bnd = "----silhouetteform7d3"
         parts = [f"--{bnd}\r\nContent-Disposition: form-data; name=\"{k}\"\r\n\r\n{val}\r\n".encode() for k, val in fields.items()]
-        with open(os.path.join(args.work, ref), "rb") as f:
-            img = f.read()
         parts.append(f"--{bnd}\r\nContent-Disposition: form-data; name=\"image[]\"; filename=\"ref.png\"\r\nContent-Type: image/png\r\n\r\n".encode() + img + b"\r\n")
         parts.append(f"--{bnd}--\r\n".encode())
         req = urllib.request.Request(

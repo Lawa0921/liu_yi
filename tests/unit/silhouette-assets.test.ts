@@ -20,15 +20,23 @@ interface ProvenanceEntry {
 }
 const provenance = JSON.parse(readFileSync(file('provenance.json'), 'utf8')) as Record<string, ProvenanceEntry>;
 
+// 升格流程（Task 6–7）會把名稱從 PLANNED 移到 READY，所以這裡只釘不變量，不釘清單的確切內容。
+const BASELINE_READY = ['fig-zhenjiao', 'fig-zhenjiao-land', 'fig-dingzhou', 'fig-chengchui', 'fig-kao'];
+
 describe('剪影清單（src/qi/config/silhouettes.ts）', () => {
-  it('已核可與待生成清單照決定表 D8 與簡報', () => {
-    expect(SILHOUETTES_READY).toEqual(['fig-zhenjiao', 'fig-zhenjiao-land', 'fig-dingzhou', 'fig-chengchui', 'fig-kao']);
-    expect(SILHOUETTES_PLANNED).toEqual(['fig-salute', 'fig-kid-wushu', 'fig-kid-defense-a', 'fig-kid-defense-b', 'fig-kid-weapon']);
+  it('已核可清單不為空，且包含最初的五張', () => {
+    expect(SILHOUETTES_READY.length).toBeGreaterThan(0);
+    expect(SILHOUETTES_READY).toEqual(expect.arrayContaining(BASELINE_READY));
   });
 
-  it('兩份清單沒有重複名稱、也沒有彼此重疊', () => {
-    const all = [...SILHOUETTES_READY, ...SILHOUETTES_PLANNED];
-    expect(new Set(all).size).toBe(all.length);
+  it('兩份清單各自沒有重複名稱，也沒有彼此重疊', () => {
+    expect(new Set(SILHOUETTES_READY).size).toBe(SILHOUETTES_READY.length);
+    expect(new Set(SILHOUETTES_PLANNED).size).toBe(SILHOUETTES_PLANNED.length);
+    expect(SILHOUETTES_READY.filter((name) => SILHOUETTES_PLANNED.includes(name))).toEqual([]);
+  });
+
+  it('已核可的每個名稱都有 provenance 紀錄', () => {
+    expect(SILHOUETTES_READY.filter((name) => provenance[name] === undefined)).toEqual([]);
   });
 });
 
@@ -42,8 +50,9 @@ describe.each(SILHOUETTES_READY)('已核可剪影 %s', (name) => {
     expect(meta.hasAlpha).toBe(true);
   });
 
-  it('解成 RGBA 後通過機械品管（size／edge／stray／haze／area）', async () => {
-    const { data, info } = await sharp(file(`${name}.png`)).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  it.each(['png', 'webp'])('.%s 解成 RGBA 後通過機械品管（size／edge／stray／haze／area）', async (ext) => {
+    // 出貨的兩種格式都要過閘門：首頁實際載入的是 .webp，不能只驗 .png
+    const { data, info } = await sharp(file(`${name}.${ext}`)).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
     expect(info.channels).toBe(4);
     const result = checkSilhouette(new Uint8Array(data.buffer, data.byteOffset, data.byteLength), info.width, info.height);
     expect(result.failures).toEqual([]);

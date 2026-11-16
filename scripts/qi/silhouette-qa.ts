@@ -1,7 +1,11 @@
 /**
  * 剪影機械品管閘門：純函式，輸入解碼後的 RGBA（只看 alpha 通道），回傳哪幾項不合格。
- * 判準與 `tools/silhouettes/postprocess.py` 的 QA 區段一致；測試在 `tests/unit/silhouette-qa.test.ts`（合成影像）
- * 與 `tests/unit/silhouette-assets.test.ts`（入庫素材）。不依賴 sharp 或 Astro，解碼由呼叫端負責。
+ * 只有 haze 的算法（遮罩 alpha > 127、半透明 8 < alpha < 247、離二值邊緣 > 2 px）與 `tools/silhouettes/postprocess.py`
+ * 的 QA 區段相同；size／edge／stray／area 是這個閘門自己的規則。postprocess.py 對應的只有清理雜點（面積 < 16 px，
+ * 或 < 300 px 且離主體 > 40 px 者移除）與回報度量，不做通過／不通過的判定；本檔的 stray 更嚴：最大 8 連通元件
+ * 要 ≥ 遮罩面積 97%，且不留任何離主體 > 40 px 的小元件。
+ * 測試在 `tests/unit/silhouette-qa.test.ts`（合成影像）與 `tests/unit/silhouette-assets.test.ts`（入庫素材，.png 與 .webp）。
+ * 不依賴 sharp 或 Astro，解碼由呼叫端負責。
  */
 
 export interface QaResult {
