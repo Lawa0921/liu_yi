@@ -423,7 +423,8 @@ test.describe('大槍桿與紅纓（1440×900，tier=min）', () => {
     const shot = await page.evaluate(() => stageOf().debug.snapshot());
     expect(shot.red, '紅纓的紅色像素').toBeGreaterThanOrEqual(150);
 
-    // 槍桿中段（寬版：長 3.8、傾角 0.05、中點 (0, 1.05)；取離中點 −0.1 個槍長的那一點）：取一欄 1 px 寬的像素，數它有幾格亮
+    // 槍桿中段（寬版：試作長 3.8、傾角 0.05、中點 (0, 1.05)；取離中點 −0.1 個試作槍長的那一點，−0.38）：取一欄 1 px 寬的像素，數它有幾格亮。
+    // 寬螢幕上槍為了留出右緣的段落導覽縮短過（Task 22b，此視窗約 3.0），中點與傾角不變，這一點仍在桿身上。
     const column = await page.evaluate(() => {
       const mid = stageOf().debug.project(-0.1 * 3.8 * Math.cos(0.05), 1.05 - 0.1 * 3.8 * Math.sin(0.05), 0);
       const h = 120;

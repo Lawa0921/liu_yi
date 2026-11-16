@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { viewportChanged } from '../../src/qi/engine/viewport';
+import { isPortrait, viewportChanged } from '../../src/qi/engine/viewport';
 
 /**
  * RF1：手機網址列伸縮、轉向。
@@ -70,5 +70,54 @@ describe('viewportChanged（RF1）', () => {
     expect(viewportChanged({ w: 390, h: 0 }, { w: 390, h: 844 })).toBe(true);
     expect(viewportChanged({ w: 390, h: 0 }, { w: 390, h: 0 })).toBe(false);
     expect(viewportChanged({ w: 390, h: Number.NaN }, { w: 390, h: 844 })).toBe(true);
+  });
+});
+
+/**
+ * Task 22b：版面（文字在左或在下）與引擎取景要依「同一個」寬高比切換。
+ * 直向的門檻是 `PORTRAIT_RATIO`（4:5＝0.8）：窄於它是直向，其餘（含近方形 1000×1000、1024×1124）是橫向。
+ * CSS 以 `@media (max-aspect-ratio: 4/5)` 表達同一條規則（home.css 與 Opening.astro 的 <source media>，單元測試守住兩邊一致）。
+ */
+describe('isPortrait（版面與取景的同一個切換點）', () => {
+  it('手機直立：390×844、360×740、375×667 都是直向', () => {
+    expect(isPortrait(390, 844)).toBe(true);
+    expect(isPortrait(360, 740)).toBe(true);
+    expect(isPortrait(375, 667)).toBe(true);
+  });
+
+  it('直式平板：1024×1366（0.75）是直向；橫放手機與桌機是橫向', () => {
+    expect(isPortrait(1024, 1366)).toBe(true);
+    expect(isPortrait(844, 390)).toBe(false);
+    expect(isPortrait(1440, 900)).toBe(false);
+    expect(isPortrait(900, 600)).toBe(false);
+  });
+
+  it('近方形（0.8–1.0）算橫向：1000×1000、1024×1124（0.91）、900×1000（0.9）', () => {
+    expect(isPortrait(1000, 1000)).toBe(false);
+    expect(isPortrait(1024, 1124)).toBe(false);
+    expect(isPortrait(900, 1000)).toBe(false);
+  });
+
+  it('門檻恰在 4:5：800×1000 是直向（≤），801×1000 不是', () => {
+    expect(isPortrait(800, 1000)).toBe(true);
+    expect(isPortrait(801, 1000)).toBe(false);
+  });
+
+  it('高度為 0 或非法值不崩潰：當成橫向', () => {
+    expect(isPortrait(390, 0)).toBe(false);
+    expect(isPortrait(Number.NaN, 844)).toBe(false);
+  });
+});
+
+describe('viewportChanged：跨過直／橫門檻一律重新取景（即使只差高度、幅度很小）', () => {
+  it('沒有跨界的小幅度變動仍不算：同在橫向（1000×1100 → 1000×1120）、同在直向（1000×1300 → 1000×1320）', () => {
+    expect(viewportChanged({ w: 1000, h: 1100 }, { w: 1000, h: 1120 })).toBe(false);
+    expect(viewportChanged({ w: 1000, h: 1300 }, { w: 1000, h: 1320 })).toBe(false);
+  });
+
+  it('1000×1249（橫向）→ 1000×1251（直向）：高度只差 0.16% 也要重新取景', () => {
+    expect(isPortrait(1000, 1249)).toBe(false);
+    expect(isPortrait(1000, 1251)).toBe(true);
+    expect(viewportChanged({ w: 1000, h: 1249 }, { w: 1000, h: 1251 })).toBe(true);
   });
 });

@@ -30,11 +30,13 @@ import type { ShapeLoader } from '../shapes/loader';
 import { floatTargets } from './caps';
 import { burstSpeed, EXHALE, inhaleDamp, inhaleStreak, SNAP_DAMP_GAIN, streakLength } from './effects';
 import { forcesFor } from './forces';
+import { weaponReachFor } from './framing';
 import { introState, type IntroState } from './intro';
 import { createPointer, type Pointer } from './pointer';
 import { createSim, zeroTexture, type Sim } from './sim';
 import { createStage, type Stage } from './stage';
 import { createGovernor, TIERS, type Governor, type TierId } from './tiers';
+import { isPortrait } from './viewport';
 
 export interface Box {
   x: number;
@@ -61,6 +63,12 @@ export interface QiStageOptions {
    * 呼叫端應 `dispose()` 並退回靜態圖（首頁 `enterStatic`）。`dispose` 之後發生的不呼叫。
    */
   onFailure?: (error: unknown) => void;
+  /**
+   * 現在是直向嗎（取景與兵器擺位依它）。首頁傳 `() => isPortrait(innerWidth, innerHeight)`：版面的 CSS 用同一條寬高比
+   * （`@media (max-aspect-ratio: 4/5)`）切換，引擎的畫布扣掉了外框，自己的寬高比與視窗的不同，所以由呼叫端告知。
+   * 不給就依畫布本身的寬高比（沒有外框的 harness 頁，畫布就是視窗）。每次 `resize` 都會再問一次。
+   */
+  portrait?: () => boolean;
 }
 
 export interface QiStage {
@@ -135,6 +143,11 @@ export interface QiDebug {
   project(x: number, y: number, z: number): { x: number; y: number };
   /** 同 `QiStage.getSealRect`（正式頁在 `stage.getSealRect()`；`?qi-debug=1` 才多這一個，e2e 用）。 */
   sealRect(): Box | null;
+  /**
+   * 非環境煙的光點目前在螢幕上的外框（CSS 像素，與 `project` 同一個空間；沒有任何光點就是全 0）。
+   * 測試用它量兵器有沒有壓到頁面上的東西（右緣的段落導覽）：聚合後（`meanError()` 夠小）量，才是姿勢的外框而不是飛行中的光點。
+   */
+  extent(): { left: number; right: number; top: number; bottom: number };
 }
 
 /** 一個姿勢展開後的目標：貼圖給 GPU，原始資料留給讀回比對。 */
@@ -207,7 +220,16 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
   let tier = o.tier;
   let cssWidth = canvas.clientWidth || window.innerWidth;
   let cssHeight = canvas.clientHeight || window.innerHeight;
-  let wide = cssWidth >= cssHeight;
+  /** 直向（取景與兵器擺位）：呼叫端告知（首頁依視窗），不給就依畫布本身的寬高比。 */
+  const askPortrait = (): boolean => (o.portrait ? o.portrait() : isPortrait(cssWidth, cssHeight));
+  let portrait = askPortrait();
+  /**
+   * 兵器擺位的條件：直向用窄版長度；橫向用寬版長度，並依畫布大小留出右緣（段落導覽與槍頭光暈）的位置，
+   * 所以橫向時畫布一變，兵器的長度也跟著變（`weaponReachFor`）。字串鍵讓 `resize` 比較「擺位有沒有變」。
+   */
+  const weaponReach = (): number | undefined => (portrait ? undefined : weaponReachFor(cssWidth / cssHeight, cssWidth));
+  const weaponKey = (): string => String(weaponReach()?.toFixed(4) ?? 'narrow');
+  let weaponFit = weaponKey();
 
   // ── 一個 tier 的資源（setTier 時整組換掉）──────────────────────────
   let side = 0;
@@ -289,7 +311,7 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
       const shape = shapes.get(id);
       if (!shape) throw new Error(`Shape ${id} is not loaded`);
       const recipe = SHAPES[id];
-      data = expandTargets(shape, side, ambient, recipe?.kind === 'weapon' ? weaponLayout(recipe.name, wide) : undefined);
+      data = expandTargets(shape, side, ambient, recipe?.kind === 'weapon' ? weaponLayout(recipe.name, !portrait, weaponReach()) : undefined);
     }
     const texture = new DataTexture(data, side, side, RGBAFormat, FloatType);
     texture.needsUpdate = true;
@@ -426,7 +448,9 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
       deferredTier = null;
       cancelAnimationFrame(rafId);
       rafId = 0;
-      o.onFailure?.(error);
+      // 呼叫端沒接 onFailure 時不能悄悄吞掉：畫面會停在空白畫布，至少留一筆錯誤給開發者與 console 監看
+      if (o.onFailure) o.onFailure(error);
+      else console.error('The qi engine failed while lowering its tier.', error);
     }
   };
 
@@ -438,15 +462,21 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
     downgrade(next);
   };
 
-  /** 調速器吃一格（`nowMs` 與它之前收到的同一條時間軸）；它說該降級就降（開場期間先記下來）。 */
+  /**
+   * 調速器吃一格（`nowMs` 與它之前收到的同一條時間軸）；它說該降級就降（開場期間先記下來）。
+   * 已經記下一次降級（開場還在演）就不再餵：調速器自己已往下走了一級，再餵只會每過一個冷卻就再降一級並覆寫記下的那一級，
+   * 一個慢的開場就讓開場結束時直接降到最低；只降記下的那一級，之後調速器照常吃幀、看新的一級撐不撐得住。
+   */
   const governFrame = (nowMs: number): void => {
     if (failed || disposed) return;
-    const lower = governor.frame(nowMs);
-    if (lower) deferredTier = lower; // 調速器的階梯是單向的：後來的一定不比先記下的高
+    if (!deferredTier) {
+      const lower = governor.frame(nowMs);
+      if (lower) deferredTier = lower;
+    }
     applyDeferredTier();
   };
 
-  stage.setSize(cssWidth, cssHeight);
+  stage.setSize(cssWidth, cssHeight, portrait);
   rebuild();
 
   // ── 每一格 ─────────────────────────────────────────────────────
@@ -630,6 +660,24 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
     },
     project: (x, y, z) => stage.project(x, y, z),
     sealRect: getSealRect,
+    extent() {
+      if (!target) return { left: 0, right: 0, top: 0, bottom: 0 };
+      const p = positions();
+      const t = target.data;
+      let left = Infinity;
+      let right = -Infinity;
+      let top = Infinity;
+      let bottom = -Infinity;
+      for (let i = 0; i < t.length; i += 4) {
+        if (t[i + 3]! < -0.5) continue; // 環境煙不算
+        stage.project(p[i]!, p[i + 1]!, p[i + 2]!, screen);
+        left = Math.min(left, screen.x);
+        right = Math.max(right, screen.x);
+        top = Math.min(top, screen.y);
+        bottom = Math.max(bottom, screen.y);
+      }
+      return right < left ? { left: 0, right: 0, top: 0, bottom: 0 } : { left, right, top, bottom };
+    },
   };
 
   // ── WebGL context 中途遺失（RF5）──────────────────────────────────
@@ -712,11 +760,12 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
       if (disposed) return;
       cssWidth = Math.max(1, w);
       cssHeight = Math.max(1, h);
-      stage.setSize(cssWidth, cssHeight);
-      const nowWide = cssWidth >= cssHeight;
-      if (nowWide !== wide) {
-        // 兵器的長度與傾角依視窗寬窄而不同：翻轉時重展開，姿勢不變、不給衝量
-        wide = nowWide;
+      portrait = askPortrait();
+      stage.setSize(cssWidth, cssHeight, portrait);
+      const nowFit = weaponKey();
+      if (nowFit !== weaponFit) {
+        // 兵器的長度與傾角依直橫與畫布寬高比而不同：擺位變了就重展開，姿勢不變、不給衝量
+        weaponFit = nowFit;
         for (const [id, t] of [...targets]) {
           if (SHAPES[id]?.kind !== 'weapon') continue;
           t.texture.dispose();

@@ -16,7 +16,7 @@ import { switchScatter } from '../../qi/engine/forces';
 import { INTRO_MAX_SCROLL, shouldPlayIntro } from '../../qi/engine/intro';
 import { scrollState, type BeatRect } from '../../qi/engine/scroll-model';
 import { initialTier, TIER_ORDER, type TierId } from '../../qi/engine/tiers';
-import { viewportChanged } from '../../qi/engine/viewport';
+import { isPortrait, viewportChanged } from '../../qi/engine/viewport';
 import { fetchBytes } from '../../qi/shapes/fetch';
 import { createShapeLoader, prefetchPlan } from '../../qi/shapes/loader';
 import { resolveShapeUrl } from '../../qi/shapes/urls';
@@ -153,6 +153,8 @@ export async function initHome(): Promise<void> {
       tier,
       loader,
       debug: params.get('qi-debug') === '1',
+      // 取景的直／橫與版面（home.css 的 @media (max-aspect-ratio: 4/5)）同一條：依視窗，不是扣掉外框的畫布
+      portrait: () => isPortrait(window.innerWidth, window.innerHeight),
       onContextLost: () => enterStatic('context-lost'), // RF5：靜態圖接手，DOM 內容不變
       onFailure: (error) => {
         // 自動降級時重建丟錯：引擎已沒有 sim 可畫，停在空白畫布比靜態圖糟；退回靜態圖（shutdown 會 dispose 引擎）

@@ -3,10 +3,12 @@
 //
 // 海報是「光點引擎到達之前」的首屏（設計 §8.4）：建置時渲好的 WebP，寬螢幕用 hero-wide、直式螢幕用 hero-tall，
 // 高優先載入。引擎接手後交叉淡化（Task 19）；減少動態或沒有 WebGL 時它就是這一段的畫面。
-// 版面方向：桌機文字在左、光點在右；手機文字在下、光點在上（取景對應引擎的 look 位移，見 home.css）。
+// 版面方向：橫向（寬高比 > 4:5）文字在左、光點在右；直向文字在下、光點在上（取景對應引擎的 look 位移，見 home.css）。
+// <source media> 與版面、引擎取景同一個切換點（`engine/viewport.ts` 的 `PORTRAIT_ASPECT`）。
 import { SITE } from '../../lib/site';
 import { stillInfo } from '../../lib/stills';
 import { COPY } from '../../qi/config/copy';
+import { PORTRAIT_ASPECT } from '../../qi/engine/viewport';
 
 const wide = stillInfo('hero-wide');
 const tall = stillInfo('hero-tall');
@@ -14,7 +16,7 @@ const tall = stillInfo('hero-tall');
 
 <section id="opening" class="opening" data-beat="opening" aria-labelledby="opening-title">
   <picture class="opening__poster" aria-hidden="true">
-    <source media="(max-aspect-ratio: 1/1)" srcset={tall.src} width={tall.width} height={tall.height} />
+    <source media={`(max-aspect-ratio: ${PORTRAIT_ASPECT})`} srcset={tall.src} width={tall.width} height={tall.height} />
     <img src={wide.src} width={wide.width} height={wide.height} alt="" fetchpriority="high" decoding="async" />
   </picture>
 

@@ -309,8 +309,69 @@ for (const device of DEVICES) {
   });
 }
 
+interface Box {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+/** 兩個矩形在 x、y 兩軸上各自重疊多少 px（負數＝分開）。 */
+function overlap(a: Box, b: Box): { x: number; y: number } {
+  return { x: Math.min(a.right, b.right) - Math.max(a.left, b.left), y: Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) };
+}
+
 /**
- * 海報對齊要量的尺寸：計畫指定的兩個，另加小手機、平板與全高清，以及「版面斷點（寬 60rem）與引擎取景斷點（畫布寬高比 1）對不上」的尺寸：
+ * 首屏人形的外框（視窗座標）：
+ *   - 海報：把圖解碼後取亮度 > 100 的像素外框（只剩人形與輪廓；更低的門檻會連光暈與環境煙一起算進去），再換算成視窗座標。
+ *   - 引擎：land 形體的 xy 外框四角投影到螢幕。
+ */
+async function figureBoxes(page: Page): Promise<{ poster: Box; engine: Box }> {
+  const land = decodeShape(new Uint8Array(readFileSync(fileURLToPath(new URL('../../src/assets/generated/qi/shapes/land.bin', import.meta.url)))));
+  const bounds = { minX: land.min[0], maxX: land.max[0], minY: land.min[1], maxY: land.max[1] };
+
+  const poster = await page.evaluate(async () => {
+    const img = document.querySelector<HTMLImageElement>('.opening__poster img')!;
+    await img.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const context = canvas.getContext('2d')!;
+    context.drawImage(img, 0, 0);
+    const { data, width, height } = context.getImageData(0, 0, canvas.width, canvas.height);
+    let x0 = width;
+    let x1 = -1;
+    let y0 = height;
+    let y1 = -1;
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const o = (y * width + x) * 4;
+        if (0.2126 * data[o]! + 0.7152 * data[o + 1]! + 0.0722 * data[o + 2]! <= 100) continue;
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+        if (y < y0) y0 = y;
+        if (y > y1) y1 = y;
+      }
+    }
+    const rect = img.getBoundingClientRect();
+    const sx = rect.width / width;
+    const sy = rect.height / height;
+    return { left: rect.left + x0 * sx, right: rect.left + (x1 + 1) * sx, top: rect.top + y0 * sy, bottom: rect.top + (y1 + 1) * sy };
+  });
+
+  const engine = await page.evaluate(({ minX, maxX, minY, maxY }) => {
+    const { project } = (window as unknown as W).__qi.debug;
+    const corners = [project(minX, minY, 0), project(maxX, minY, 0), project(minX, maxY, 0), project(maxX, maxY, 0)];
+    const xs = corners.map((c) => c.x);
+    const ys = corners.map((c) => c.y);
+    return { left: Math.min(...xs), right: Math.max(...xs), top: Math.min(...ys), bottom: Math.max(...ys) };
+  }, bounds);
+
+  return { poster, engine };
+}
+
+/**
+ * 海報對齊要量的尺寸：計畫指定的兩個，另加小手機、平板與全高清，以及「寬度斷點（60rem）與直／橫切換點（視窗寬高比 4:5）不重合」的尺寸：
  * 橫放手機（寬 < 60rem 但橫向）、900×600（同）、直式平板（寬 ≥ 60rem 但直向）。
  */
 const ALIGN_SIZES = [
@@ -322,6 +383,10 @@ const ALIGN_SIZES = [
   { name: '橫放小手機 667×375', viewport: { width: 667, height: 375 } },
   { name: '小筆電 900×600', viewport: { width: 900, height: 600 } },
   { name: '直式平板 1024×1366', viewport: { width: 1024, height: 1366 } },
+  // Task 22b：版面與引擎取景同一個寬高比切換點（4:5）。近方形（0.8–1.0）一律橫向取景，海報也要跟著橫向；手機 360×740 是常見的短螢幕。
+  { name: '手機 360×740', viewport: { width: 360, height: 740 } },
+  { name: '近方形 1000×1000', viewport: { width: 1000, height: 1000 } },
+  { name: '近方形 1024×1124', viewport: { width: 1024, height: 1124 } },
 ];
 
 for (const device of ALIGN_SIZES) {
@@ -330,50 +395,10 @@ for (const device of ALIGN_SIZES) {
 
     test('海報人形與引擎 land 的外框對齊：中心與高度差都 ≤ 視窗的 5%', async ({ page }) => {
       await open(page);
-      const land = decodeShape(new Uint8Array(readFileSync(fileURLToPath(new URL('../../src/assets/generated/qi/shapes/land.bin', import.meta.url)))));
-      const bounds = { minX: land.min[0], maxX: land.max[0], minY: land.min[1], maxY: land.max[1] };
-
-      // 海報：把圖解碼後取亮度 > 100 的像素外框（只剩人形與輪廓；更低的門檻會連光暈與環境煙一起算進去），再換算成視窗座標
-      const poster = await page.evaluate(async () => {
-        const img = document.querySelector<HTMLImageElement>('.opening__poster img')!;
-        await img.decode();
-        const canvas = document.createElement('canvas');
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
-        const context = canvas.getContext('2d')!;
-        context.drawImage(img, 0, 0);
-        const { data, width, height } = context.getImageData(0, 0, canvas.width, canvas.height);
-        let x0 = width;
-        let x1 = -1;
-        let y0 = height;
-        let y1 = -1;
-        for (let y = 0; y < height; y++) {
-          for (let x = 0; x < width; x++) {
-            const o = (y * width + x) * 4;
-            if (0.2126 * data[o]! + 0.7152 * data[o + 1]! + 0.0722 * data[o + 2]! <= 100) continue;
-            if (x < x0) x0 = x;
-            if (x > x1) x1 = x;
-            if (y < y0) y0 = y;
-            if (y > y1) y1 = y;
-          }
-        }
-        const rect = img.getBoundingClientRect();
-        const sx = rect.width / width;
-        const sy = rect.height / height;
-        return { left: rect.left + x0 * sx, right: rect.left + (x1 + 1) * sx, top: rect.top + y0 * sy, bottom: rect.top + (y1 + 1) * sy };
-      });
-
-      // 引擎：land 形體的 xy 外框四角投影到螢幕
-      const engine = await page.evaluate(({ minX, maxX, minY, maxY }) => {
-        const { project } = (window as unknown as W).__qi.debug;
-        const corners = [project(minX, minY, 0), project(maxX, minY, 0), project(minX, maxY, 0), project(maxX, maxY, 0)];
-        const xs = corners.map((c) => c.x);
-        const ys = corners.map((c) => c.y);
-        return { left: Math.min(...xs), right: Math.max(...xs), top: Math.min(...ys), bottom: Math.max(...ys) };
-      }, bounds);
+      const { poster, engine } = await figureBoxes(page);
 
       const { width, height } = device.viewport;
-      const measure = (box: { left: number; right: number; top: number; bottom: number }) => ({
+      const measure = (box: Box) => ({
         cx: (box.left + box.right) / 2,
         cy: (box.top + box.bottom) / 2,
         h: box.bottom - box.top,
@@ -388,6 +413,26 @@ for (const device of ALIGN_SIZES) {
       expect(Math.abs(p.cx - e.cx) / width, `中心 x 差（占視窗寬）：${note}`).toBeLessThanOrEqual(0.05);
       expect(Math.abs(p.cy - e.cy) / height, `中心 y 差（占視窗高）：${note}`).toBeLessThanOrEqual(0.05);
       expect(Math.abs(p.h - e.h) / height, `高度差（占視窗高）：${note}`).toBeLessThanOrEqual(0.05);
+    });
+
+    // Task 22b：直書站名與副標不壓到人形（手機首屏、近方形、直式平板、橫放手機）。海報與引擎的外框各量一次，重疊 ≤ 4px 才算沒壓到。
+    test('站名（h1）與副標不壓到人形：海報外框與引擎外框的重疊都 ≤ 4px', async ({ page }) => {
+      await open(page);
+      await settleAnimations(page); // 進場動畫（0.9 秒、上移 1rem）跑完，量到的才是站名的定位
+      const { poster, engine } = await figureBoxes(page);
+      const texts = await page.evaluate(() => {
+        const box = (selector: string) => {
+          const r = document.querySelector(selector)!.getBoundingClientRect();
+          return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+        };
+        return { h1: box('.opening h1'), sub: box('.opening__sub') };
+      });
+      for (const [figure, box] of [['海報', poster], ['引擎', engine]] as const) {
+        for (const [name, text] of Object.entries(texts)) {
+          const { x, y } = overlap(box, text);
+          expect(Math.min(x, y), `${figure}人形外框與 ${name} 的重疊（x ${x.toFixed(1)}px、y ${y.toFixed(1)}px；兩軸都 > 4 才算壓到）：人形 ${JSON.stringify(box)} / ${name} ${JSON.stringify(text)}`).toBeLessThanOrEqual(4);
+        }
+      }
     });
   });
 }
@@ -653,7 +698,7 @@ for (const device of DEVICES) {
   test.describe(`沒有 JavaScript：${device.name}`, () => {
     test.use({ javaScriptEnabled: false, viewport: device.viewport });
 
-    test('兩組面板都顯示、每個靜態圖可見；段落導覽、略過鈕、切換鈕隱藏；無水平外溢', async ({ page }) => {
+    test('兩組面板都顯示、每個靜態圖可見；略過鈕、切換鈕隱藏；段落導覽桌機可見、手機不顯示；無水平外溢', async ({ page }) => {
       await page.goto('./');
       await expect(html(page)).not.toHaveClass(/(^|\s)js(\s|$)/);
 
@@ -677,11 +722,29 @@ for (const device of DEVICES) {
       }
       expect(await page.locator('main img.beat__still').count()).toBeGreaterThanOrEqual(11);
 
-      await expect(page.locator('nav.home-rail')).toBeHidden();
+      // 段落導覽是錨點連結、不需要 JS：桌機（≥ 60rem）沒有 JS 也看得到，手機不顯示（頁首選單已有頁面連結）
+      if (device.viewport.width >= 960) await expect(page.locator('nav.home-rail')).toBeVisible();
+      else await expect(page.locator('nav.home-rail')).toBeHidden();
       await expect(page.locator('[data-skip-intro]')).toBeHidden();
       for (const option of await page.locator('[data-audience-option]').all()) await expect(option).toBeHidden();
       await expect(page.locator('canvas[data-qi-canvas]')).toBeHidden();
       expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+    });
+
+    test('段落導覽的連結不需 JS：桌機點「預約」「師資」就跳到該段（錨點）；手機沒有這列導覽', async ({ page }) => {
+      await page.goto('./');
+      const rail = page.getByRole('navigation', { name: '首頁段落' });
+      if (device.viewport.width < 960) {
+        await expect(rail).toBeHidden();
+        return;
+      }
+      await expect(rail.getByRole('link')).toHaveText(['開場', '課程', '師資', '收費課表', '預約']);
+      await rail.getByRole('link', { name: '預約' }).click();
+      await expect(page).toHaveURL(/#booking$/);
+      await expect(page.locator('#booking')).toBeInViewport();
+      await rail.getByRole('link', { name: '師資' }).click();
+      await expect(page).toHaveURL(/#coaches$/);
+      await expect(page.locator('#coaches')).toBeInViewport();
     });
 
     test('「看這門課」進入課程頁；「預約體驗」的 href 是 #line，點了看到 LINE QR', async ({ page, baseURL }) => {

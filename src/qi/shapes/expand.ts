@@ -30,6 +30,12 @@ export interface Layout {
   /** 繞 z 軸的旋轉（弧度，逆時針；鋒尖朝右上為正）。 */
   rotZ: number;
   offset: [number, number, number];
+  /**
+   * 擺好之後最右邊的光點（世界 x）不得超過它：超過就把整把兵器等比例縮小（以 `offset` 為中心；`rotZ`、中點高度不變）。
+   * 寬螢幕的右緣有段落導覽，大槍原本的長度會壓到它（Task 22b，數字見 `engine/framing.ts` 的 `weaponReachFor`）。
+   * 只縮、不放大；用形體實際最右的點量（形體檔的 x 範圍約 ±0.6，比「全長 1」的假設略長），不是靠長度推算。
+   */
+  maxRight?: number;
 }
 
 /** 環境煙占全部格子的比例（D14）。 */
@@ -101,11 +107,17 @@ export function ambientField(count: number, seed: number = AMBIENT_SEED): Ambien
   return { mask, positions };
 }
 
-/** 兵器的擺放（D13）：長度、傾角與中點高度依視窗寬窄（`wide`）取試作的數值。 */
-export function weaponLayout(name: 'jian' | 'miaodao' | 'spear', wide: boolean): Layout {
+/**
+ * 兵器的擺放（D13）：長度、傾角與中點高度依視窗寬窄（`wide`）取試作的數值。
+ * `maxRight`（寬版才有意義）：最右的光點不得超過這個世界 x（見 `Layout.maxRight`）；窄版（直向）沒有右緣導覽，不套用。
+ */
+export function weaponLayout(name: 'jian' | 'miaodao' | 'spear', wide: boolean, maxRight?: number): Layout {
   if (!Object.hasOwn(WEAPON_LAYOUT, name)) throw new RangeError(`Unknown weapon: ${String(name)}`);
+  if (maxRight !== undefined && !(Number.isFinite(maxRight) && maxRight > 0)) throw new RangeError(`Weapon maxRight must be a positive finite number: ${maxRight}`);
   const [scale, rotZ] = WEAPON_LAYOUT[name][wide ? 'wide' : 'narrow'];
-  return { scale, rotZ, offset: [0, WEAPON_MID_HEIGHT, 0] };
+  const layout: Layout = { scale, rotZ, offset: [0, WEAPON_MID_HEIGHT, 0] };
+  if (wide && maxRight !== undefined) layout.maxRight = maxRight;
+  return layout;
 }
 
 /**
@@ -123,6 +135,33 @@ function tasselPivot(shape: Shape): number | null {
   return n > 0 ? sum / n : null;
 }
 
+/** 把形體的每個取樣依 `layout`（長度以 `scale` 為準）擺到世界座標；紅纓掛著、順著重力垂下（見檔頭）。 */
+function layOut(shape: Shape, layout: Layout, scale: number): Float64Array {
+  const { count } = shape;
+  const [ox, oy, oz] = layout.offset;
+  const cos = Math.cos(layout.rotZ) * scale;
+  const sin = Math.sin(layout.rotZ) * scale;
+  // 紅纓是掛著的，順著重力垂下：兵器傾斜時纓穗不跟著傾斜。試作把纓穗（pendulum）反向旋轉；這裡等價於
+  // 「紅點相對紮點只受 scale 影響（不轉）」：紮點隨兵器轉到位，纓穗從紮點起仍朝下。
+  const pivot = tasselPivot(shape);
+  const pivotX = pivot !== null ? pivot * cos + ox : 0;
+  const pivotY = pivot !== null ? pivot * sin + oy : 0;
+  const laid = new Float64Array(count * 3);
+  for (let k = 0; k < count; k++) {
+    const x = shape.positions[k * 3]!;
+    const y = shape.positions[k * 3 + 1]!;
+    if (pivot !== null && shape.kinds[k] === KIND.RED) {
+      laid[k * 3] = pivotX + (x - pivot) * scale;
+      laid[k * 3 + 1] = pivotY + y * scale;
+    } else {
+      laid[k * 3] = x * cos - y * sin + ox;
+      laid[k * 3 + 1] = x * sin + y * cos + oy;
+    }
+    laid[k * 3 + 2] = shape.positions[k * 3 + 2]! * scale + oz;
+  }
+  return laid;
+}
+
 /**
  * 把 `shape` 展開成 `size × size × 4` 的目標貼圖（xyz＋w）。
  * w：人形 0–1（靠近輪廓的程度）、兵器 2–6、朱印 7（`kindToW`）、環境煙 −1。
@@ -137,26 +176,13 @@ export function expandTargets(shape: Shape, size: number, ambient: AmbientField,
   // 每個取樣只算一次：套 layout（沒給就原樣）與 kind → w
   let base: ArrayLike<number> = shape.positions;
   if (layout) {
-    const [ox, oy, oz] = layout.offset;
-    const cos = Math.cos(layout.rotZ) * layout.scale;
-    const sin = Math.sin(layout.rotZ) * layout.scale;
-    // 紅纓是掛著的，順著重力垂下：兵器傾斜時纓穗不跟著傾斜。試作把纓穗（pendulum）反向旋轉；這裡等價於
-    // 「紅點相對紮點只受 scale 影響（不轉）」：紮點隨兵器轉到位，纓穗從紮點起仍朝下。
-    const pivot = tasselPivot(shape);
-    const pivotX = pivot !== null ? pivot * cos + ox : 0;
-    const pivotY = pivot !== null ? pivot * sin + oy : 0;
-    const laid = new Float64Array(count * 3);
-    for (let k = 0; k < count; k++) {
-      const x = shape.positions[k * 3]!;
-      const y = shape.positions[k * 3 + 1]!;
-      if (pivot !== null && shape.kinds[k] === KIND.RED) {
-        laid[k * 3] = pivotX + (x - pivot) * layout.scale;
-        laid[k * 3 + 1] = pivotY + y * layout.scale;
-      } else {
-        laid[k * 3] = x * cos - y * sin + ox;
-        laid[k * 3 + 1] = x * sin + y * cos + oy;
-      }
-      laid[k * 3 + 2] = shape.positions[k * 3 + 2]! * layout.scale + oz;
+    let laid = layOut(shape, layout, layout.scale);
+    if (layout.maxRight !== undefined) {
+      // 最右的光點超過上限就等比例縮小：擺放對 scale 是線性的（以 offset 為中心），第二次算就是精確值
+      const ox = layout.offset[0];
+      let right = -Infinity;
+      for (let k = 0; k < count; k++) right = Math.max(right, laid[k * 3]!);
+      if (right > layout.maxRight && right > ox) laid = layOut(shape, layout, (layout.scale * (layout.maxRight - ox)) / (right - ox));
     }
     base = laid;
   }

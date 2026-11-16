@@ -1,9 +1,11 @@
 /*
  * 首頁「氣聚成人」的版面（標記在 src/components/home/，由 src/pages/index.astro 引入）。
  *
- * 版面方向（設計 §7、決定 D17）：
- *   桌機：文字在左、光點在右（引擎取景 look.x = −visibleH·aspect·0.13，所以人形落在 63% 處）。
- *   手機：文字在下、光點在上（look.y 下移 13% 的可視高度，人形落在約 37% 處）。
+ * 版面方向（設計 §7、決定 D17；Task 22b 起版面、海報與引擎取景用同一個寬高比切換）：
+ *   橫向（寬高比 > 4:5：桌機、橫放手機、近方形視窗）：文字在左、光點在右（引擎取景 look.x = −visibleH·aspect·0.13，所以人形落在 63% 處）。
+ *   直向（寬高比 ≤ 4:5：手機直立、直式平板）：文字在下、光點在上（look.y 下移 13% 的可視高度，人形落在約 37% 處）。
+ *   切換點是 `@media (max-aspect-ratio: 4/5)`，引擎端是 `engine/viewport.ts` 的 `isPortrait`（單元測試守住兩邊一致）；
+ *   寬度斷點（60rem）只剩尺寸微調與桌機才有的東西（外框、段落導覽）。
  * 每個 [data-beat] 高 var(--stage-height)（svh），不用強制 scroll-snap；光點畫布（.home-canvas）是 position: fixed 的背景層
  * （高度用 lvh：手機網址列伸縮時畫布不跟著變），所以這裡的版面只負責「文字放哪裡、光點的位置留空」。
  * 靜態圖（.beat__still）只在退回時露出（見下方規則）。
@@ -15,7 +17,8 @@
 [data-home] {
   /* 內容左右的留白：桌機比頁首的 4.5rem 內縮再多一點，手機用全站的 gutter。 */
   --home-pad: max(var(--gutter), 5.5vw);
-  --text-col: 35rem;
+  /* 文字欄寬：寬螢幕 35rem；窄的橫向視窗（900×600、橫放手機）縮到視窗的 44%，不伸進 63% 處的人形。 */
+  --text-col: min(35rem, 44vw);
   --beat-title: clamp(2.5rem, 1.6rem + 3.2vw, 4.25rem);
   overflow-x: clip;
 }
@@ -77,9 +80,9 @@ html.js:not(.qi-static) .beat__still {
 .opening {
   /*
    * 海報人形的大小與位置：要與引擎的 `land`（取景見 engine/stage.ts 的 `fit`）疊得起來，交叉淡化時才不會「跳」一下。
-   * 引擎依畫布寬高比選取景（aspect ≥ 1 橫向、否則直向），與視窗寬度（版面的 60rem 斷點）無關，所以這裡的算式也用同一個條件切換：
-   * 橫向在這裡、直向在下方的 `@media (max-aspect-ratio: 1/1)`（與 Opening.astro 的 <source media> 同源）。
-   * 數字由 e2e（home-fallback.spec 的「海報人形與引擎 land 的外框對齊」，九個尺寸，含橫放手機與直式平板）量測：
+   * 引擎依視窗寬高比選取景（≤ 4:5 直向、否則橫向；`engine/viewport.ts` 的 `isPortrait`），與視窗寬度（60rem 斷點）無關，
+   * 所以這裡的算式也用同一個條件切換：橫向在這裡、直向在下方的 `@media (max-aspect-ratio: 4/5)`（與 Opening.astro 的 <source media> 同源）。
+   * 數字由 e2e（home-fallback.spec 的「海報人形與引擎 land 的外框對齊」，十二個尺寸，含橫放手機、直式平板與近方形）量測：
    *   - 海報圖裡的人形外框占圖高 81%（取景 80% ＋ 光暈），所以 --poster-h ＝ 引擎人形高 ÷ 0.81。
    *   - 畫布 ＝ 視窗扣掉外框的 inset／上／下；引擎的可視高有下限 3.4，所以人形高 ＝ 0.588 × 畫布高，
    *     可視高超過下限時改由畫布寬決定（橫向 0.339、直向 0.727 × 畫布寬）；兩者取小。
@@ -109,7 +112,7 @@ html.js:not(.qi-static) .beat__still {
   }
 }
 
-@media (max-aspect-ratio: 1/1) {
+@media (max-aspect-ratio: 4/5) {
   .opening {
     --poster-h: min(
       0.724 * (var(--poster-vh) - var(--frame-top) - var(--frame-bottom)),
@@ -695,20 +698,21 @@ html[data-audience='kid'] [data-audience-option='kid'] {
   display: none;
 }
 
-/* 沒有 JS 時整個段落導覽不顯示（桌機規則在下方的 media 區塊；這條的優先序較高）：目前所在段的標示是腳本的事，頁首導覽仍可用。 */
-html:not(.js) .home-rail {
-  display: none;
-}
+/* 段落導覽是錨點連結，不需要 JS：沒有 JS 時桌機（下方 min-width: 60rem）照樣顯示、連結照樣能跳；只有「目前所在段」的標示是腳本的事。 */
 
-/* ── 手機（< 60rem）：文字在下、光點在上 ──────────── */
+/* ── 直向（寬高比 ≤ 4:5）：文字在下、光點在上 ───────── */
 
-@media (max-width: 59.999rem) {
+/*
+ * 與引擎取景、海報（上面的 .opening 直向算式、Opening.astro 的 <source media>）同一個切換點：手機直立、直式平板在這裡；
+ * 橫放手機、900×600 的小筆電、近方形視窗（1000×1000）都是橫向，文字在左、光點在右。
+ */
+@media (max-aspect-ratio: 4/5) {
   .opening {
     align-items: end;
     padding-block: var(--space-5) 6rem;
   }
 
-  /* 手機人形在正中央，站名與副標成一組置中放在它的下方。 */
+  /* 人形在正中央，站名與副標成一組置中放在它的下方。 */
   .opening__lockup {
     justify-self: center;
   }
@@ -718,12 +722,8 @@ html:not(.js) .home-rail {
   }
 
   .opening__sub {
-    font-size: 1rem;
-    letter-spacing: 0.4em;
-  }
-
-  .opening__skip {
-    bottom: 4.25rem;
+    font-size: 0.875rem;
+    letter-spacing: 0.3em;
   }
 
   .beat {
@@ -754,6 +754,57 @@ html:not(.js) .home-rail {
   .audience-switch__inner {
     left: auto;
     right: var(--gutter);
+  }
+}
+
+/*
+ * 站名（直書）不壓到人形：字級依「人形下緣到開場區底」的空間縮放。
+ *   人形下緣 ＝ 海報人形中心（--poster-y）＋ 0.405 個海報圖高（人形外框占圖高 81%，見 .opening 的說明）；
+ *   開場區底 ＝ 視窗底（100svh）扣外框下緣與留給「往下捲」提示的 6rem；站名高 ＝ 4 字 × (1em ＋ 0.06em 字距) ＝ 4.24em。
+ * 字級取原本的大小與「放得下的最大值」中較小的，下限 2.5rem；人形的位置用 lvh、這裡的底用 svh，網址列展開時（svh 較小）空間更小，
+ * 算式自然縮得更小，不會壓到。
+ */
+@supports (height: 100svh) and (height: 100lvh) {
+  @media (max-aspect-ratio: 4/5) {
+    .opening__title {
+      --title-room: calc(100svh - var(--frame-bottom) - 6rem - var(--poster-y) - 0.405 * var(--poster-h) - 0.75rem);
+      font-size: min(clamp(3.25rem, 17vw, 4.5rem), max(2.5rem, var(--title-room) / 4.24));
+    }
+  }
+}
+
+/*
+ * 太矮的直立手機（≤ 720px 高，如 375×667、360×640）：人形下緣之下放不下直書站名，改成橫書的一組（站名在上、副標在下），
+ * 仍置中在人形下方、不壓到人形。
+ */
+@media (max-aspect-ratio: 4/5) and (max-height: 720px) {
+  .opening__lockup {
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .opening__title {
+    writing-mode: horizontal-tb;
+    font-size: 2.5rem;
+    line-height: 1.1;
+  }
+
+  .opening__sub {
+    writing-mode: horizontal-tb;
+    padding: var(--space-1) 0 0;
+    border-right: 0;
+    border-top: var(--line) solid var(--color-line);
+    letter-spacing: 0.3em;
+    text-indent: 0.3em;
+  }
+}
+
+/* ── 窄螢幕（< 60rem）：尺寸微調（版面方向看上面的寬高比，不看寬度） ───── */
+
+@media (max-width: 59.999rem) {
+  .opening__skip {
+    bottom: 4.25rem;
   }
 
   .audience-switch__option {

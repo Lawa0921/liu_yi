@@ -1,0 +1,67 @@
+import { describe, expect, it } from 'vitest';
+import { framingFor, weaponReachFor, WEAPON_RIGHT_RESERVE_PX } from '../../src/qi/engine/framing';
+
+/**
+ * 取景（試作的值，原本寫在 stage.ts 的 `fit`）：橫向與直向各自決定可視高度與鏡頭位移。
+ * 抽成純函式後，兵器擺位（寬螢幕的槍長要留出右緣的段落導覽）也能用同一份取景算「槍尖落在畫布的幾成處」。
+ */
+describe('framingFor（取景）', () => {
+  it('橫向（aspect 1.6）：可視高 5.9 ÷ aspect，鏡頭往左移 13% 的可視寬，人形落在 63% 處', () => {
+    const f = framingFor(1.6, false);
+    expect(f.visibleH).toBeCloseTo(5.9 / 1.6, 10);
+    expect(f.lookX).toBeCloseTo(-f.visibleH * 1.6 * 0.13, 10);
+    expect(f.lookY).toBe(1.05);
+  });
+
+  it('橫向很寬（aspect 2.2）：可視高有下限 3.4', () => {
+    expect(framingFor(2.2, false).visibleH).toBe(3.4);
+  });
+
+  it('直向（aspect 0.46）：可視高 2.75 ÷ aspect，鏡頭往下移 13%，x 不動', () => {
+    const f = framingFor(0.46, true);
+    expect(f.visibleH).toBeCloseTo(2.75 / 0.46, 10);
+    expect(f.lookX).toBe(0);
+    expect(f.lookY).toBeCloseTo(1.05 - f.visibleH * 0.13, 10);
+  });
+
+  it('直向取景遇到較寬的畫布（aspect 1.05；視窗與畫布的寬高比不同，邊界值）：可視高取下限 3.4', () => {
+    expect(framingFor(1.05, true).visibleH).toBe(3.4);
+  });
+});
+
+describe('weaponReachFor（寬螢幕兵器右端的世界座標上限）', () => {
+  const CASES: [aspect: number, widthPx: number][] = [
+    [1.556, 996], // 1024×768 的畫布
+    [1.863, 1252], // 1280×800
+    [1.83, 1412], // 1440×900
+    [1.987, 1892], // 1920×1080
+    [2.4, 2400],
+  ];
+
+  it.each(CASES)('aspect %s、畫布寬 %s px：上限處投影到離畫布右緣 WEAPON_RIGHT_RESERVE_PX 處', (aspect, widthPx) => {
+    const { visibleH, lookX } = framingFor(aspect, false);
+    const reach = weaponReachFor(aspect, widthPx);
+    const rightPx = (0.5 + (reach - lookX) / (visibleH * aspect)) * widthPx;
+    expect(widthPx - rightPx).toBeCloseTo(WEAPON_RIGHT_RESERVE_PX, 6);
+  });
+
+  it('導覽 58px ＋ 槍頭光暈 40px 都放得進保留的距離（再留一點餘裕）', () => {
+    expect(WEAPON_RIGHT_RESERVE_PX).toBeGreaterThanOrEqual(58 + 40);
+  });
+
+  it('畫布越寬，保留的比例越小（導覽與光暈是固定的 px，不隨視窗放大）', () => {
+    const fraction = (aspect: number, widthPx: number) => {
+      const { visibleH, lookX } = framingFor(aspect, false);
+      return 0.5 + (weaponReachFor(aspect, widthPx) - lookX) / (visibleH * aspect);
+    };
+    expect(fraction(1.987, 1892)).toBeGreaterThan(fraction(1.556, 996));
+  });
+
+  it('畫布很窄時有下限（右端不低於畫布寬的 70%），上限永遠是正數', () => {
+    for (const [aspect, widthPx] of [[1.2, 200], [1.0, 120], [1.6, 400]] as const) {
+      expect(weaponReachFor(aspect, widthPx), `aspect ${aspect}、寬 ${widthPx}`).toBeGreaterThan(0);
+    }
+    const { visibleH, lookX } = framingFor(1.2, false);
+    expect(0.5 + (weaponReachFor(1.2, 200) - lookX) / (visibleH * 1.2)).toBeCloseTo(0.7, 10);
+  });
+});

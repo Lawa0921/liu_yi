@@ -5,6 +5,7 @@
 // 一般建置（含部署）不會產出，也不在 src/pages 底下；sitemap 另外排除 /__test/，並加 noindex，雙重保險。
 //   ?qi-tier=high|mid|low|min  覆寫光點數分級（沒給或不認得就依視窗判斷）
 //   ?qi-debug=1                暴露 stage.debug（讀回、虛擬時間餵調速器）
+//   ?qi-no-onfailure=1         掛引擎時不給 onFailure（測引擎自己的 console.error 後備）
 // 引擎依實測 fps 自動降級時發 window 的 `qi:tier`；這裡把它鏡射到 html[data-qi-tier]（和正式首頁一樣的屬性）。
 import { SITE } from '../../src/lib/site';
 ---
@@ -54,9 +55,14 @@ import { SITE } from '../../src/lib/site';
           reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
           debug: params.get('qi-debug') === '1',
           // 引擎中途出錯（自動降級重建失敗）時通知這裡；正式首頁在這裡退回靜態圖，harness 只記下來給測試讀。
-          onFailure: (error) => {
-            failures.push(String(error));
-          },
+          // ?qi-no-onfailure=1 不給這個回呼，測「呼叫端沒接時引擎自己至少 console.error」。
+          ...(params.get('qi-no-onfailure') === '1'
+            ? {}
+            : {
+                onFailure: (error: unknown) => {
+                  failures.push(String(error));
+                },
+              }),
         });
         (window as unknown as { __qiStage: QiStage }).__qiStage = stage;
         addEventListener('resize', () => stage.resize(innerWidth, innerHeight));

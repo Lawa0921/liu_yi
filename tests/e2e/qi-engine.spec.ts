@@ -554,6 +554,7 @@ test.describe('資源不洩漏', () => {
 test.describe('依 fps 自動降級', () => {
   test.use({ viewport: { width: 640, height: 400 } });
   const HIGH = './__test/qi-harness/?qi-tier=high&qi-debug=1';
+  const MID = './__test/qi-harness/?qi-tier=mid&qi-debug=1';
   const LOW = './__test/qi-harness/?qi-tier=low&qi-debug=1';
 
   interface TierEvent {
@@ -782,6 +783,30 @@ test.describe('依 fps 自動降級', () => {
     expect(await generation(page), '之後不再重建').toBe(before + 1);
   });
 
+  // Task 22b：記下降級之後調速器不再吃幀。以前它在開場期間照樣吃慢幀、每過一個冷卻就再往下走一級並覆寫記下的那一級，
+  // 一個慢的開場就讓開場結束時直接降到最低（mid → min），而不是只降一級再重新暖機。
+  test('開場期間已記下一次降級後，調速器不再吃幀：開場結束只降一級（mid → low），不會連降到 min', async ({ page }) => {
+    await open(page, MID);
+    await setPose(page, 'land');
+    await run(page, 16);
+    const before = await generation(page);
+    await page.evaluate(() => {
+      (window as unknown as { __tiers: string[] }).__tiers = [];
+      window.addEventListener('qi:tier', (event) => (window as unknown as { __tiers: string[] }).__tiers.push((event as CustomEvent<string>).detail));
+      stageOf().playIntro();
+    });
+    await waitIntroStarted(page);
+    const fed = await feed(page, 40, 30_000); // 夠長：調速器若繼續吃幀，會再走 mid → low → min 兩級
+    expect(fed.events, '開場期間不降級').toEqual([]);
+    expect(await generation(page)).toBe(before);
+
+    await page.evaluate(() => stageOf().playIntro({ skip: true }));
+    await run(page, 100);
+    expect(await page.evaluate(() => stageOf().debug.tier()), '只降一級').toBe('low');
+    expect(await generation(page)).toBe(before + 1);
+    expect(await page.evaluate(() => (window as unknown as { __tiers: string[] }).__tiers)).toEqual(['low']);
+  });
+
   test('沒有開場時降級照舊立刻發生（對照組：延後只針對開場）', async ({ page }) => {
     await open(page, LOW);
     await setPose(page, 'land');
@@ -874,6 +899,36 @@ test.describe('依 fps 自動降級', () => {
     await page.evaluate(() => ((window as unknown as { __failFramebuffers: boolean }).__failFramebuffers = false));
     await page.evaluate(() => stageOf().dispose());
     await page.evaluate(() => stageOf().dispose()); // 重複呼叫無妨
+  });
+
+  // Task 22b：呼叫端沒給 onFailure 時，錯誤不能被悄悄吞掉：至少 console.error 一次。
+  test('沒給 onFailure：降級重建丟錯至少 console.error 一次（含原本的錯誤），迴圈照樣停住', async ({ page }) => {
+    await page.addInitScript(() => {
+      const proto = WebGL2RenderingContext.prototype;
+      const original = proto.createFramebuffer;
+      proto.createFramebuffer = function (this: WebGL2RenderingContext) {
+        if ((window as unknown as { __failFramebuffers?: boolean }).__failFramebuffers) throw new Error('forced framebuffer failure');
+        return original.call(this);
+      };
+    });
+    await open(page, './__test/qi-harness/?qi-tier=low&qi-debug=1&qi-no-onfailure=1');
+    await setPose(page, 'land');
+    await run(page, 100);
+    const seen = seenBy.get(page)!;
+    expect(seen.errors, '失敗之前沒有錯誤').toEqual([]);
+
+    await page.evaluate(() => ((window as unknown as { __failFramebuffers: boolean }).__failFramebuffers = true));
+    await feed(page, 40, 20_000);
+    const reported = seen.errors.splice(0); // 這個測試刻意製造的錯誤：驗過就移走，不讓 afterEach 當成意外
+    expect(reported, '只通報一次').toHaveLength(1);
+    expect(reported[0]).toMatch(/lowering its tier/);
+    expect(reported[0]).toMatch(/forced framebuffer failure/);
+
+    const drawn = await draws(page);
+    await run(page, 1000);
+    expect(await draws(page), '失敗後不再排 rAF、不再畫').toBe(drawn);
+    await page.evaluate(() => ((window as unknown as { __failFramebuffers: boolean }).__failFramebuffers = false));
+    await page.evaluate(() => stageOf().dispose());
   });
 
   test('手動 setTier 重建失敗：照舊 reject 給呼叫端（不走 onFailure，呼叫端自己知道）', async ({ page }) => {

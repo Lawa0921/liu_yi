@@ -77,3 +77,17 @@ describe('style guard：字型變數', () => {
     }
   });
 });
+
+describe('style guard：課程卡大字是平面古金（Task 22b）', () => {
+  const card = read(join(SRC, 'components', 'CourseCard.astro'));
+
+  it('CourseCard.astro 沒有 background-clip（不做漸層字，設計 §4 反目標：金色漸層立體字）', () => {
+    expect(card).not.toMatch(/background-clip\s*:/); // 宣告；說明文字裡提到這個詞不算
+  });
+
+  it('.course-card__glyph 用平面的古金 token（--color-accent），沒有 linear-gradient', () => {
+    const rule = /\.course-card__glyph\s*\{([^}]*)\}/.exec(card)?.[1] ?? '';
+    expect(rule).toMatch(/color\s*:\s*var\(--color-accent\)/);
+    expect(rule).not.toMatch(/gradient/);
+  });
+});

@@ -319,6 +319,76 @@ describe('weaponLayout（D13：寬／窄的長度與傾角；中點高度 1.05�
   });
 });
 
+describe('weaponLayout 的右端上限 maxRight（Task 22b：大槍不壓到右緣的段落導覽）', () => {
+  /** 一條軸線上的兵器：x 從 −0.6 到 +0.6（比「全長 1」的單位形長一點，像真的形體檔），全是鋼。 */
+  function axisWeapon(): Shape {
+    const count = 64;
+    const positions = new Float32Array(count * 3);
+    const kinds = new Uint8Array(count).fill(KIND.STEEL);
+    for (let k = 0; k < count; k++) positions[k * 3] = -0.6 + (1.2 * k) / (count - 1);
+    return { count, positions, kinds, min: [-0.6, 0, 0], max: [0.6, 0, 0] };
+  }
+  /** 前 64 個點（形體的取樣各一次，還沒重複，所以沒有抖動）的最大 x。 */
+  const maxX = (out: Float32Array, ambient: AmbientField): number => Math.max(...solidSlots(ambient).slice(0, 64).map((i) => out[i * 4]!));
+
+  it('沒給 maxRight：layout 與試作一致（D13），expandTargets 不縮', () => {
+    expect(weaponLayout('spear', true)).toEqual({ scale: 3.8, rotZ: 0.05, offset: [0, 1.05, 0] });
+    const ambient = ambientField(112 * 112);
+    const out = expandTargets(axisWeapon(), 112, ambient, weaponLayout('spear', true));
+    expect(maxX(out, ambient)).toBeCloseTo(0.6 * 3.8 * Math.cos(0.05), 4);
+  });
+
+  it('給 maxRight 時 layout 帶著它（scale、rotZ、offset 不變）', () => {
+    expect(weaponLayout('spear', true, 1.5)).toEqual({ scale: 3.8, rotZ: 0.05, offset: [0, 1.05, 0], maxRight: 1.5 });
+  });
+
+  it('寬版長槍超過上限：等比例縮小到最右的光點剛好落在 maxRight（用形體實際的最右點，不是「全長 1」的假設）', () => {
+    const ambient = ambientField(112 * 112);
+    const out = expandTargets(axisWeapon(), 112, ambient, weaponLayout('spear', true, 1.5));
+    expect(maxX(out, ambient)).toBeCloseTo(1.5, 5);
+    // 傾角與中點高度不變：鋒尖與尾端的中點仍在 (0, 1.05)
+    const slots = solidSlots(ambient);
+    const first = slots[0]!; // 尾端（x = −0.6）
+    const last = slots[63]!; // 鋒尖（x = +0.6）：64 個取樣各一次，之後才開始重複
+    expect((out[first * 4 + 1]! + out[last * 4 + 1]!) / 2).toBeCloseTo(1.05, 4);
+    expect((out[first * 4]! + out[last * 4]!) / 2).toBeCloseTo(0, 4);
+  });
+
+  it('沒超過上限的不動：劍（2.9）在寬鬆的上限下維持原樣；只縮、不放大', () => {
+    const ambient = ambientField(112 * 112);
+    const out = expandTargets(axisWeapon(), 112, ambient, weaponLayout('jian', true, 5));
+    expect(maxX(out, ambient)).toBeCloseTo(0.6 * 2.9 * Math.cos(0.16), 4);
+  });
+
+  it('紅纓隨整把兵器等比例縮（纓穗相對紮點的位移也乘縮小後的 scale）', () => {
+    const count = 64;
+    const positions = new Float32Array(count * 3);
+    const kinds = new Uint8Array(count).fill(KIND.STEEL);
+    for (let k = 0; k < count; k++) positions[k * 3] = -0.6 + (1.2 * k) / (count - 1);
+    positions[0] = 0.3; // 紅纓：紮在 x = 0.3，往 −y 垂 0.1
+    positions[1] = -0.1;
+    kinds[0] = KIND.RED;
+    const shape: Shape = { count, positions, kinds, min: [-0.6, -0.1, 0], max: [0.6, 0, 0] };
+    const ambient = ambientField(112 * 112);
+    const capped = expandTargets(shape, 112, ambient, weaponLayout('spear', true, 1.5));
+    const slot = solidSlots(ambient)[0]!;
+    const scale = 1.5 / (0.6 * Math.cos(0.05)); // 縮小後的長度（3.8 → 約 2.5）
+    // 紅點：紮點 (0.3, 0) 隨兵器轉到位，纓穗從紮點往 −y 垂 0.1 × scale（不跟著傾斜）
+    expect(capped[slot * 4]).toBeCloseTo(0.3 * Math.cos(0.05) * scale, 4);
+    expect(capped[slot * 4 + 1]).toBeCloseTo(1.05 + 0.3 * Math.sin(0.05) * scale - 0.1 * scale, 4);
+  });
+
+  it('上限不是正數或不是有限值：RangeError（呼叫端算錯時不要悄悄擺出長度 0 的兵器）', () => {
+    expect(() => weaponLayout('spear', true, 0)).toThrow(RangeError);
+    expect(() => weaponLayout('spear', true, -1)).toThrow(RangeError);
+    expect(() => weaponLayout('spear', true, Number.NaN)).toThrow(RangeError);
+  });
+
+  it('窄（直向）版面沒有段落導覽，不套上限：維持試作的窄版長度', () => {
+    expect(weaponLayout('spear', false, 0.5)).toEqual({ scale: 2.3, rotZ: 0.45, offset: [0, 1.05, 0] });
+  });
+});
+
 describe('纓穗（RED）：套 layout 後仍朝下垂（試作：pendulum 反向旋轉，Task 16）', () => {
   /**
    * 單位形：鋒尖 (0.5, 0, 0)、尾端 (−0.5, 0, 0)；紅纓掛在長軸的 x = 0.4 那一點，往 −y 垂 0.08（兩束，z 前後 ±0.01）。

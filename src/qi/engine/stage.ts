@@ -27,10 +27,12 @@ import {
 import { rng } from '../shapes/rng';
 import { halfFloatTargets } from './caps';
 import { cameraShake, shockwave, shockwaveSecond } from './effects';
+import { framingFor } from './framing';
 import { createGlow, type Glow } from './glow';
 import { GROUND, groundVertex } from './shaders/ground';
 import { coverageOf, POINT_PX, pointsFragment, pointsVertex } from './shaders/points';
 import { sceneScaleFor, type TierId } from './tiers';
+import { isPortrait } from './viewport';
 
 /** 頁面底色（`--qi-bg`）。 */
 export const BACKDROP_HEX = 0x0b0a09;
@@ -81,8 +83,11 @@ export interface Stage {
   /** 光點著色器讀的位置與速度貼圖。 */
   bind(position: Texture, velocity: Texture): void;
   setVisible(visible: boolean): void;
-  /** CSS 像素的畫布尺寸。 */
-  setSize(width: number, height: number): void;
+  /**
+   * CSS 像素的畫布尺寸。`portrait`（`viewport.ts` 的 `isPortrait`，依視窗）決定取景用直向或橫向（`framing.ts`）；
+   * 不給就依畫布本身的寬高比（沒有外框的 harness 頁，畫布就是視窗）。
+   */
+  setSize(width: number, height: number, portrait?: boolean): void;
   /** `time` 秒、`dt` 秒；`animate` 為 false 時鏡頭不動（減少動態）。 */
   update(time: number, dt: number, input: StageInput, animate?: boolean): void;
   /** 衝擊波、白閃、鏡頭震與拖尾上限（見 `StageEffects`）；每格在 `update` 之前呼叫。 */
@@ -118,6 +123,7 @@ export function createStage(renderer: WebGLRenderer, canvas: HTMLCanvasElement):
   const drawingSize = new Vector2();
   let cssWidth = 1;
   let cssHeight = 1;
+  let portrait = false;
   let pointCount = 0; // 這個 tier 的光點數（`build` 設）；覆蓋密度要用
 
   const shared = {
@@ -154,18 +160,12 @@ export function createStage(renderer: WebGLRenderer, canvas: HTMLCanvasElement):
     groundPoints = null;
   };
 
-  /** 取景：直向與橫向各自決定人物佔畫面的大小與偏移（試作的值）。 */
+  /** 取景：直向與橫向各自決定人物佔畫面的大小與偏移（試作的值，見 `framing.ts`）。 */
   const fit = (): void => {
     const aspect = cssWidth / cssHeight;
     camera.aspect = aspect;
-    let visibleH: number;
-    if (aspect >= 1) {
-      visibleH = Math.max(3.4, 5.9 / aspect);
-      look.set(-visibleH * aspect * 0.13, 1.05, 0);
-    } else {
-      visibleH = Math.max(3.4, 2.75 / aspect);
-      look.set(0, 1.05 - visibleH * 0.13, 0);
-    }
+    const { visibleH, lookX, lookY } = framingFor(aspect, portrait);
+    look.set(lookX, lookY, 0);
     // 兵器在螢幕上的大小隨取景變（手機直向小）：覆蓋密度（密集點的亮度倍率）要跟著
     shared.uCoverage.value = coverageOf(pointCount, shared.uPx.value, cssHeight / visibleH);
     const distance = visibleH / (2 * Math.tan((camera.fov * Math.PI) / 360));
@@ -297,9 +297,10 @@ export function createStage(renderer: WebGLRenderer, canvas: HTMLCanvasElement):
       for (const p of points) p.visible = visible;
       if (groundPoints) groundPoints.visible = visible;
     },
-    setSize(width, height) {
+    setSize(width, height, portraitView) {
       cssWidth = Math.max(1, width);
       cssHeight = Math.max(1, height);
+      portrait = portraitView ?? isPortrait(cssWidth, cssHeight);
       applySize();
     },
     update(time, dt, input, animate = true) {
