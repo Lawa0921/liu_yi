@@ -83,7 +83,13 @@ def build_prompt(prompts_file, name):
     with open(prompts_file, encoding="utf-8") as f:
         P = json.load(f)
     a = P["assets"][name]
-    p = a["prompt"].replace("{FIG}", P["_common_fig"]).replace("{KID}", P.get("_common_kid", "")).replace("{SCENE}", P["_common_scene"])
+    p = a["prompt"]
+    # a placeholder in the prompt needs its common block: a missing key is an error, never silently an empty string
+    for token, key in (("{FIG}", "_common_fig"), ("{KID}", "_common_kid"), ("{SCENE}", "_common_scene")):
+        if token in p:
+            if key not in P:
+                raise SystemExit(f"{name}: prompt uses {token} but {key} is missing from {prompts_file}")
+            p = p.replace(token, P[key])
     if a.get("retry_note"):
         p += " IMPORTANT CORRECTION: " + a["retry_note"]
     return p, a["size"], a.get("ref")
@@ -165,6 +171,8 @@ def main(argv):
             prompt, size, ref = build_prompt(args.prompts, name)
             print(f"{name}: model={args.model} size={size} ref={ref} chars={len(prompt)} sha256={prompt_sha256(prompt)}")
         return
+    for name in args.names:  # build every prompt first: a bad prompt table fails here, before the key is read and before any paid request
+        build_prompt(args.prompts, name)
     key = load_key()
     with ThreadPoolExecutor(max_workers=4) as ex:
         for res in ex.map(lambda n: gen(args, key, args.model, n), args.names):
