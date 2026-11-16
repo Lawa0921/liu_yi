@@ -155,7 +155,7 @@
   outline: 2px solid var(--color-seal);
   color: var(--color-on-seal);
   font-family: var(--font-display);
-  font-weight: 700;
+  font-weight: 400;
   line-height: 1;
   letter-spacing: 0;
   /* 邊緣略帶毛邊，像蓋在紙上的印泥（濾鏡定義在 BaseLayout 的 #seal-rough）。 */

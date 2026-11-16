@@ -135,6 +135,47 @@ describe.skipIf(!hasTtf)('runSubset', () => {
     expect(parseCharList(readFileSync(charsPath(), 'utf8'))).toEqual(new Set(['藝']));
   });
 
+  describe('掃不到東西時報錯，不用空字集覆寫既有子集', () => {
+    const seedExisting = () => {
+      mkdirSync(join(root, 'src/assets/fonts'), { recursive: true });
+      writeFileSync(woff2Path(), 'SENTINEL');
+      writeFileSync(charsPath(), '六藝\n');
+    };
+    const untouched = () => {
+      expect(readFileSync(woff2Path(), 'utf8')).toBe('SENTINEL');
+      expect(readFileSync(charsPath(), 'utf8')).toBe('六藝\n');
+    };
+
+    it('資料夾裡沒有任何 .html（--from-dir 指錯地方）', async () => {
+      seedExisting();
+      const dist = join(root, 'wrong');
+      mkdirSync(dist, { recursive: true });
+      writeFileSync(join(dist, 'only.css'), '.x::before{content:"六"}');
+
+      await expect(runSubset({ root, fromDir: dist, ensureFont, log })).rejects.toThrow(/\.html/);
+      untouched();
+    });
+
+    it('有 .html 但一個字都沒掃到', async () => {
+      seedExisting();
+      const dist = join(root, 'blank');
+      writeHtml(dist, '<p>  </p>');
+
+      await expect(runSubset({ root, fromDir: dist, ensureFont, log })).rejects.toThrow(/0 個字/);
+      untouched();
+    });
+
+    it('建置沒有產出 .html（建置成功但 outDir 是空的）', async () => {
+      seedExisting();
+      const build = vi.fn(async () => {
+        mkdirSync(join(root, 'dist'), { recursive: true });
+      });
+
+      await expect(runSubset({ root, ensureFont, build, log, env: {} })).rejects.toThrow(/\.html/);
+      untouched();
+    });
+  });
+
   it('建置失敗：錯誤往外丟，且不動到既有的子集檔', async () => {
     mkdirSync(join(root, 'src/assets/fonts'), { recursive: true });
     writeFileSync(woff2Path(), 'SENTINEL');

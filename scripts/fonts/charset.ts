@@ -68,7 +68,8 @@ function decodeEntities(text: string): string {
       const valid = codePoint > 0 && codePoint <= 0x10ffff && !(codePoint >= 0xd800 && codePoint <= 0xdfff);
       return valid ? String.fromCodePoint(codePoint) : '�';
     }
-    const decoded = NAMED_ENTITIES[body];
+    // 必須是自己的屬性：`&constructor;` 之類的名稱會沿原型鏈查到 Object 的函式，不是 entity
+    const decoded = Object.hasOwn(NAMED_ENTITIES, body) ? NAMED_ENTITIES[body] : undefined;
     if (decoded === undefined) {
       throw new Error(`未知的 HTML entity &${body};：請改用字元本身或數字 entity，或把它補進 scripts/fonts/charset.ts 的 NAMED_ENTITIES`);
     }
@@ -326,9 +327,12 @@ async function listFiles(dir: string): Promise<string[]> {
 /**
  * 掃建置產物資料夾：`.html`（文字節點、文字屬性，加上內聯的 `<style>` 與 `<script>`）、`.css`、`.js`／`.mjs`。
  * 其他檔（圖片、`.xml`、`.svg`、`.json`、`.txt`）不讀。
- * `where` 是「字 → 出現的檔案」，檔名為相對 `dir`、以 `/` 分隔，依字串順序排列。
+ * `where` 是「字 → 出現的檔案」，檔名為相對 `dir`、以 `/` 分隔，依字串順序排列；`files` 是所有掃過的檔案（同樣的相對路徑與順序）。
+ * 某個檔案解析失敗時，錯誤訊息以該檔的相對路徑開頭（原錯誤留在 `cause`）。
  */
-export async function scanDist(dir: string): Promise<{ chars: Set<string>; where: Map<string, string[]> }> {
+export async function scanDist(
+  dir: string,
+): Promise<{ chars: Set<string>; where: Map<string, string[]>; files: string[] }> {
   const files = (await listFiles(dir))
     .map((full) => ({ full, rel: relative(dir, full).split(sep).join('/') }))
     .sort((a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0));
@@ -339,28 +343,43 @@ export async function scanDist(dir: string): Promise<{ chars: Set<string>; where
   for (const { full, rel } of files) {
     const source = await readFile(full, 'utf8');
     const found = new Set<string>();
-    switch (extname(rel).toLowerCase()) {
-      case '.html': {
-        const page = scanHtml(source);
-        for (const ch of page.chars) found.add(ch);
-        for (const style of page.styles) for (const ch of charsFromCss(style)) found.add(ch);
-        for (const script of page.scripts) for (const ch of charsFromJs(script)) found.add(ch);
-        break;
+    try {
+      switch (extname(rel).toLowerCase()) {
+        case '.html': {
+          const page = scanHtml(source);
+          for (const ch of page.chars) found.add(ch);
+          for (const style of page.styles) for (const ch of charsFromCss(style)) found.add(ch);
+          for (const script of page.scripts) for (const ch of charsFromJs(script)) found.add(ch);
+          break;
+        }
+        case '.css':
+          for (const ch of charsFromCss(source)) found.add(ch);
+          break;
+        default:
+          for (const ch of charsFromJs(source)) found.add(ch);
       }
-      case '.css':
-        for (const ch of charsFromCss(source)) found.add(ch);
-        break;
-      default:
-        for (const ch of charsFromJs(source)) found.add(ch);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error(`${rel}：${reason}`, { cause: error });
     }
     for (const ch of found) {
       chars.add(ch);
-      const files = where.get(ch);
-      if (files) files.push(rel);
+      const pages = where.get(ch);
+      if (pages) pages.push(rel);
       else where.set(ch, [rel]);
     }
   }
-  return { chars, where };
+  return { chars, where, files: files.map(({ rel }) => rel) };
+}
+
+/**
+ * 掃描結果裡沒有任何 .html 就丟錯：資料夾不是建置產物（路徑指錯、建置沒產出頁面）時，
+ * 空的結果不能被當成「沒有用字」而放行或覆寫子集。
+ */
+export function assertHasHtml(scan: { files: string[] }, dir: string): void {
+  if (!scan.files.some((file) => file.toLowerCase().endsWith('.html'))) {
+    throw new Error(`${dir} 內沒有任何 .html 檔，無法判斷頁面用字：請確認它是建置產物資料夾`);
+  }
 }
 
 // ───────────────────────── 字集 ─────────────────────────

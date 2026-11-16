@@ -5,7 +5,7 @@ import { join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolveDeployTarget } from '../../deploy-target.mjs';
 import { SITE } from '../../src/lib/site';
-import { parseCharList, scanDist, toCharsetText } from './charset';
+import { assertHasHtml, parseCharList, scanDist, toCharsetText } from './charset';
 import { ensureSourceFont } from './source';
 import { buildSubset } from './subset';
 
@@ -112,15 +112,21 @@ export async function runSubset(opts: RunOptions): Promise<number> {
     scanDir = resolve(root, resolveDeployTarget(env).outDir);
   }
 
-  const { chars, where } = await scanDist(scanDir);
+  const scan = await scanDist(scanDir);
+  const { chars, where } = scan;
+  const shownDir = relative(root, scanDir);
+  const shownName = shownDir === '' ? '.' : shownDir.startsWith('..') ? scanDir : shownDir;
+  // 掃不到東西時直接報錯：不能拿空字集覆寫既有的子集
+  assertHasHtml(scan, shownName);
+  if (chars.size === 0) throw new Error(`掃描 ${shownName} 得到 0 個字，不覆寫現有的子集：請確認建置有產出頁面內容`);
+
   const { woff2, notInFont } = await writeSubset(chars);
 
   const allowed = parseCharList(await readIfExists(join(root, FALLBACK_FILE)));
   const unresolved = notInFont.filter((ch) => !allowed.has(ch));
   const tolerated = notInFont.filter((ch) => allowed.has(ch));
 
-  const shownDir = relative(root, scanDir);
-  log(`掃描 ${shownDir === '' ? '.' : shownDir.startsWith('..') ? scanDir : shownDir}`);
+  log(`掃描 ${shownName}`);
   log(`字數：${chars.size - notInFont.length}（掃到 ${chars.size}，其中 ${notInFont.length} 個不在 TW-Kai 內）`);
   log(`大小：${woff2.byteLength} bytes（${(woff2.byteLength / 1024).toFixed(1)} KB）→ ${SUBSET_FILE}`);
   if (tolerated.length > 0) {

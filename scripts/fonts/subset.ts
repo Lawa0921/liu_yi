@@ -70,6 +70,7 @@ export function cmapCodePoints(sfnt: Uint8Array): Set<number> {
 /**
  * 把 `chars` 子集化成 woff2。
  * - 保留直排用的 `vhea`／`vmtx` 與 GSUB 的 `vert`：不開 `noLayoutClosure`，也不限制 `keepFeatures`。
+ * - U+0020 固定進子集（掃描不收空白，所以呼叫端的字集不會有它）：英數之間的空白也要用 TW-Kai 渲染，不能退到後備字型。
  * - 輸入以碼位排序後再交給 harfbuzz，所以輸出與 Set 的插入順序無關、可重現。
  * - `notInFont`：要求了、但來源字型沒有字形的字（依碼位排序）；它們不會出現在子集裡。
  */
@@ -81,6 +82,6 @@ export async function buildSubset(
   const notInFont = [...chars].filter((ch) => !available.has(ch.codePointAt(0)!));
   notInFont.sort((a, b) => a.codePointAt(0)! - b.codePointAt(0)!);
 
-  const woff2 = await subsetFont(sourceTtf, toCharsetText(chars), { targetFormat: 'woff2' });
+  const woff2 = await subsetFont(sourceTtf, toCharsetText(new Set([' ', ...chars])), { targetFormat: 'woff2' });
   return { woff2, notInFont };
 }

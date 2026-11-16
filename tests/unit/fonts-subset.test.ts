@@ -96,6 +96,9 @@ async function inflate(woff2: Uint8Array): Promise<Uint8Array> {
 
 const codepoints = (text: string) => new Set([...text].map((ch) => ch.codePointAt(0)!));
 
+/** U+0020 一律進子集（讓英數之間的空白也用 TW-Kai 渲染），所以 cmap 永遠比請求的字多這一個。 */
+const withSpace = (text: string) => codepoints(`${text} `);
+
 describe.skipIf(!hasTtf)('buildSubset（以 .cache/fonts/TW-Kai.ttf 為來源）', () => {
   let ttf: Uint8Array;
   let result: Awaited<ReturnType<typeof buildSubset>>;
@@ -119,13 +122,25 @@ describe.skipIf(!hasTtf)('buildSubset（以 .cache/fonts/TW-Kai.ttf 為來源）
     const withPunctuation = await buildSubset(ttf, new Set([...`${WANTED}「」、。，（）`]));
     const punctuationSfnt = await inflate(withPunctuation.woff2);
     expect(gsubFeatureTags(punctuationSfnt)).toContain('vert');
-    expect(cmapCodepoints(punctuationSfnt)).toEqual(codepoints(`${WANTED}「」、。，（）`));
+    expect(cmapCodepoints(punctuationSfnt)).toEqual(withSpace(`${WANTED}「」、。，（）`));
   });
 
-  it('cmap 恰含請求的字，不多不少', () => {
-    expect(cmapCodepoints(sfnt)).toEqual(codepoints(WANTED));
+  it('cmap 恰含請求的字加上 U+0020，不多不少', () => {
+    expect(cmapCodepoints(sfnt)).toEqual(withSpace(WANTED));
     // 產品碼的 cmap 讀取器（用來算 notInFont）與測試自己的實作對同一份產物讀出相同結果
-    expect(cmapCodePoints(sfnt)).toEqual(codepoints(WANTED));
+    expect(cmapCodePoints(sfnt)).toEqual(withSpace(WANTED));
+  });
+
+  it('U+0020 固定進子集：即使請求的字完全沒有空白，也不會因此列入 notInFont', async () => {
+    const noSpace = await buildSubset(ttf, new Set(['六']));
+    expect(noSpace.notInFont).toEqual([]);
+    expect(cmapCodepoints(await inflate(noSpace.woff2))).toEqual(withSpace('六'));
+  });
+
+  it('請求的字集裡自帶空白時結果相同（U+0020 不重複、輸出與沒帶時逐位元相同）', async () => {
+    const withExplicit = await buildSubset(ttf, new Set([...WANTED, ' ']));
+    expect(withExplicit.notInFont).toEqual([]);
+    expect(Buffer.from(withExplicit.woff2).equals(Buffer.from(result.woff2))).toBe(true);
   });
 
   it('請求的字都在字型內時 notInFont 為空', () => {
@@ -140,7 +155,7 @@ describe.skipIf(!hasTtf)('buildSubset（以 .cache/fonts/TW-Kai.ttf 為來源）
     const mixed = await buildSubset(ttf, new Set(['六', '\u{1F600}']));
     expect(mixed.notInFont).toEqual(['\u{1F600}']);
     const mixedSfnt = await inflate(mixed.woff2);
-    expect(cmapCodepoints(mixedSfnt)).toEqual(codepoints('六'));
+    expect(cmapCodepoints(mixedSfnt)).toEqual(withSpace('六'));
   });
 
   it('notInFont 依碼位排序、與輸入順序無關', async () => {

@@ -37,7 +37,7 @@ const moves = [
     <meta name="robots" content="noindex, nofollow" />
     <title>氣聚成人（試作）｜{SITE.shortName}</title>
     <meta name="theme-color" content="#0b0a09" />
-    <Font cssVariable="--font-noto-serif-tc" />
+    <Font cssVariable="--font-twkai" />
   </head>
   <body>
     <canvas class="qi-canvas" aria-hidden="true"></canvas>
@@ -94,7 +94,8 @@ const moves = [
         margin: 0;
         background: var(--qi-bg);
         color: var(--qi-paper);
-        font-family: var(--font-noto-serif-tc), serif;
+        font-family: var(--font-twkai), serif;
+        font-synthesis: none;
         -webkit-font-smoothing: antialiased;
       }
 
@@ -145,7 +146,7 @@ const moves = [
       .qi-name {
         margin: 0;
         writing-mode: vertical-rl;
-        font-weight: 700;
+        font-weight: 400;
         line-height: 1;
         letter-spacing: 0.22em;
         color: var(--qi-paper);

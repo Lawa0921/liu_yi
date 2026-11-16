@@ -40,6 +40,13 @@ describe('charsFromHtml', () => {
     expect(() => charsFromHtml('<p>&notanentity;</p>')).toThrow(/&notanentity;/);
   });
 
+  it.each(['constructor', 'toString', 'valueOf', 'hasOwnProperty', 'isPrototypeOf'])(
+    '&%s; 是 Object 原型鏈上的名稱，不是 entity：照樣當未知 entity 丟錯，不能把函式原始碼當字收進來',
+    (name) => {
+      expect(() => charsFromHtml(`<p>&${name};</p>`)).toThrow(new RegExp(`&${name};`));
+    },
+  );
+
   it('沒有分號的 & 照字面處理，不當成 entity', () => {
     expect(charsFromHtml('<p>AT&T</p>')).toEqual(new Set(['A', 'T', '&']));
   });
@@ -261,6 +268,24 @@ describe('scanDist', () => {
     } finally {
       rmSync(empty, { recursive: true, force: true });
     }
+  });
+
+  it('files 回掃過的檔案（相對路徑、依字母序）', async () => {
+    const { files } = await scanDist(dir);
+    expect(files).toEqual(['a.html', 'd.js', 'sub/b.html', 'sub/deep/c.css']);
+  });
+
+  it('某個檔案解析失敗時，錯誤訊息帶上該檔的相對路徑，原因保留在 cause', async () => {
+    writeFileSync(join(dir, 'sub', 'bad.html'), '<p>&notanentity;</p>');
+
+    const error = await scanDist(dir).then(
+      () => undefined,
+      (caught: unknown) => caught,
+    );
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toMatch(/^sub\/bad\.html：.*&notanentity;/s);
+    expect(((error as Error).cause as Error).message).toMatch(/&notanentity;/);
   });
 
   it('資料夾不存在時 reject', async () => {
