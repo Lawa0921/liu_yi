@@ -23,6 +23,7 @@ import { resolveShapeUrl } from '../../qi/shapes/urls';
 import type { QiDebug, QiStage } from '../../qi/engine/qi-stage';
 import { currentAudience, observeAudience } from './audience-sync';
 import { readBeatRects } from './beats';
+import { textInkRight } from './text-extent';
 import { enterStatic, onEnterStatic } from './fallback';
 import { introSeen, markIntroSeen } from './intro-gate';
 
@@ -128,6 +129,8 @@ export async function initHome(): Promise<void> {
   let beats: BeatRect[] = readBeatRects(main, window.scrollY);
   const refreshBeats = (): void => {
     beats = readBeatRects(main, window.scrollY);
+    // 版面或文字變了（視窗、字型載入、切換對象、圖片讓版面位移）：兵器的左界（實際文字的右緣）跟著重新量
+    engine?.relayout();
   };
 
   /** 視窗中央現在對到哪一個 beat；沒有任何有高度的 beat（或 beats 是空的）時回 undefined。 */
@@ -155,10 +158,12 @@ export async function initHome(): Promise<void> {
       debug: params.get('qi-debug') === '1',
       // 取景的直／橫與版面（home.css 的 @media (max-aspect-ratio: 4/5)）同一條：依視窗，不是扣掉外框的畫布
       portrait: () => isPortrait(window.innerWidth, window.innerHeight),
-      // 橫向版面的文字欄右緣（從畫布左緣起算）：兵器的左端不進文字欄。目前顯示的那一組面板的 .beat__text，欄寬由 CSS 決定，各段相同。
-      textRight: () => {
-        const column = [...main.querySelectorAll<HTMLElement>('.beat__text')].find((el) => el.getClientRects().length > 0);
-        return column ? column.getBoundingClientRect().right - canvas.getBoundingClientRect().left : undefined;
+      // 兵器的左界：該姿勢那一段實際文字的最右緣（從畫布左緣起算）。哪一段看目前對象的姿勢對應（劍＝兵器 a、妙刀＝b、大槍＝c）。
+      textRight: (pose) => {
+        const beat = BEATS.find((id) => poseFor(id, currentAudience()) === pose);
+        const section = beat ? main.querySelector(`[data-beat="${beat}"]`) : null;
+        const right = section ? textInkRight(section) : undefined;
+        return right === undefined ? undefined : right - canvas.getBoundingClientRect().left;
       },
       onContextLost: () => enterStatic('context-lost'), // RF5：靜態圖接手，DOM 內容不變
       onFailure: (error) => {

@@ -49,13 +49,14 @@ export function weaponReachFor(aspect: number, widthPx: number): number {
   return lookX + (fraction - 0.5) * visibleH * aspect;
 }
 
-/** 兵器的左端離文字欄右緣至少這麼多 px（槍尾與字之間留一點空）。 */
-export const WEAPON_LEFT_MARGIN_PX = 16;
+/** 兵器的左端離文字右緣至少這麼多 px（槍尾與字之間留一點空）。 */
+export const WEAPON_LEFT_MARGIN_PX = 24;
 
 /**
- * 橫向取景下，兵器左端的世界 x 下限（`weaponLayout` 的 `minLeft`）：投影後落在文字欄右緣（`textRightPx`，從畫布左緣起算的 CSS 像素，
- * 由頁面量 `.beat__text` 的右緣給）再加 `WEAPON_LEFT_MARGIN_PX` 處。文字欄之後才是兵器的地盤：近方形視窗（1000×1000）與窄的橫向視窗
- * （橫放手機），兵器置中在人形的位置，左端原本會伸進文字。
+ * 橫向取景下，兵器左端的世界 x 下限（`weaponLayout` 的 `minLeft`）：投影後落在文字右緣（`textRightPx`，從畫布左緣起算的 CSS 像素）
+ * 再加 `WEAPON_LEFT_MARGIN_PX` 處。`textRightPx` 是目前那一段**實際文字**的最右緣（頁面量每個文字節點的矩形，
+ * `scripts/home/text-extent.ts`），不是整個文字欄的盒子：欄比字寬（35rem／44vw），用欄當界線，1440×900 的大槍會被縮到只剩約 540–620px。
+ * 兵器置中在人形的位置，左端原本會伸進文字（近方形視窗、窄的橫向視窗）；超過界線的兵器整把往右推，窗放不下才縮（`expand.ts`）。
  */
 export function weaponLeftFor(aspect: number, widthPx: number, textRightPx: number): number {
   const { visibleH, lookX } = framingFor(aspect, false);

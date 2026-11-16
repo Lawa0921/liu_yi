@@ -66,22 +66,23 @@ describe('weaponReachFor（寬螢幕兵器右端的世界座標上限）', () =>
   });
 });
 
-describe('weaponLeftFor（兵器左端的世界座標下限：不進入文字欄）', () => {
+describe('weaponLeftFor（兵器左端的世界座標下限：不進入該段實際文字）', () => {
   const CASES: [aspect: number, widthPx: number, textRightPx: number][] = [
-    [1.11, 972, 481], // 1000×1000：文字欄右緣（扣掉外框 inset 後）
-    [1.556, 996, 492], // 1024×768
-    [1.83, 1412, 625], // 1440×900
-    [2.62, 844, 417], // 844×390 橫放手機
+    [1.11, 972, 440], // 1000×1000：該段文字右緣（從畫布左緣起算）
+    [1.556, 996, 440], // 1024×768
+    [1.83, 1412, 471], // 1440×900：大槍那一段的字只排到約 471px
+    [2.62, 844, 380], // 844×390 橫放手機
   ];
 
-  it.each(CASES)('aspect %s、畫布寬 %s px、文字欄右緣 %s px：下限投影到文字欄右緣再加 WEAPON_LEFT_MARGIN_PX', (aspect, widthPx, textRightPx) => {
+  it.each(CASES)('aspect %s、畫布寬 %s px、文字欄右緣 %s px：下限投影到文字右緣再加 WEAPON_LEFT_MARGIN_PX', (aspect, widthPx, textRightPx) => {
     const { visibleH, lookX } = framingFor(aspect, false);
     const left = weaponLeftFor(aspect, widthPx, textRightPx);
     const leftPx = (0.5 + (left - lookX) / (visibleH * aspect)) * widthPx;
     expect(leftPx).toBeCloseTo(textRightPx + WEAPON_LEFT_MARGIN_PX, 6);
   });
 
-  it('文字欄越寬，下限越往右', () => {
+  it('文字排得越右，下限越往右；留的空隙是 24px', () => {
+    expect(WEAPON_LEFT_MARGIN_PX).toBe(24);
     expect(weaponLeftFor(1.5, 1000, 600)).toBeGreaterThan(weaponLeftFor(1.5, 1000, 400));
   });
 });

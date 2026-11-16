@@ -106,8 +106,26 @@ for (const size of RAIL_SIZES) {
   });
 }
 
-// 兵器左端不進入文字欄：橫向版面的文字欄（.beat__text，左欄）之後才是兵器的地盤；近方形視窗與窄的橫向視窗，
-// 兵器的左端原本會伸進文字（槍尾碰到字）。量引擎讀回的實際光點外框，與該段 .beat__text 的右緣比。
+// 兵器左端不進入文字：橫向版面的文字在左，兵器是文字之後的地盤。左界是「該段實際文字」的右緣（不是整個文字欄的盒子：
+// 欄是 35rem／44vw 寬、字沒那麼長，用欄當界線大槍在 1440×900 會被縮到只剩約 540px）。
+// 這裡量 `.beat__text` 底下每個文字節點的矩形，取最大 right——與引擎端（src/scripts/home/text-extent.ts）各自獨立實作。
+
+/** 該段 `.beat__text`（目前顯示的那一組面板）裡所有文字節點的最右緣（視窗座標）。 */
+const textInkRight = (page: Page, beat: BeatId): Promise<number> =>
+  page.evaluate((id) => {
+    let right = -Infinity;
+    for (const column of document.querySelectorAll(`[data-beat="${id}"] .beat__text`)) {
+      const walker = document.createTreeWalker(column, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        if (!node.textContent?.trim()) continue;
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        for (const rect of range.getClientRects()) if (rect.width > 0) right = Math.max(right, rect.right);
+      }
+    }
+    return right;
+  }, beat);
+
 const TEXT_SIZES = [
   { width: 900, height: 600 },
   { width: 1000, height: 1000 },
@@ -120,26 +138,106 @@ const TEXT_SIZES = [
 ];
 
 for (const size of TEXT_SIZES) {
-  test.describe(`兵器與文字欄：${size.width}×${size.height}`, () => {
+  test.describe(`兵器與文字：${size.width}×${size.height}`, () => {
     test.use({ viewport: size });
 
     for (const { beat, pose, name } of WEAPON_BEATS) {
-      test(`${name}聚合後，光點外框的左端在文字欄右緣之右`, async ({ page }) => {
+      test(`${name}聚合後，光點外框的左端在該段實際文字的右緣之右`, async ({ page }) => {
         await open(page);
         await settlePose(page, beat, pose);
         expect(await page.evaluate(() => (window as unknown as W).__qi.debug.meanError()), '已聚合').toBeLessThan(0.05);
-        const column = await page.evaluate((id) => {
-          const text = [...document.querySelectorAll(`[data-beat="${id}"] .beat__text`)].find((el) => el.getClientRects().length > 0)!;
-          const r = text.getBoundingClientRect();
-          return { left: r.left, right: r.right };
-        }, beat);
+        const inkRight = await textInkRight(page, beat);
+        expect(inkRight, '量得到文字').toBeGreaterThan(0);
         const extent = await page.evaluate(() => (window as unknown as W).__qi.debug.extent());
         expect(extent.right, '兵器有畫出來').toBeGreaterThan(extent.left);
-        expect(extent.left, `光點外框左端 ${extent.left.toFixed(0)}px 在文字欄右緣 ${column.right.toFixed(0)}px 之右（右端 ${extent.right.toFixed(0)}px）`).toBeGreaterThanOrEqual(column.right);
+        expect(extent.left, `光點外框左端 ${extent.left.toFixed(0)}px 在實際文字右緣 ${inkRight.toFixed(0)}px 之右（右端 ${extent.right.toFixed(0)}px）`).toBeGreaterThanOrEqual(inkRight);
       });
     }
   });
 }
+
+// 大槍要「丈二」，畫面上要夠長：1440×900 下可見長度（光點外框的寬）≥ 700px。
+// 左界若用整個文字欄的盒子，這裡只剩約 540–600px；改用實際文字右緣就留得住（槍尾離字約 24px）。
+test.describe('大槍長度：1440×900', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test('聚合後光點外框的寬 ≥ 700px（而且仍在文字右緣之右、導覽之左）', async ({ page }) => {
+    await open(page);
+    await settlePose(page, 'weapon-c', 'spear');
+    expect(await page.evaluate(() => (window as unknown as W).__qi.debug.meanError()), '已聚合').toBeLessThan(0.05);
+    const extent = await page.evaluate(() => (window as unknown as W).__qi.debug.extent());
+    const inkRight = await textInkRight(page, 'weapon-c');
+    const rail = (await page.locator('nav.home-rail').boundingBox())!;
+    expect(extent.right - extent.left, `大槍可見長度（左 ${extent.left.toFixed(0)}、右 ${extent.right.toFixed(0)}）`).toBeGreaterThanOrEqual(700);
+    expect(extent.left, '仍在實際文字右緣之右').toBeGreaterThanOrEqual(inkRight);
+    expect(extent.right, '仍在導覽（含光暈）之左').toBeLessThanOrEqual(rail.x - HALO_PX);
+  });
+});
+
+// 視窗改變、換到別的兵器段：左右界跟著重新量。
+// 注意：視窗高度一變，各段的位置跟著變，同一個捲動位置可能落在另一段（1440×900 縮成 1000×1000 後，原來大槍那一段的位置變成妙刀）；
+// 所以「換尺寸」要在高度不變時做，或換完再捲回該段。
+
+/** 改視窗大小，等頁面的 resize 事件處理完（首頁的監聽先註冊，這裡後註冊，輪到這裡時首頁已處理完）。 */
+async function resizeTo(page: Page, width: number, height: number): Promise<void> {
+  await page.evaluate(() => {
+    (window as unknown as { __resized: Promise<void> }).__resized = new Promise((resolve) => addEventListener('resize', () => resolve(), { once: true }));
+  });
+  await page.setViewportSize({ width, height });
+  await page.evaluate(() => (window as unknown as { __resized: Promise<void> }).__resized);
+}
+
+test.describe('兵器左右界重新量', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test('視窗從 1440 寬縮成 1280 寬（高度不變，仍在大槍那一段）：右端跟著縮進導覽之左，左端仍在文字之右', async ({ page }) => {
+    await open(page);
+    await settlePose(page, 'weapon-c', 'spear');
+    await resizeTo(page, 1280, 900);
+    await page.clock.runFor(3500);
+    await expect(page.locator('html')).toHaveAttribute('data-qi-pose', 'spear');
+    const rail = (await page.locator('nav.home-rail').boundingBox())!;
+    const inkRight = await textInkRight(page, 'weapon-c');
+    const extent = await page.evaluate(() => (window as unknown as W).__qi.debug.extent());
+    expect(extent.right, `縮窗後光點外框右端 ${extent.right.toFixed(0)}px 在導覽（含光暈）之左 ${(rail.x - HALO_PX).toFixed(0)}px`).toBeLessThanOrEqual(rail.x - HALO_PX);
+    expect(extent.left, `縮窗後光點外框左端 ${extent.left.toFixed(0)}px 在文字右緣 ${inkRight.toFixed(0)}px 之右`).toBeGreaterThanOrEqual(inkRight);
+  });
+
+  test('視窗縮成 1000×1000 後捲回大槍那一段：舊的（1440 時展開的）目標過期，左端在新的文字右緣之右', async ({ page }) => {
+    await open(page);
+    await settlePose(page, 'weapon-c', 'spear');
+    await resizeTo(page, 1000, 1000);
+    await settlePose(page, 'weapon-c', 'spear'); // 捲回大槍那一段；那一段的目標要用新的視窗與新的文字重展開
+    const inkRight = await textInkRight(page, 'weapon-c');
+    const extent = await page.evaluate(() => (window as unknown as W).__qi.debug.extent());
+    expect(extent.left, `光點外框左端 ${extent.left.toFixed(0)}px 在文字右緣 ${inkRight.toFixed(0)}px 之右`).toBeGreaterThanOrEqual(inkRight);
+  });
+
+  test('1000×1000 依序捲過劍、妙刀、大槍再回到劍：每一段的左端都在該段文字的右緣之右', async ({ page }) => {
+    await page.setViewportSize({ width: 1000, height: 1000 });
+    await open(page);
+    for (const { beat, pose } of [WEAPON_BEATS[0], WEAPON_BEATS[1], WEAPON_BEATS[2], WEAPON_BEATS[0]]) {
+      await settlePose(page, beat, pose);
+      const inkRight = await textInkRight(page, beat);
+      const extent = await page.evaluate(() => (window as unknown as W).__qi.debug.extent());
+      expect(extent.left, `${beat}：光點外框左端 ${extent.left.toFixed(0)}px 在文字右緣 ${inkRight.toFixed(0)}px 之右`).toBeGreaterThanOrEqual(inkRight);
+    }
+  });
+
+  test('切換對象（大人→小孩→大人）後，大槍那一段的左端仍在文字右緣之右', async ({ page }) => {
+    await open(page);
+    await settlePose(page, 'weapon-c', 'spear');
+    for (const label of ['小孩', '大人']) {
+      await page.getByRole('button', { name: label }).click();
+      await page.clock.runFor(200);
+      await expect(page.locator('html')).toHaveAttribute('data-qi-pose', 'spear', READY);
+      await page.clock.runFor(3500);
+      const inkRight = await textInkRight(page, 'weapon-c');
+      const extent = await page.evaluate(() => (window as unknown as W).__qi.debug.extent());
+      expect(extent.left, `${label}：光點外框左端 ${extent.left.toFixed(0)}px 在文字右緣 ${inkRight.toFixed(0)}px 之右`).toBeGreaterThanOrEqual(inkRight);
+    }
+  });
+});
 
 // ── 4. 版面與引擎取景同一個切換點 ─────────────────────────────────────
 

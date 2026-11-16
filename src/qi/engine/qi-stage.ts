@@ -70,10 +70,11 @@ export interface QiStageOptions {
    */
   portrait?: () => boolean;
   /**
-   * 橫向版面的文字欄右緣（從畫布左緣起算的 CSS 像素）；兵器的左端不得進入它（再加一點空隙，`framing.ts` 的 `WEAPON_LEFT_MARGIN_PX`）。
-   * 首頁傳 `.beat__text` 的右緣；沒有文字欄（harness、直向、沒有課程段）回 `undefined`＝不限制。每次 `resize` 都會再問一次。
+   * 橫向版面裡，這個兵器姿勢那一段**實際文字**的最右緣（從畫布左緣起算的 CSS 像素）；兵器的左端不得進入它
+   * （再加一點空隙，`framing.ts` 的 `WEAPON_LEFT_MARGIN_PX`）。首頁傳該段 `.beat__text` 底下所有文字的最大 right；
+   * 沒有文字（harness、直向、沒有那一段）回 `undefined`＝不限制。換到兵器姿勢、`resize`、`relayout()` 時都會再問一次。
    */
-  textRight?: () => number | undefined;
+  textRight?: (pose: PoseId) => number | undefined;
 }
 
 export interface QiStage {
@@ -108,6 +109,11 @@ export interface QiStage {
   getSealRect(): Box | null;
   /** 只動相機與 render target，不重建模擬、不動姿勢。 */
   resize(w: number, h: number): void;
+  /**
+   * 版面或文字變了（字型載入、切換對象、圖片讓版面位移）：重新量兵器的左界（`textRight`），擺位變了的兵器重展開
+   * （姿勢不變、不給衝量）；沒變就什麼都不做。不動取景與畫布大小（那是 `resize`）。
+   */
+  relayout(): void;
   /**
    * 重建 GPGPU（同一個 tier 也會重建）；保留目前姿勢。換了級就在 `window` 發 `qi:tier`（`CustomEvent`，`detail` 是新的 tier；同一級不發），
    * 並讓調速器從新的級重新暖機（所以手動換級後不會又被「降」回舊的階梯）。依 fps 自動降級也走這條路，另外給一次輕衝量。
@@ -159,6 +165,8 @@ export interface QiDebug {
 interface Target {
   texture: DataTexture;
   data: Float32Array;
+  /** 兵器的擺位條件（`weaponKey`）；其他姿勢是空字串。條件變了（視窗、文字）這個目標就過期，要重展開。 */
+  fit: string;
 }
 
 /** `covered`／`bright` 的亮度門檻（像素最大通道，0–255；底色約 11）。 */
@@ -230,16 +238,16 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
   let portrait = askPortrait();
   /**
    * 兵器擺位的條件：直向用窄版長度；橫向用寬版長度，並依畫布大小留出右緣（段落導覽與槍頭光暈）的位置、
-   * 依文字欄的右緣讓出左邊（`weaponReachFor`、`weaponLeftFor`），所以橫向時畫布或文字欄一變，兵器的位置與長度也跟著變。
-   * 字串鍵讓 `resize` 比較「擺位有沒有變」。
+   * 依「該段實際文字」的右緣讓出左邊（`weaponReachFor`、`weaponLeftFor`），所以橫向時畫布或文字一變，兵器的位置與長度也跟著變。
+   * 字串鍵讓目標快取比較「擺位有沒有變」；每次換姿勢（換 beat）、`resize`、`relayout` 都重新量。
    */
   const weaponReach = (): number | undefined => (portrait ? undefined : weaponReachFor(cssWidth / cssHeight, cssWidth));
-  const weaponReachLeft = (): number | undefined => {
-    const textRight = portrait ? undefined : o.textRight?.();
+  const weaponReachLeft = (id: PoseId): number | undefined => {
+    const textRight = portrait ? undefined : o.textRight?.(id);
     return textRight === undefined ? undefined : weaponLeftFor(cssWidth / cssHeight, cssWidth, textRight);
   };
-  const weaponKey = (): string => `${weaponReach()?.toFixed(4) ?? 'narrow'}|${weaponReachLeft()?.toFixed(4) ?? '-'}`;
-  let weaponFit = weaponKey();
+  const isWeapon = (id: PoseId): boolean => SHAPES[id]?.kind === 'weapon';
+  const weaponKey = (id: PoseId): string => (isWeapon(id) ? `${weaponReach()?.toFixed(4) ?? 'narrow'}|${weaponReachLeft(id)?.toFixed(4) ?? '-'}` : '');
 
   // ── 一個 tier 的資源（setTier 時整組換掉）──────────────────────────
   let side = 0;
@@ -312,8 +320,10 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
   };
 
   const makeTarget = (id: PoseId): Target => {
+    const fit = weaponKey(id);
     const cached = targets.get(id);
-    if (cached) return cached;
+    if (cached && cached.fit === fit) return cached;
+    cached?.texture.dispose(); // 兵器擺位的條件變了：舊的過期
     let data: Float32Array;
     if (id === 'flow') {
       data = flowTargets(side, ambient);
@@ -321,13 +331,30 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
       const shape = shapes.get(id);
       if (!shape) throw new Error(`Shape ${id} is not loaded`);
       const recipe = SHAPES[id];
-      data = expandTargets(shape, side, ambient, recipe?.kind === 'weapon' ? weaponLayout(recipe.name, !portrait, weaponReach(), weaponReachLeft()) : undefined);
+      data = expandTargets(shape, side, ambient, recipe?.kind === 'weapon' ? weaponLayout(recipe.name, !portrait, weaponReach(), weaponReachLeft(id)) : undefined);
     }
     const texture = new DataTexture(data, side, side, RGBAFormat, FloatType);
     texture.needsUpdate = true;
-    const made = { texture, data };
+    const made = { texture, data, fit };
     targets.set(id, made);
     return made;
+  };
+
+  /**
+   * 兵器擺位的條件變了（視窗、文字）：過期的兵器目標丟掉；現在正擺著的就重展開並換過去（姿勢不變、不給衝量）。
+   * 回傳有沒有動到目前畫面上的姿勢。
+   */
+  const refreshWeapons = (): boolean => {
+    for (const [id, t] of [...targets]) {
+      if (!isWeapon(id) || t.fit === weaponKey(id)) continue;
+      t.texture.dispose();
+      targets.delete(id);
+    }
+    if (pose && isWeapon(pose) && !targets.has(pose) && shapes.has(pose)) {
+      apply(pose, makeTarget(pose), false);
+      return true;
+    }
+    return false;
   };
 
   let draws = 0;
@@ -772,18 +799,12 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
       cssHeight = Math.max(1, h);
       portrait = askPortrait();
       stage.setSize(cssWidth, cssHeight, portrait);
-      const nowFit = weaponKey();
-      if (nowFit !== weaponFit) {
-        // 兵器的長度與傾角依直橫與畫布寬高比而不同：擺位變了就重展開，姿勢不變、不給衝量
-        weaponFit = nowFit;
-        for (const [id, t] of [...targets]) {
-          if (SHAPES[id]?.kind !== 'weapon') continue;
-          t.texture.dispose();
-          targets.delete(id);
-        }
-        if (pose && SHAPES[pose]?.kind === 'weapon') apply(pose, makeTarget(pose), false);
-      }
+      refreshWeapons(); // 兵器的長度與傾角依直橫、畫布大小與文字右緣而不同：擺位變了就重展開
       redraw(); // 改了畫布大小，緩衝被清掉
+    },
+    relayout() {
+      if (disposed) return;
+      if (refreshWeapons()) redraw();
     },
     async setTier(next) {
       if (!Object.hasOwn(TIERS, next)) throw new RangeError(`Unknown tier: ${String(next)}`);
