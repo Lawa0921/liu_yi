@@ -13,6 +13,21 @@ import { SEAL_CENTER_Y, SEAL_WORLD_SIZE, SHAPES, WEAPON_NAMES } from '../../src/
 import { decodeShape, KIND, SHAPE_COUNT, type Shape } from '../../src/qi/shapes/format';
 import { decodeSnapshot, encodeSnapshot } from '../../src/qi/shapes/weapon-snapshot';
 
+/**
+ * 讓測試能注入「清掉 .staging 失敗」（Windows 上檔案被別的程式鎖住時 rmSync 會丟 EBUSY／EPERM）。預設全部透傳。
+ */
+const inject = vi.hoisted(() => ({ stagingRmFails: false }));
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  return {
+    ...actual,
+    rmSync: (path: Parameters<typeof actual.rmSync>[0], options?: Parameters<typeof actual.rmSync>[1]) => {
+      if (inject.stagingRmFails && String(path).endsWith('.staging')) throw new Error('EBUSY: injected');
+      return actual.rmSync(path, options);
+    },
+  };
+});
+
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const BIN_BYTES = 40 + 7 * SHAPE_COUNT;
 const IDS = Object.keys(SHAPES);
@@ -153,8 +168,9 @@ describe('buildAllShapes：第一次建置', () => {
     }
   });
 
-  it('.inputs-hash 存在、是 64 位十六進位', () => {
+  it('.inputs-hash 存在、是 64 位十六進位；暫存目錄 .staging 不留殘餘', () => {
     expect(readFileSync(join(OUT, '.inputs-hash'), 'utf8').trim()).toMatch(/^[0-9a-f]{64}$/);
+    expect(existsSync(join(OUT, '.staging'))).toBe(false);
   });
 
   it('全部 .bin 合計 ≤ 1.9 MB', () => {
@@ -436,6 +452,7 @@ describe('buildAllShapes：輸入雜湊與跳過', () => {
     expect((error as Error).message).toContain('形體 kao');
     expect((error as Error).cause).toBeDefined();
     expect(existsSync(join(outDir, '.inputs-hash'))).toBe(false);
+    expect(existsSync(join(outDir, '.staging'))).toBe(false);
     expect(readdirSync(outDir).sort()).toEqual(filesBefore);
     expect(snapshot(outDir)).toEqual(before);
     expect(readFileSync(join(outDir, 'shapes.json'), 'utf8')).toBe(manifestBefore);
@@ -446,11 +463,78 @@ describe('buildAllShapes：輸入雜湊與跳過', () => {
     await buildAllShapes({ root, outDir: clean });
 
     expect(fixed.skipped).toBe(false);
+    expect(existsSync(join(outDir, '.staging'))).toBe(false);
     expect(snapshot(outDir)).toEqual(snapshot(clean));
     expect(snapshot(outDir).land).not.toBe(before.land); // land 確實吃到了修改
     expect(readFileSync(join(outDir, 'shapes.json'), 'utf8')).toBe(readFileSync(join(clean, 'shapes.json'), 'utf8'));
     expect(readFileSync(join(outDir, '.inputs-hash'), 'utf8')).toBe(readFileSync(join(clean, '.inputs-hash'), 'utf8'));
     expect(readdirSync(outDir).sort()).toEqual(readdirSync(clean).sort());
+  }, 180_000);
+
+  it('換入途中失敗（kao.bin 的位置被資料夾佔住，rename 在任何平台都會失敗）：丟錯，shapes.json 與 .inputs-hash 都不在，不可能被誤當完整產物；移走障礙後重建，結果與乾淨建置一致', async () => {
+    const root = copyRoot();
+    const outDir = join(tmp(), 'shapes');
+    await buildAllShapes({ root, outDir });
+    const before = snapshot(outDir);
+
+    // land 的輸入改了：換入順序在 kao 之前，land.bin 會先換成新的，接著 kao.bin 換入失敗——這就是新舊混雜的狀態
+    await paintCorner(join(root, 'src/assets/silhouettes', `${FIGURES.land!.src}.png`));
+    rmSync(join(outDir, 'kao.bin'));
+    mkdirSync(join(outDir, 'kao.bin'));
+
+    await expect(buildAllShapes({ root, outDir })).rejects.toThrow(/kao\.bin/);
+
+    expect(sha(binOf(outDir, 'land'))).not.toBe(before.land); // 確實是新舊混雜的狀態
+    expect(existsSync(join(outDir, 'shapes.json'))).toBe(false);
+    expect(existsSync(join(outDir, '.inputs-hash'))).toBe(false);
+    expect(existsSync(join(outDir, '.staging'))).toBe(false);
+    // 障礙還在時再叫一次：還是不會把半套當完整（重建、再失敗）
+    await expect(buildAllShapes({ root, outDir })).rejects.toThrow(/kao\.bin/);
+    expect(existsSync(join(outDir, 'shapes.json'))).toBe(false);
+
+    rmSync(join(outDir, 'kao.bin'), { recursive: true });
+    const fixed = await buildAllShapes({ root, outDir });
+    const clean = join(tmp(), 'shapes');
+    await buildAllShapes({ root, outDir: clean });
+
+    expect(fixed.skipped).toBe(false);
+    expect(existsSync(join(outDir, '.staging'))).toBe(false);
+    expect(snapshot(outDir)).toEqual(snapshot(clean));
+    expect(readFileSync(join(outDir, 'shapes.json'), 'utf8')).toBe(readFileSync(join(clean, 'shapes.json'), 'utf8'));
+    expect(readFileSync(join(outDir, '.inputs-hash'), 'utf8')).toBe(readFileSync(join(clean, '.inputs-hash'), 'utf8'));
+  }, 180_000);
+
+  it('清掉 .staging 失敗（被鎖住）：成功的建置照樣成功、失敗的建置丟出原本的錯誤（不被清理的錯誤蓋掉），兩者都只發警告', async () => {
+    const root = copyRoot();
+    const outDir = join(tmp(), 'shapes');
+    const warn = vi.fn();
+    const kaoFile = join(root, 'src/assets/silhouettes', `${FIGURES.kao!.src}.png`);
+    const kaoGood = readFileSync(kaoFile);
+
+    inject.stagingRmFails = true;
+    try {
+      const ok = await buildAllShapes({ root, outDir, warn });
+      expect(ok.skipped).toBe(false);
+      expect(Object.keys(snapshot(outDir)).sort()).toEqual([...IDS].sort());
+      expect(warn).toHaveBeenCalled();
+      expect(String(warn.mock.calls[0]![0])).toContain('.staging');
+
+      warn.mockClear();
+      writeFileSync(kaoFile, kaoGood.subarray(0, 100));
+      const error = await buildAllShapes({ root, outDir, warn }).then(
+        () => undefined,
+        (caught: unknown) => caught,
+      );
+      expect((error as Error).message).toContain('形體 kao'); // 不是 EBUSY
+      expect(warn).toHaveBeenCalled();
+    } finally {
+      inject.stagingRmFails = false;
+    }
+
+    // 鎖放開之後，下一次建置會把殘留的 .staging 清掉
+    writeFileSync(kaoFile, kaoGood);
+    await buildAllShapes({ root, outDir });
+    expect(existsSync(join(outDir, '.staging'))).toBe(false);
   }, 180_000);
 
   it('重建時清掉 outDir 裡已不在 SHAPES 的 .bin（改名的形體不留殘檔）', async () => {

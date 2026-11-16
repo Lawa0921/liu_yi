@@ -14,7 +14,11 @@ export function qiAssets(): AstroIntegration {
     hooks: {
       'astro:config:setup': async ({ config, logger }) => {
         const root = fileURLToPath(config.root);
-        const { built, skipped } = await buildAllShapes({ root, outDir: join(root, 'src', 'assets', 'generated', 'qi', 'shapes') });
+        const { built, skipped } = await buildAllShapes({
+          root,
+          outDir: join(root, 'src', 'assets', 'generated', 'qi', 'shapes'),
+          warn: (message) => logger.warn(message),
+        });
         logger.info(skipped ? '形體檔輸入未變，沿用既有產物' : `已產生 ${built.length} 個形體檔`);
       },
     },

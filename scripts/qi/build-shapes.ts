@@ -7,8 +7,13 @@
  * 本腳本自己也進雜湊：朱印取樣、合成排列的邏輯寫在這裡，改了它產物就該重建。
  * 「檔案齊全」包含大小：每個 `.bin` 必須恰為 `shapeFileBytes(SHAPE_COUNT)`，被截斷的檔會觸發重建。
  *
- * 失敗不留半套產物：重建開始就刪 `.inputs-hash`，全部形體先建到 `outDir/.staging/`，都成功才換入正式位置；
- * 任何一個形體失敗，錯誤訊息帶形體 id（`形體 kao：…`，原始錯誤在 `cause`），正式位置維持上一次完整的產物。
+ * 失敗不留半套產物（不會有看起來完整、其實新舊混雜的輸出目錄）：
+ *   - 重建開始就刪 `.inputs-hash`；
+ *   - 全部形體先建到 `outDir/.staging/`。建置階段任何一個形體失敗，錯誤訊息帶形體 id（`形體 kao：…`，原始錯誤在 `cause`），
+ *     正式位置維持上一次完整的產物（`shapes.json` 與 `.bin` 彼此相符，只是沒有 `.inputs-hash`，下一次會重建）；
+ *   - 都成功之後才換入正式位置，換入前先刪 `shapes.json`：換入途中失敗（例如某個 `.bin` 被別的程式鎖住）時，
+ *     `.bin` 可能新舊混雜，但目錄裡既沒有 `shapes.json` 也沒有 `.inputs-hash`，一看就知道不完整，下一次整批重建；
+ *   - `.staging` 的清理是盡力而為：清不掉只發警告，不讓成功的建置變失敗，也不蓋掉建置本身的錯誤。
  *
  * 只用 Node 與入庫的檔案（CI 沒有 Python、字型原檔，也不 import `weapons.ts`：兵器取樣吃 `.geo` 快照，見 D29）。
  * 固定種子（由形體 id 雜湊而來）＋純函式取樣：同輸入逐位元相同。
@@ -197,8 +202,24 @@ function sizeOf(path: string): number | undefined {
   }
 }
 
-export async function buildAllShapes(opts: { root: string; outDir: string; force?: boolean }): Promise<{ built: string[]; skipped: boolean }> {
+/** 盡力清掉暫存目錄：失敗（Windows 上被別的程式鎖住等）只警告，下一次建置開始時會再清一次。 */
+function discardStaging(staging: string, warn: (message: string) => void): void {
+  try {
+    rmSync(staging, { recursive: true, force: true, maxRetries: 3 });
+  } catch (cause) {
+    warn(`清不掉暫存目錄 ${staging}（${cause instanceof Error ? cause.message : String(cause)}），下一次建置會再清一次`);
+  }
+}
+
+export async function buildAllShapes(opts: {
+  root: string;
+  outDir: string;
+  force?: boolean;
+  /** 清不掉暫存目錄這類「不影響結果」的問題用它回報；預設 `console.warn`。 */
+  warn?: (message: string) => void;
+}): Promise<{ built: string[]; skipped: boolean }> {
   const { root, outDir } = opts;
+  const warn = opts.warn ?? ((message: string) => console.warn(message));
   const ids = Object.keys(SHAPES);
   const inputsHash = hashInputs(root, allInputs(root), `qsh${SHAPE_FORMAT_VERSION}:${SHAPE_COUNT}`);
   const hashFile = join(outDir, HASH_FILE);
@@ -218,8 +239,8 @@ export async function buildAllShapes(opts: { root: string; outDir: string; force
   rmSync(hashFile, { force: true });
 
   const staging = join(outDir, STAGING);
-  rmSync(staging, { recursive: true, force: true });
-  mkdirSync(staging);
+  discardStaging(staging, warn);
+  mkdirSync(staging, { recursive: true });
   try {
     // 先全部建到暫存目錄：任何一個形體失敗，正式位置維持上一次完整的產物，不會新舊混雜
     const manifest: { id: string; bytes: number; sha256: string }[] = [];
@@ -233,19 +254,19 @@ export async function buildAllShapes(opts: { root: string; outDir: string; force
       writeFileSync(join(staging, `${id}.bin`), bytes);
       manifest.push({ id, bytes: bytes.byteLength, sha256: sha256(bytes) });
     }
-    writeFileSync(join(staging, MANIFEST), `${JSON.stringify(manifest, null, 2)}
-`);
+    writeFileSync(join(staging, MANIFEST), `${JSON.stringify(manifest, null, 2)}\n`);
 
-    // 全部成功才換入（同一個檔案系統內的 rename）。換入途中若失敗，雜湊已不在，下一次會整批重建。
+    // 全部成功才換入（同一個檔案系統內的 rename）。先刪 shapes.json：換入到一半失敗時 .bin 可能新舊混雜，
+    // 但目錄裡既沒有 shapes.json 也沒有 .inputs-hash，一看就是不完整，下一次整批重建。
+    rmSync(join(outDir, MANIFEST), { force: true });
     for (const id of ids) renameSync(join(staging, `${id}.bin`), join(outDir, `${id}.bin`));
     renameSync(join(staging, MANIFEST), join(outDir, MANIFEST));
     // 改名或移除的形體不留殘檔：執行時用 glob 收 `*.bin`，殘檔會被一起打進 dist
     const known = new Set(ids.map((id) => `${id}.bin`));
     for (const name of readdirSync(outDir)) if (name.endsWith('.bin') && !known.has(name)) rmSync(join(outDir, name));
-    writeFileSync(hashFile, `${inputsHash}
-`);
+    writeFileSync(hashFile, `${inputsHash}\n`);
   } finally {
-    rmSync(staging, { recursive: true, force: true });
+    discardStaging(staging, warn);
   }
   return { built: ids, skipped: false };
 }
