@@ -750,11 +750,6 @@ html[data-audience='kid'] [data-audience-option='kid'] {
     grid-column: 1;
     width: min(100%, calc(38svh * 4 / 3));
   }
-
-  .audience-switch__inner {
-    left: auto;
-    right: var(--gutter);
-  }
 }
 
 /*
@@ -805,6 +800,15 @@ html[data-audience='kid'] [data-audience-option='kid'] {
 @media (max-width: 59.999rem) {
   .opening__skip {
     bottom: 4.25rem;
+  }
+
+  /*
+   * 切換鈕靠右：窄螢幕（含橫放手機）的招式文字從左邊起，切換鈕（sticky、捲動時一直在視窗上緣）若在左邊會蓋住拳術段與兵器段的標題與朱印。
+   * 這條跟版面方向（寬高比）無關，所以放在寬度斷點，不放在直向的區塊。
+   */
+  .audience-switch__inner {
+    left: auto;
+    right: var(--gutter);
   }
 
   .audience-switch__option {

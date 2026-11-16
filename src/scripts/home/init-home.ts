@@ -155,6 +155,11 @@ export async function initHome(): Promise<void> {
       debug: params.get('qi-debug') === '1',
       // 取景的直／橫與版面（home.css 的 @media (max-aspect-ratio: 4/5)）同一條：依視窗，不是扣掉外框的畫布
       portrait: () => isPortrait(window.innerWidth, window.innerHeight),
+      // 橫向版面的文字欄右緣（從畫布左緣起算）：兵器的左端不進文字欄。目前顯示的那一組面板的 .beat__text，欄寬由 CSS 決定，各段相同。
+      textRight: () => {
+        const column = [...main.querySelectorAll<HTMLElement>('.beat__text')].find((el) => el.getClientRects().length > 0);
+        return column ? column.getBoundingClientRect().right - canvas.getBoundingClientRect().left : undefined;
+      },
       onContextLost: () => enterStatic('context-lost'), // RF5：靜態圖接手，DOM 內容不變
       onFailure: (error) => {
         // 自動降級時重建丟錯：引擎已沒有 sim 可畫，停在空白畫布比靜態圖糟；退回靜態圖（shutdown 會 dispose 引擎）

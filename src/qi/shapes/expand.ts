@@ -36,7 +36,15 @@ export interface Layout {
    * 只縮、不放大；用形體實際最右的點量（形體檔的 x 範圍約 ±0.6，比「全長 1」的假設略長），不是靠長度推算。
    */
   maxRight?: number;
+  /**
+   * 擺好之後最左邊的光點（世界 x）不得小於它（文字欄之後才是兵器的地盤）：左端超過就整把往右推（長度不變），
+   * 推到右端到 `maxRight` 還放不下，才縮到剛好塞進 `minLeft`…`maxRight` 的窗裡（縮的中心是 `offset`，之後再推）。
+   */
+  minLeft?: number;
 }
+
+/** 兵器的左右窗（`minLeft` 到 `maxRight`）至少這麼寬（世界單位，約人形半高）：再窄就不縮了，免得擺出長度接近 0 的兵器。 */
+const WEAPON_MIN_SPAN = 1;
 
 /** 環境煙占全部格子的比例（D14）。 */
 const AMBIENT_SHARE = 0.07;
@@ -109,14 +117,17 @@ export function ambientField(count: number, seed: number = AMBIENT_SEED): Ambien
 
 /**
  * 兵器的擺放（D13）：長度、傾角與中點高度依視窗寬窄（`wide`）取試作的數值。
- * `maxRight`（寬版才有意義）：最右的光點不得超過這個世界 x（見 `Layout.maxRight`）；窄版（直向）沒有右緣導覽，不套用。
+ * `maxRight`／`minLeft`（寬版才有意義）：最右、最左的光點不得超出這個世界 x 範圍（見 `Layout.maxRight`、`Layout.minLeft`）；
+ * 窄版（直向）沒有右緣導覽、文字在下方，不套用。兩個都給而窗太窄（< `WEAPON_MIN_SPAN`）時把 `minLeft` 往左放寬到剛好那麼寬。
  */
-export function weaponLayout(name: 'jian' | 'miaodao' | 'spear', wide: boolean, maxRight?: number): Layout {
+export function weaponLayout(name: 'jian' | 'miaodao' | 'spear', wide: boolean, maxRight?: number, minLeft?: number): Layout {
   if (!Object.hasOwn(WEAPON_LAYOUT, name)) throw new RangeError(`Unknown weapon: ${String(name)}`);
   if (maxRight !== undefined && !(Number.isFinite(maxRight) && maxRight > 0)) throw new RangeError(`Weapon maxRight must be a positive finite number: ${maxRight}`);
+  if (minLeft !== undefined && !Number.isFinite(minLeft)) throw new RangeError(`Weapon minLeft must be a finite number: ${minLeft}`);
   const [scale, rotZ] = WEAPON_LAYOUT[name][wide ? 'wide' : 'narrow'];
   const layout: Layout = { scale, rotZ, offset: [0, WEAPON_MID_HEIGHT, 0] };
   if (wide && maxRight !== undefined) layout.maxRight = maxRight;
+  if (wide && minLeft !== undefined) layout.minLeft = maxRight !== undefined ? Math.min(minLeft, maxRight - WEAPON_MIN_SPAN) : minLeft;
   return layout;
 }
 
@@ -135,10 +146,11 @@ function tasselPivot(shape: Shape): number | null {
   return n > 0 ? sum / n : null;
 }
 
-/** 把形體的每個取樣依 `layout`（長度以 `scale` 為準）擺到世界座標；紅纓掛著、順著重力垂下（見檔頭）。 */
-function layOut(shape: Shape, layout: Layout, scale: number): Float64Array {
+/** 把形體的每個取樣依 `layout`（長度以 `scale` 為準、整把再往右推 `dx`）擺到世界座標；紅纓掛著、順著重力垂下（見檔頭）。 */
+function layOut(shape: Shape, layout: Layout, scale: number, dx = 0): Float64Array {
   const { count } = shape;
-  const [ox, oy, oz] = layout.offset;
+  const [ox0, oy, oz] = layout.offset;
+  const ox = ox0 + dx;
   const cos = Math.cos(layout.rotZ) * scale;
   const sin = Math.sin(layout.rotZ) * scale;
   // 紅纓是掛著的，順著重力垂下：兵器傾斜時纓穗不跟著傾斜。試作把纓穗（pendulum）反向旋轉；這裡等價於
@@ -176,13 +188,37 @@ export function expandTargets(shape: Shape, size: number, ambient: AmbientField,
   // 每個取樣只算一次：套 layout（沒給就原樣）與 kind → w
   let base: ArrayLike<number> = shape.positions;
   if (layout) {
-    let laid = layOut(shape, layout, layout.scale);
+    let scale = layout.scale;
+    let laid = layOut(shape, layout, scale);
+    const extent = (points: Float64Array): { left: number; right: number } => {
+      let left = Infinity;
+      let right = -Infinity;
+      for (let k = 0; k < count; k++) {
+        left = Math.min(left, points[k * 3]!);
+        right = Math.max(right, points[k * 3]!);
+      }
+      return { left, right };
+    };
+    const ox = layout.offset[0];
     if (layout.maxRight !== undefined) {
       // 最右的光點超過上限就等比例縮小：擺放對 scale 是線性的（以 offset 為中心），第二次算就是精確值
-      const ox = layout.offset[0];
-      let right = -Infinity;
-      for (let k = 0; k < count; k++) right = Math.max(right, laid[k * 3]!);
-      if (right > layout.maxRight && right > ox) laid = layOut(shape, layout, (layout.scale * (layout.maxRight - ox)) / (right - ox));
+      const { right } = extent(laid);
+      if (right > layout.maxRight && right > ox) {
+        scale = (scale * (layout.maxRight - ox)) / (right - ox);
+        laid = layOut(shape, layout, scale);
+      }
+    }
+    if (layout.minLeft !== undefined) {
+      let { left, right } = extent(laid);
+      if (left < layout.minLeft) {
+        // 左端伸進文字欄：先試著整把往右推；右端會超過上限（窗比兵器窄）才縮到剛好塞進窗裡再推
+        const span = layout.maxRight !== undefined ? layout.maxRight - layout.minLeft : Infinity;
+        if (right - left > span && right > left) {
+          scale *= span / (right - left);
+          ({ left, right } = extent(layOut(shape, layout, scale)));
+        }
+        laid = layOut(shape, layout, scale, layout.minLeft - left);
+      }
     }
     base = laid;
   }

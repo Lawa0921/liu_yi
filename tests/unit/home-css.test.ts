@@ -97,6 +97,9 @@ describe('home.css 的退回與海報規則（Task 20）', () => {
     expect(widthBlock).not.toMatch(/--poster-/);
     expect(widthBlock).not.toMatch(/\.beat__panel\s*\{/);
     expect(widthBlock).not.toMatch(/\.beat__text\s*\{/);
+    // 切換鈕靠右是窄螢幕（含橫放手機）的事，不是直向的事：放在直向區塊裡，橫放手機（寬 < 60rem、橫向）就會被排除而蓋住文字
+    expect(widthBlock).toMatch(/\.audience-switch__inner\s*\{[^}]*left\s*:\s*auto[^}]*right\s*:\s*var\(--gutter\)/);
+    expect(stacked).not.toMatch(/\.audience-switch__inner/);
     // 海報圖的 <source media> 也是同一個條件
     const opening = readFileSync(new URL('../../src/components/home/Opening.astro', import.meta.url), 'utf8');
     expect(opening).toContain('max-aspect-ratio: ${PORTRAIT_ASPECT}');

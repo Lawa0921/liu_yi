@@ -387,6 +387,9 @@ const ALIGN_SIZES = [
   { name: '手機 360×740', viewport: { width: 360, height: 740 } },
   { name: '近方形 1000×1000', viewport: { width: 1000, height: 1000 } },
   { name: '近方形 1024×1124', viewport: { width: 1024, height: 1124 } },
+  // 常見的直式平板（iPad 9.7／10.9 吋）：寬 ≥ 60rem 的直向，站名要放在人形下方
+  { name: '直式平板 768×1024', viewport: { width: 768, height: 1024 } },
+  { name: '直式平板 820×1180', viewport: { width: 820, height: 1180 } },
 ];
 
 for (const device of ALIGN_SIZES) {
@@ -415,8 +418,9 @@ for (const device of ALIGN_SIZES) {
       expect(Math.abs(p.h - e.h) / height, `高度差（占視窗高）：${note}`).toBeLessThanOrEqual(0.05);
     });
 
-    // Task 22b：直書站名與副標不壓到人形（手機首屏、近方形、直式平板、橫放手機）。海報與引擎的外框各量一次，重疊 ≤ 4px 才算沒壓到。
-    test('站名（h1）與副標不壓到人形：海報外框與引擎外框的重疊都 ≤ 4px', async ({ page }) => {
+    // Task 22b：直書站名與副標不壓到人形（手機首屏、近方形、直式平板、橫放手機）。海報與引擎的外框各量一次，
+    // 兩個矩形不得有任何像素重疊（至少一軸上是分開的）。外框是矩形，人形是輪廓：矩形重疊比實際壓到人形更嚴，所以量到 0 就一定沒壓到。
+    test('站名（h1）與副標不壓到人形：海報外框與引擎外框都沒有像素重疊', async ({ page }) => {
       await open(page);
       await settleAnimations(page); // 進場動畫（0.9 秒、上移 1rem）跑完，量到的才是站名的定位
       const { poster, engine } = await figureBoxes(page);
@@ -430,7 +434,7 @@ for (const device of ALIGN_SIZES) {
       for (const [figure, box] of [['海報', poster], ['引擎', engine]] as const) {
         for (const [name, text] of Object.entries(texts)) {
           const { x, y } = overlap(box, text);
-          expect(Math.min(x, y), `${figure}人形外框與 ${name} 的重疊（x ${x.toFixed(1)}px、y ${y.toFixed(1)}px；兩軸都 > 4 才算壓到）：人形 ${JSON.stringify(box)} / ${name} ${JSON.stringify(text)}`).toBeLessThanOrEqual(4);
+          expect(Math.min(x, y), `${figure}人形外框與 ${name} 的重疊（x ${x.toFixed(1)}px、y ${y.toFixed(1)}px；兩軸都 > 0 才算重疊）：人形 ${JSON.stringify(box)} / ${name} ${JSON.stringify(text)}`).toBeLessThanOrEqual(0);
         }
       }
     });

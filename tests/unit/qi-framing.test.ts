@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { framingFor, weaponReachFor, WEAPON_RIGHT_RESERVE_PX } from '../../src/qi/engine/framing';
+import { framingFor, weaponLeftFor, weaponReachFor, WEAPON_LEFT_MARGIN_PX, WEAPON_RIGHT_RESERVE_PX } from '../../src/qi/engine/framing';
 
 /**
  * 取景（試作的值，原本寫在 stage.ts 的 `fit`）：橫向與直向各自決定可視高度與鏡頭位移。
@@ -63,5 +63,25 @@ describe('weaponReachFor（寬螢幕兵器右端的世界座標上限）', () =>
     }
     const { visibleH, lookX } = framingFor(1.2, false);
     expect(0.5 + (weaponReachFor(1.2, 200) - lookX) / (visibleH * 1.2)).toBeCloseTo(0.7, 10);
+  });
+});
+
+describe('weaponLeftFor（兵器左端的世界座標下限：不進入文字欄）', () => {
+  const CASES: [aspect: number, widthPx: number, textRightPx: number][] = [
+    [1.11, 972, 481], // 1000×1000：文字欄右緣（扣掉外框 inset 後）
+    [1.556, 996, 492], // 1024×768
+    [1.83, 1412, 625], // 1440×900
+    [2.62, 844, 417], // 844×390 橫放手機
+  ];
+
+  it.each(CASES)('aspect %s、畫布寬 %s px、文字欄右緣 %s px：下限投影到文字欄右緣再加 WEAPON_LEFT_MARGIN_PX', (aspect, widthPx, textRightPx) => {
+    const { visibleH, lookX } = framingFor(aspect, false);
+    const left = weaponLeftFor(aspect, widthPx, textRightPx);
+    const leftPx = (0.5 + (left - lookX) / (visibleH * aspect)) * widthPx;
+    expect(leftPx).toBeCloseTo(textRightPx + WEAPON_LEFT_MARGIN_PX, 6);
+  });
+
+  it('文字欄越寬，下限越往右', () => {
+    expect(weaponLeftFor(1.5, 1000, 600)).toBeGreaterThan(weaponLeftFor(1.5, 1000, 400));
   });
 });

@@ -48,3 +48,16 @@ export function weaponReachFor(aspect: number, widthPx: number): number {
   const fraction = Math.max(WEAPON_RIGHT_FRACTION_MIN, 1 - WEAPON_RIGHT_RESERVE_PX / widthPx);
   return lookX + (fraction - 0.5) * visibleH * aspect;
 }
+
+/** 兵器的左端離文字欄右緣至少這麼多 px（槍尾與字之間留一點空）。 */
+export const WEAPON_LEFT_MARGIN_PX = 16;
+
+/**
+ * 橫向取景下，兵器左端的世界 x 下限（`weaponLayout` 的 `minLeft`）：投影後落在文字欄右緣（`textRightPx`，從畫布左緣起算的 CSS 像素，
+ * 由頁面量 `.beat__text` 的右緣給）再加 `WEAPON_LEFT_MARGIN_PX` 處。文字欄之後才是兵器的地盤：近方形視窗（1000×1000）與窄的橫向視窗
+ * （橫放手機），兵器置中在人形的位置，左端原本會伸進文字。
+ */
+export function weaponLeftFor(aspect: number, widthPx: number, textRightPx: number): number {
+  const { visibleH, lookX } = framingFor(aspect, false);
+  return lookX + ((textRightPx + WEAPON_LEFT_MARGIN_PX) / widthPx - 0.5) * visibleH * aspect;
+}

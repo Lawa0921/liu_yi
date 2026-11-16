@@ -30,7 +30,7 @@ import type { ShapeLoader } from '../shapes/loader';
 import { floatTargets } from './caps';
 import { burstSpeed, EXHALE, inhaleDamp, inhaleStreak, SNAP_DAMP_GAIN, streakLength } from './effects';
 import { forcesFor } from './forces';
-import { weaponReachFor } from './framing';
+import { weaponLeftFor, weaponReachFor } from './framing';
 import { introState, type IntroState } from './intro';
 import { createPointer, type Pointer } from './pointer';
 import { createSim, zeroTexture, type Sim } from './sim';
@@ -69,6 +69,11 @@ export interface QiStageOptions {
    * 不給就依畫布本身的寬高比（沒有外框的 harness 頁，畫布就是視窗）。每次 `resize` 都會再問一次。
    */
   portrait?: () => boolean;
+  /**
+   * 橫向版面的文字欄右緣（從畫布左緣起算的 CSS 像素）；兵器的左端不得進入它（再加一點空隙，`framing.ts` 的 `WEAPON_LEFT_MARGIN_PX`）。
+   * 首頁傳 `.beat__text` 的右緣；沒有文字欄（harness、直向、沒有課程段）回 `undefined`＝不限制。每次 `resize` 都會再問一次。
+   */
+  textRight?: () => number | undefined;
 }
 
 export interface QiStage {
@@ -224,11 +229,16 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
   const askPortrait = (): boolean => (o.portrait ? o.portrait() : isPortrait(cssWidth, cssHeight));
   let portrait = askPortrait();
   /**
-   * 兵器擺位的條件：直向用窄版長度；橫向用寬版長度，並依畫布大小留出右緣（段落導覽與槍頭光暈）的位置，
-   * 所以橫向時畫布一變，兵器的長度也跟著變（`weaponReachFor`）。字串鍵讓 `resize` 比較「擺位有沒有變」。
+   * 兵器擺位的條件：直向用窄版長度；橫向用寬版長度，並依畫布大小留出右緣（段落導覽與槍頭光暈）的位置、
+   * 依文字欄的右緣讓出左邊（`weaponReachFor`、`weaponLeftFor`），所以橫向時畫布或文字欄一變，兵器的位置與長度也跟著變。
+   * 字串鍵讓 `resize` 比較「擺位有沒有變」。
    */
   const weaponReach = (): number | undefined => (portrait ? undefined : weaponReachFor(cssWidth / cssHeight, cssWidth));
-  const weaponKey = (): string => String(weaponReach()?.toFixed(4) ?? 'narrow');
+  const weaponReachLeft = (): number | undefined => {
+    const textRight = portrait ? undefined : o.textRight?.();
+    return textRight === undefined ? undefined : weaponLeftFor(cssWidth / cssHeight, cssWidth, textRight);
+  };
+  const weaponKey = (): string => `${weaponReach()?.toFixed(4) ?? 'narrow'}|${weaponReachLeft()?.toFixed(4) ?? '-'}`;
   let weaponFit = weaponKey();
 
   // ── 一個 tier 的資源（setTier 時整組換掉）──────────────────────────
@@ -311,7 +321,7 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
       const shape = shapes.get(id);
       if (!shape) throw new Error(`Shape ${id} is not loaded`);
       const recipe = SHAPES[id];
-      data = expandTargets(shape, side, ambient, recipe?.kind === 'weapon' ? weaponLayout(recipe.name, !portrait, weaponReach()) : undefined);
+      data = expandTargets(shape, side, ambient, recipe?.kind === 'weapon' ? weaponLayout(recipe.name, !portrait, weaponReach(), weaponReachLeft()) : undefined);
     }
     const texture = new DataTexture(data, side, side, RGBAFormat, FloatType);
     texture.needsUpdate = true;

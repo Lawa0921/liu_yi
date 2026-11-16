@@ -387,6 +387,81 @@ describe('weaponLayout 的右端上限 maxRight（Task 22b：大槍不壓到右�
   it('窄（直向）版面沒有段落導覽，不套上限：維持試作的窄版長度', () => {
     expect(weaponLayout('spear', false, 0.5)).toEqual({ scale: 2.3, rotZ: 0.45, offset: [0, 1.05, 0] });
   });
+
+  // ── 左端：不得進入文字欄（Task 22b 修正輪）────────────────────────────
+  // 橫向版面文字欄在左、兵器置中在人形的位置；近方形視窗（1000×1000）與窄的橫向視窗，文字欄之後只剩一小段，
+  // 兵器的左端會伸進文字。minLeft 是左端的世界 x 下限：左端超過就整把往右推（不縮），推到右端也到上限、放不下才縮到剛好塞進去。
+  const minX = (out: Float32Array, ambient: AmbientField): number => Math.min(...solidSlots(ambient).slice(0, 64).map((i) => out[i * 4]!));
+
+  it('給 minLeft 時 layout 帶著它；沒給就沒有這個欄位', () => {
+    expect(weaponLayout('spear', true, 1.5, -0.2)).toEqual({ scale: 3.8, rotZ: 0.05, offset: [0, 1.05, 0], maxRight: 1.5, minLeft: -0.2 });
+    expect('minLeft' in weaponLayout('spear', true, 1.5)).toBe(false);
+  });
+
+  it('左端沒超過 minLeft：不動（對照組）', () => {
+    const ambient = ambientField(112 * 112);
+    const free = expandTargets(axisWeapon(), 112, ambient, weaponLayout('jian', true));
+    const out = expandTargets(axisWeapon(), 112, ambient, weaponLayout('jian', true, undefined, -5));
+    expect(Buffer.from(out.buffer).equals(Buffer.from(free.buffer))).toBe(true);
+  });
+
+  it('左端超過 minLeft、右邊放得下：整把往右推到左端剛好在 minLeft，長度不變', () => {
+    const ambient = ambientField(112 * 112);
+    const layout = weaponLayout('jian', true, 3, -0.5); // 試作長 2.9：左端 −0.6 × 2.9 × cos ≈ −1.72，要推到 −0.5
+    const out = expandTargets(axisWeapon(), 112, ambient, layout);
+    expect(minX(out, ambient)).toBeCloseTo(-0.5, 4);
+    const width = maxX(out, ambient) - minX(out, ambient);
+    expect(width).toBeCloseTo(1.2 * 2.9 * Math.cos(0.16), 4); // 長度沒變
+    expect(maxX(out, ambient)).toBeLessThanOrEqual(3);
+  });
+
+  it('窗（minLeft 到 maxRight）比兵器窄：縮到剛好塞進窗裡（左端在 minLeft、右端在 maxRight）', () => {
+    const ambient = ambientField(112 * 112);
+    const out = expandTargets(axisWeapon(), 112, ambient, weaponLayout('spear', true, 1.0, -0.4));
+    expect(minX(out, ambient)).toBeCloseTo(-0.4, 4);
+    expect(maxX(out, ambient)).toBeCloseTo(1.0, 4);
+  });
+
+  it('右端先超過 maxRight（原本的上限）、左端又超過 minLeft：兩端都落在窗內，傾角與中點高度不變', () => {
+    const ambient = ambientField(112 * 112);
+    const out = expandTargets(axisWeapon(), 112, ambient, weaponLayout('spear', true, 1.5, -0.1));
+    expect(minX(out, ambient)).toBeGreaterThanOrEqual(-0.1 - 1e-4);
+    expect(maxX(out, ambient)).toBeLessThanOrEqual(1.5 + 1e-4);
+    const slots = solidSlots(ambient);
+    const dy = out[slots[63]! * 4 + 1]! - out[slots[0]! * 4 + 1]!;
+    const dx = out[slots[63]! * 4]! - out[slots[0]! * 4]!;
+    expect(Math.atan2(dy, dx)).toBeCloseTo(0.05, 4); // 傾角
+    expect((out[slots[0]! * 4 + 1]! + out[slots[63]! * 4 + 1]!) / 2).toBeCloseTo(1.05, 4); // 中點高度（只推 x，不動 y）
+  });
+
+  it('紅纓跟著整把兵器一起被推：紮點右移同樣的量，纓穗仍從紮點往下垂', () => {
+    const count = 64;
+    const positions = new Float32Array(count * 3);
+    const kinds = new Uint8Array(count).fill(KIND.STEEL);
+    for (let k = 0; k < count; k++) positions[k * 3] = -0.6 + (1.2 * k) / (count - 1);
+    positions[0] = 0.3;
+    positions[1] = -0.1;
+    kinds[0] = KIND.RED;
+    const shape: Shape = { count, positions, kinds, min: [-0.6, -0.1, 0], max: [0.6, 0, 0] };
+    const ambient = ambientField(112 * 112);
+    const free = expandTargets(shape, 112, ambient, weaponLayout('jian', true));
+    const pushed = expandTargets(shape, 112, ambient, weaponLayout('jian', true, 3, -0.5));
+    const slot = solidSlots(ambient)[0]!;
+    const shift = pushed[solidSlots(ambient)[1]! * 4]! - free[solidSlots(ambient)[1]! * 4]!; // 鋼點被推了多少
+    expect(shift).toBeGreaterThan(0.5);
+    expect(pushed[slot * 4]! - free[slot * 4]!).toBeCloseTo(shift, 4);
+    expect(pushed[slot * 4 + 1]).toBeCloseTo(free[slot * 4 + 1]!, 5); // 高度不變
+  });
+
+  it('窄（直向）版面不套左端限制', () => {
+    expect(weaponLayout('spear', false, undefined, 0.5)).toEqual({ scale: 2.3, rotZ: 0.45, offset: [0, 1.05, 0] });
+  });
+
+  it('minLeft 不是有限值：RangeError；窗太窄（< 1 個世界單位）時把 minLeft 往左放寬到剛好 1，不擺出長度接近 0 的兵器', () => {
+    expect(() => weaponLayout('spear', true, 1.5, Number.NaN)).toThrow(RangeError);
+    expect(() => weaponLayout('spear', true, 1.5, Number.POSITIVE_INFINITY)).toThrow(RangeError);
+    expect(weaponLayout('spear', true, 1.5, 1.4).minLeft).toBeCloseTo(0.5, 10);
+  });
 });
 
 describe('纓穗（RED）：套 layout 後仍朝下垂（試作：pendulum 反向旋轉，Task 16）', () => {

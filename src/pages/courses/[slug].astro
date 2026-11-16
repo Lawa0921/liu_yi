@@ -403,10 +403,8 @@ const WEAPON_KIND: Record<string, 'jian' | 'miaodao' | 'spear'> = { 中國劍: '
     font-size: clamp(9rem, 24vw, 17rem);
     font-weight: 400;
     line-height: 1;
-    background: linear-gradient(170deg, var(--color-text) 10%, var(--color-accent-strong) 48%, var(--color-accent) 85%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+    /* 平面古金（設計 §4 反目標：不做金色漸層立體字）。 */
+    color: var(--color-accent);
     filter: drop-shadow(0 0 18px var(--color-bg)) drop-shadow(0 0 8px var(--color-bg));
   }
 

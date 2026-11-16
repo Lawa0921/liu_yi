@@ -91,3 +91,15 @@ describe('style guard：課程卡大字是平面古金（Task 22b）', () => {
     expect(rule).not.toMatch(/gradient/);
   });
 });
+
+describe('style guard：全站不做漸層字（設計 §4 反目標：金色漸層立體字）', () => {
+  /** 去掉 CSS／JS 註解後的宣告：說明文字裡提到 background-clip 不算。 */
+  const stripComments = (text: string) => text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/<!--[\s\S]*?-->/g, '');
+
+  it('src/**/*.{css,astro} 沒有任何 background-clip 宣告（含 -webkit- 前綴）：靜止時不會有 background-clip:text', () => {
+    const offenders = styleFiles
+      .filter((file) => /background-clip\s*:/.test(stripComments(read(file))))
+      .map((file) => rel(file));
+    expect(offenders).toEqual([]);
+  });
+});
