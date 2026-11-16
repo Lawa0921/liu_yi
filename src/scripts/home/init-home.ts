@@ -3,6 +3,8 @@
 //   - 每個 rAF 讀 `scrollY`（另有 passive scroll 監聽喚醒）→ `scrollState` → 姿勢（`poseFor(beat, audience)`）與散開量
 //     `max(捲動 scatter, 切換 scatter)`；捲動速度（視窗高／秒）平滑後餵引擎。
 //   - 引擎對外的狀態以 `html[data-qi-*]` 與 `window.__qi`（只有 ready／frames／tier／mode；`?qi-debug=1` 才多一個 debug）暴露。
+//   - 依 fps 自動降級（Task 17）由引擎自己做（調速器接在 qi-stage 的 rAF 裡），降級時在 window 發 `qi:tier`；這裡聽它，
+//     把 `html[data-qi-tier]` 與 `window.__qi.tier` 跟著改。降級不碰姿勢：引擎保留目前姿勢，`data-qi-pose` 也不動。
 //   - 退回靜態圖（Task 20，`fallback.ts`）：減少動態、沒有 WebGL2（`<head>` 的探測已加 `html.qi-static`）時根本不載入引擎；
 //     引擎掛不上、第一個姿勢載不到、WebGL context 中途遺失時，停掉迴圈、釋放舞台再退回。退回後這個檔案的處理器一律不再動作。
 //   - 離開頁面（`pagehide`、非 bfcache）釋放引擎與 GL context；bfcache 返回（`pageshow` persisted）重設時間戳後繼續。
@@ -13,7 +15,7 @@ import { BEATS, poseFor, type BeatId, type PoseId } from '../../qi/config/poses'
 import { switchScatter } from '../../qi/engine/forces';
 import { INTRO_MAX_SCROLL, shouldPlayIntro } from '../../qi/engine/intro';
 import { scrollState, type BeatRect } from '../../qi/engine/scroll-model';
-import { initialTier, type TierId } from '../../qi/engine/tiers';
+import { initialTier, TIER_ORDER, type TierId } from '../../qi/engine/tiers';
 import { viewportChanged } from '../../qi/engine/viewport';
 import { fetchBytes } from '../../qi/shapes/fetch';
 import { createShapeLoader, prefetchPlan } from '../../qi/shapes/loader';
@@ -109,6 +111,15 @@ export async function initHome(): Promise<void> {
     root.dataset[name] = value;
   };
   setAttr('qiTier', tier);
+  // 引擎降級（依實測 fps，或呼叫端 setTier）時發 qi:tier：屬性與 window.__qi.tier 一起更新（Task 17）
+  const onTier = (event: Event): void => {
+    const next: unknown = (event as CustomEvent<unknown>).detail;
+    if (!alive || typeof next !== 'string' || !TIER_ORDER.includes(next as TierId)) return;
+    qi.tier = next as TierId;
+    setAttr('qiTier', next);
+  };
+  window.addEventListener('qi:tier', onTier);
+  teardowns.push(() => window.removeEventListener('qi:tier', onTier));
   setAttr('qiScatter', '0.00');
   if (!willPlayIntro) setAttr('qiIntro', 'skipped');
 

@@ -788,3 +788,101 @@ test.describe('頁尾：LINE 區塊不變，加崇羲篆體的姓名標示（CC 
     expect(await credit.evaluate((el) => getComputedStyle(el).fontFamily), '字型與版權行一致（站上的 TW-Kai）').toBe(await family('footer .site-footer__copyright'));
   });
 });
+
+// ── 依 fps 自動降級（Task 17，正式首頁）──────────────────────────────────
+// 引擎降級時發 `qi:tier`，首頁腳本把 `html[data-qi-tier]` 與 `window.__qi.tier` 跟著改；姿勢（`data-qi-pose`）不變。
+// 用 `debug.feedFrameTime` 以虛擬時間餵慢幀（不依賴 rAF，軟體 GL 不必真的跑 65 536 點的幀）。
+test.describe('依 fps 自動降級（桌機 960×600，起於 high）', () => {
+  test.use({ viewport: { width: 960, height: 600 } });
+  const HIGH_HOME = './?qi-tier=high&qi-debug=1';
+
+  interface Step {
+    attr: string | undefined;
+    global: string;
+    pose: string | undefined;
+    enginePose: string | null;
+    textures: number;
+    geometries: number;
+    programs: number;
+  }
+
+  /** 以固定幀時間餵到累計 `totalMs`；每當 `html[data-qi-tier]` 或 `window.__qi.tier` 變了就記一筆（兩者要一起變，否則會多出不成對的一筆）。 */
+  const feedSlow = (page: Page, frameMs: number, totalMs: number): Promise<Step[]> =>
+    page.evaluate(
+      ([ms, total]) => {
+        const qi = (window as unknown as W).__qi;
+        const root = document.documentElement;
+        const snap = (): Step => ({
+          attr: root.dataset.qiTier,
+          global: qi.tier,
+          pose: root.dataset.qiPose,
+          enginePose: qi.debug.pose(),
+          ...qi.debug.resources(),
+        });
+        const steps: Step[] = [snap()];
+        let at = 0;
+        while (at < total) {
+          at += ms;
+          qi.debug.feedFrameTime(ms);
+          const last = steps[steps.length - 1]!;
+          if (root.dataset.qiTier !== last.attr || qi.tier !== last.global) steps.push(snap());
+        }
+        return steps;
+      },
+      [frameMs, totalMs] as const,
+    );
+
+  test('慢幀餵進去：data-qi-tier 與 window.__qi.tier 一起依序 high → mid → low → min；data-qi-pose 與引擎的姿勢不變', async ({ page }) => {
+    await open(page, { url: HIGH_HOME });
+    await expect(html(page)).toHaveAttribute('data-qi-tier', 'high');
+    expect(await page.evaluate(() => (window as unknown as W).__qi.tier)).toBe('high');
+    await scrollToBeat(page, 'fist');
+    await run(page, 300);
+    await expect(html(page)).toHaveAttribute('data-qi-pose', 'dingzhou');
+    await run(page, 1500);
+    const before = await generation(page);
+
+    const steps = await feedSlow(page, 40, 20_000);
+    expect(steps.map((s) => [s.attr, s.global])).toEqual([
+      ['high', 'high'],
+      ['mid', 'mid'],
+      ['low', 'low'],
+      ['min', 'min'],
+    ]);
+    for (const step of steps) {
+      expect(step.pose, `${step.attr}：data-qi-pose`).toBe('dingzhou');
+      expect(step.enginePose, `${step.attr}：引擎的姿勢`).toBe('dingzhou');
+    }
+    expect(await generation(page)).toBe(before + 3);
+
+    // 資源不洩漏（基線＝第一次降級後，同 qi-engine.spec 的「依 fps 自動降級」）：降到 min 之後貼圖與幾何不增加，程式至多多 4 個
+    const mid = steps[1]!;
+    expect(steps[3]!.textures).toBeLessThanOrEqual(mid.textures + 2);
+    expect(steps[3]!.geometries).toBeLessThanOrEqual(mid.geometries);
+    expect(steps[3]!.programs).toBeLessThanOrEqual(mid.programs + 4);
+
+    // 降完之後頁面照常運作：姿勢屬性沒被動過、光點仍聚在目標上、捲動與換姿勢照常
+    await expect(html(page)).toHaveAttribute('data-qi-tier', 'min');
+    await expect(html(page)).toHaveAttribute('data-qi-pose', 'dingzhou');
+    await run(page, 2500);
+    expect(await page.evaluate(() => (window as unknown as W).__qi.debug.meanError())).toBeLessThan(0.05);
+    const settled = await page.evaluate(() => (window as unknown as W).__qi.debug.resources());
+    expect(settled.textures).toBeLessThanOrEqual(mid.textures + 2);
+    expect(settled.geometries).toBeLessThanOrEqual(mid.geometries);
+    expect(settled.programs).toBeLessThanOrEqual(mid.programs + 4);
+    await scrollToBeat(page, 'weapon-a');
+    await run(page, 300);
+    await expect(html(page)).toHaveAttribute('data-qi-pose', 'jian');
+    await expect(html(page)).toHaveAttribute('data-qi-tier', 'min');
+  });
+
+  test('16 ms 的幀 20 秒：不降級，屬性與 window.__qi.tier 都不變', async ({ page }) => {
+    await open(page, { url: HIGH_HOME });
+    const before = await generation(page);
+    const steps = await feedSlow(page, 16, 20_000);
+    expect(steps).toHaveLength(1);
+    expect(steps[0]!.attr).toBe('high');
+    expect(steps[0]!.global).toBe('high');
+    expect(await generation(page)).toBe(before);
+  });
+});

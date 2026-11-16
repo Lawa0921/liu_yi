@@ -3,6 +3,7 @@
 // 給引擎 e2e 與截圖用。不進 sitemap、不給搜尋引擎收錄。
 //   ?qi-tier=high|mid|low|min  覆寫光點數分級（沒給或不認得就依視窗判斷）
 //   ?qi-debug=1                暴露 stage.debug（讀回、虛擬時間餵調速器）
+// 引擎依實測 fps 自動降級時發 window 的 `qi:tier`；這裡把它鏡射到 html[data-qi-tier]（和正式首頁一樣的屬性）。
 import { SITE } from '../../lib/site';
 ---
 
@@ -35,6 +36,10 @@ import { SITE } from '../../lib/site';
         override: params.get('qi-tier'),
       });
       const loader = createShapeLoader({ fetch: fetchBytes, resolveUrl: resolveShapeUrl });
+      root.dataset.qiTier = tier;
+      addEventListener('qi:tier', (event) => {
+        root.dataset.qiTier = (event as CustomEvent<string>).detail;
+      });
 
       async function start(): Promise<void> {
         const { mountQiStage } = await import('../../qi/engine/qi-stage');

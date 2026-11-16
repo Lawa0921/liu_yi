@@ -6,6 +6,9 @@
  *     （`BURSTS`）。第一次擺姿勢（以及換 tier 重建後）光點直接落在目標上，沒有飛行過程：首頁要接續靜態圖的聚合態，不能先從遠處飛來。
  *   - 力場：每一格由 `forcesFor` 依散開量、捲動速度、距上次衝量的時間算出彈簧／旋渦／阻尼（散開量與捲動速度由呼叫端餵）。
  *   - `resize` 只動相機與 render target；`setTier` 才重建 GPGPU（`simGeneration` 遞增）。
+ *   - 自動降級（Task 17）：每個 rAF 以 `performance.now()` 餵 `createGovernor`（D16）；它說該降級了就 `setTier` 到下一級（保留目前姿勢、
+ *     光點直接落在目標上），給一次輕衝量遮住重建的跳動，並在 `window` 上發 `qi:tier`（`detail` 是新的 tier；手動 `setTier` 換了級也發）。
+ *     首頁腳本聽這個事件更新 `html[data-qi-tier]` 與 `window.__qi.tier`；引擎本身不碰 DOM 屬性。減少動態沒有 rAF，也就沒有降級。
  *   - 減少動態（`reducedMotion`）：不跑模擬、不收指標、不排 rAF；光點直接畫在目標上，狀態改變時畫一格。
  *   - 武器的擺放依視窗寬窄（D13）：寬窄翻轉時重展開武器的目標，姿勢不變。
  *   - 補強（Task 16）：換招拖尾（`uStreak`，由衝量的包絡決定）、落地演出（`playLanding`：雙圈衝擊波、白閃、鏡頭震）、
@@ -27,7 +30,7 @@ import { introState, type IntroState } from './intro';
 import { createPointer, type Pointer } from './pointer';
 import { createSim, zeroTexture, type Sim } from './sim';
 import { createStage, type Stage } from './stage';
-import { TIERS, type TierId } from './tiers';
+import { createGovernor, TIERS, type Governor, type TierId } from './tiers';
 
 export interface Box {
   x: number;
@@ -83,7 +86,10 @@ export interface QiStage {
   getSealRect(): Box | null;
   /** 只動相機與 render target，不重建模擬、不動姿勢。 */
   resize(w: number, h: number): void;
-  /** 重建 GPGPU（同一個 tier 也會重建）；保留目前姿勢。 */
+  /**
+   * 重建 GPGPU（同一個 tier 也會重建）；保留目前姿勢。換了級就在 `window` 發 `qi:tier`（`CustomEvent`，`detail` 是新的 tier；同一級不發），
+   * 並讓調速器從新的級重新暖機（所以手動換級後不會又被「降」回舊的階梯）。依 fps 自動降級也走這條路，另外給一次輕衝量。
+   */
   setTier(t: TierId): Promise<void>;
   /** 釋放資源並把 GL context 還給瀏覽器（這個 canvas 之後不能再掛引擎）；重複呼叫無妨。 */
   dispose(): void;
@@ -110,7 +116,11 @@ export interface QiDebug {
   draws(): number;
   /** three 的資源計數（`renderer.info`）：貼圖、幾何、著色器程式。重建 tier 後要回到基線，不能洩漏。 */
   resources(): { textures: number; geometries: number; programs: number };
-  /** 以內部虛擬時間餵調速器（不依賴 rAF）。Task 17 在這裡接上 `createGovernor`；目前只累計虛擬時間（`uniforms().virtualTimeMs`）。 */
+  /**
+   * 以內部虛擬時間餵調速器（不依賴 rAF，測試在單一 evaluate 迴圈裡餵幀即可）：累計虛擬時間（`uniforms().virtualTimeMs`），
+   * 調速器說該降級就降級（同 rAF 路徑）。第一次呼叫起，調速器改由虛擬時間獨佔（從目前的 tier 重新暖機），真的 rAF 不再餵，
+   * 兩種時間軸不會混在一起。減少動態沒有模擬、沒有幀成本，只累計時間、不降級。
+   */
   feedFrameTime(ms: number): void;
   /** 人物本地座標的一點在螢幕上的位置（CSS 像素，與滑鼠座標同一個空間）；測試用來知道人形在哪裡。 */
   project(x: number, y: number, z: number): { x: number; y: number };
@@ -245,6 +255,8 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
   const impulse = { dir: new Vector3(), power: 0, mode: 0 };
   let pulses = 0;
   let virtualMs = 0;
+  let governor: Governor = createGovernor({ start: tier });
+  let virtualClock = false; // `feedFrameTime` 用過：調速器只吃虛擬時間
   let disposed = false;
 
   const fire = (burst: Burst): void => {
@@ -366,6 +378,31 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
     return state;
   };
 
+  // ── 換級與自動降級（Task 17）───────────────────────────────────────
+  /**
+   * 換成 `next`：重建 GPGPU、保留姿勢（光點直接落在目標上）、補畫一格，換了級才發 `qi:tier`。
+   * `auto`（調速器要求的降級）另給一次輕衝量，遮住光點數突然變少的那一下；調速器自己已往下走了一級（含冷卻），所以不動它。
+   * 手動換級則讓調速器從新的級重新暖機。
+   */
+  const changeTier = (next: TierId, auto: boolean): void => {
+    const changed = next !== tier;
+    tier = next;
+    rebuild();
+    if (pose) {
+      apply(pose, makeTarget(pose), false);
+      if (auto) fire(PULSE); // 不增加 pulseCount：那是「呼叫端要求的氣息」
+    }
+    if (!auto) governor = createGovernor({ start: next });
+    redraw(); // 重建清掉了緩衝
+    if (changed) window.dispatchEvent(new CustomEvent('qi:tier', { detail: next }));
+  };
+
+  /** 調速器吃一格（`nowMs` 與它之前收到的同一條時間軸）；它說該降級就降。 */
+  const governFrame = (nowMs: number): void => {
+    const lower = governor.frame(nowMs);
+    if (lower) changeTier(lower, true);
+  };
+
   stage.setSize(cssWidth, cssHeight);
   rebuild();
 
@@ -417,6 +454,7 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
     const now = performance.now();
     const dt = Math.min(Math.max((now - last) / 1000, 0), MAX_DT);
     last = now;
+    if (!virtualClock) governFrame(now); // 降級（重建）在這一格的模擬之前：新的 sim 馬上接手
     advance(dt, now);
   };
   if (!reducedMotion) rafId = requestAnimationFrame(frame);
@@ -529,6 +567,12 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
     }),
     feedFrameTime(ms) {
       virtualMs += ms;
+      if (reducedMotion || disposed) return;
+      if (!virtualClock) {
+        virtualClock = true;
+        governor = createGovernor({ start: tier }); // 重新暖機：之前（真的 rAF）收過的時間不能和虛擬時間混在一起
+      }
+      governFrame(virtualMs);
     },
     project: (x, y, z) => stage.project(x, y, z),
     sealRect: getSealRect,
@@ -631,10 +675,7 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
     async setTier(next) {
       if (!Object.hasOwn(TIERS, next)) throw new RangeError(`Unknown tier: ${String(next)}`);
       if (disposed) return;
-      tier = next;
-      rebuild();
-      if (pose) apply(pose, makeTarget(pose), false); // 形體已載入過；光點直接落在目標上
-      redraw(); // 重建清掉了緩衝
+      changeTier(next, false); // 形體已載入過；光點直接落在目標上
     },
     dispose() {
       if (disposed) return;

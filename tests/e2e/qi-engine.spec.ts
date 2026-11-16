@@ -546,3 +546,192 @@ test.describe('資源不洩漏', () => {
     expect(await resources(page)).toEqual(base);
   });
 });
+
+// ── 依 fps 自動降級（Task 17）──────────────────────────────────────────
+// 調速器（`createGovernor`）接在引擎裡：每個 rAF 以 performance.now() 餵入；`debug.feedFrameTime(ms)` 則以內部的虛擬時間餵，
+// 所以測試可以在單一 page.evaluate 迴圈裡餵幀，不必讓軟體 GL 真的跑 65 536 點的幀。降級＝`setTier` 到下一級（重建 GPGPU、保留姿勢），
+// 並發出 `window` 的 `qi:tier` 事件（detail 是新的 tier）。harness 把它鏡射到 `html[data-qi-tier]`（正式首頁的接線見 home-engine.spec）。
+test.describe('依 fps 自動降級', () => {
+  test.use({ viewport: { width: 640, height: 400 } });
+  const HIGH = './lab/qi-harness/?qi-tier=high&qi-debug=1';
+  const LOW = './lab/qi-harness/?qi-tier=low&qi-debug=1';
+
+  interface TierEvent {
+    tier: string;
+    /** 這個事件發生時，餵進去的虛擬時間累計（ms）。 */
+    at: number;
+    generation: number;
+    textures: number;
+    geometries: number;
+    programs: number;
+  }
+  interface Fed {
+    events: TierEvent[];
+    /** `html[data-qi-tier]` 的值，依序（只記變化）。 */
+    attrs: (string | undefined)[];
+    tier: string;
+    virtualMs: number;
+    generation: number;
+  }
+
+  /** 在頁面裡以固定的幀時間餵調速器，直到累計虛擬時間 ≥ `totalMs`；記下每個 `qi:tier` 事件與 `html[data-qi-tier]` 的變化。 */
+  const feed = (page: Page, frameMs: number, totalMs: number): Promise<Fed> =>
+    page.evaluate(
+      ([ms, total]) => {
+        const stage = stageOf();
+        const root = document.documentElement;
+        const events: TierEvent[] = [];
+        const attrs: (string | undefined)[] = [root.dataset.qiTier];
+        let at = 0;
+        const onTier = (event: Event): void => {
+          events.push({
+            tier: (event as CustomEvent<string>).detail,
+            at,
+            generation: stage.debug.simGeneration(),
+            ...stage.debug.resources(),
+          });
+        };
+        window.addEventListener('qi:tier', onTier);
+        while (at < total) {
+          at += ms;
+          stage.debug.feedFrameTime(ms);
+          if (root.dataset.qiTier !== attrs[attrs.length - 1]) attrs.push(root.dataset.qiTier);
+        }
+        window.removeEventListener('qi:tier', onTier);
+        return {
+          events,
+          attrs,
+          tier: stage.debug.tier(),
+          virtualMs: stage.debug.uniforms().virtualTimeMs!,
+          generation: stage.debug.simGeneration(),
+        };
+      },
+      [frameMs, totalMs] as const,
+    );
+
+  test('連續 40 ms 的幀：依序 high → mid → low → min，相鄰降級 ≥ 3 s，到 min 後不再變；每次重建一次、姿勢保留、舊資源釋放', async ({ page }) => {
+    await open(page, HIGH);
+    await setPose(page, 'land');
+    const before = await generation(page);
+    expect(await page.evaluate(() => document.documentElement.dataset.qiTier)).toBe('high');
+
+    const fed = await feed(page, 40, 20_000);
+    expect(fed.virtualMs).toBe(20_000);
+    expect(fed.events.map((e) => e.tier)).toEqual(['mid', 'low', 'min']);
+    expect(fed.attrs).toEqual(['high', 'mid', 'low', 'min']);
+    expect(fed.tier).toBe('min');
+    const gaps = fed.events.slice(1).map((e, i) => e.at - fed.events[i]!.at);
+    for (const gap of gaps) expect(gap, '相鄰兩次降級的虛擬時間差').toBeGreaterThanOrEqual(3000);
+    expect(fed.events.map((e) => e.generation), '每次降級重建一次').toEqual([before + 1, before + 2, before + 3]);
+    expect(fed.generation, '到 min 後不再重建').toBe(before + 3);
+    // 資源不洩漏：以第一次降級後（mid）為基線。降到 min 少了光暈的 RT，貼圖與幾何只會少、不會多（舊的 sim 與 render target 有 dispose）；
+    // 著色器程式則多一點點是正常的：three 的 GPUComputationRenderer.dispose() 不放它內部的 pass-through 程式（每種貼圖尺寸留一個：144²、112²），
+    // 加上 lite 路徑的點與地面各一個變體，上限 +4，之後不隨重建次數增長（setTier 循環的基線測試守住這一點）。
+    const [mid, , min] = fed.events;
+    expect(min!.textures, '貼圖相較第一次降級後的增量 ≤ 2').toBeLessThanOrEqual(mid!.textures + 2);
+    expect(min!.geometries).toBeLessThanOrEqual(mid!.geometries);
+    expect(min!.programs).toBeLessThanOrEqual(mid!.programs + 4);
+
+    // 姿勢保留；降級給了一次輕衝量（下一格才生效），之後光點仍聚在目標上
+    expect(await page.evaluate(() => stageOf().debug.pose())).toBe('land');
+    await run(page, 16);
+    expect((await uniforms(page)).uImpulsePower, '自動降級給一次輕衝量（PULSE 的 0.9，不是 land 換招的 2.2）').toBeCloseTo(0.9, 5);
+    await run(page, 2500);
+    expect(await meanError(page)).toBeLessThan(0.05);
+    expect((await snapshot(page)).covered).toBeGreaterThanOrEqual(0.01);
+    const settled = await resources(page); // 畫過幾格之後（lite 路徑的程式此時都編好了）還在上限內
+    expect(settled.textures).toBeLessThanOrEqual(mid!.textures + 2);
+    expect(settled.geometries).toBeLessThanOrEqual(mid!.geometries);
+    expect(settled.programs).toBeLessThanOrEqual(mid!.programs + 4);
+  });
+
+  test('連續 16 ms 的幀 20 秒（62 fps）：不降級，不重建', async ({ page }) => {
+    await open(page, HIGH);
+    await setPose(page, 'land');
+    const before = await generation(page);
+    const fed = await feed(page, 16, 20_000);
+    expect(fed.events).toEqual([]);
+    expect(fed.attrs).toEqual(['high']);
+    expect(fed.tier).toBe('high');
+    expect(fed.generation).toBe(before);
+  });
+
+  test('?qi-tier=bogus 退回 initialTier 的結果（640 寬、非觸控 → low），調速器從實際的 tier 起算（low → min）', async ({ page }) => {
+    await open(page, './lab/qi-harness/?qi-tier=bogus&qi-debug=1');
+    expect(await page.evaluate(() => stageOf().debug.tier())).toBe('low');
+    const fed = await feed(page, 40, 20_000);
+    expect(fed.events.map((e) => e.tier)).toEqual(['min']);
+    expect(fed.attrs).toEqual(['low', 'min']);
+  });
+
+  test('手動 setTier 與調速器同步：換了級就發 qi:tier（同一級不發）；之後真的 rAF 的慢幀只會從新的級往下降，不會「升級」回 mid', async ({ page }) => {
+    await open(page, HIGH);
+    await setPose(page, 'land');
+    await run(page, 16); // 讓 setPose 的換招衝量先被這一格用掉（還沒用掉的衝量會跟著進重建後的 sim，與換級無關）
+    await page.evaluate(() => {
+      const tiers: string[] = [];
+      (window as unknown as { __tiers: string[] }).__tiers = tiers;
+      window.addEventListener('qi:tier', (event) => tiers.push((event as CustomEvent<string>).detail));
+    });
+    const seen = () => page.evaluate(() => (window as unknown as { __tiers: string[] }).__tiers);
+
+    await page.evaluate(async () => {
+      await stageOf().setTier('low');
+      await stageOf().setTier('low'); // 同一級：不發
+    });
+    expect(await seen()).toEqual(['low']);
+    expect(await page.evaluate(() => document.documentElement.dataset.qiTier)).toBe('low');
+    await run(page, 16);
+    expect((await uniforms(page)).uImpulsePower, '手動 setTier 不給衝量').toBe(0);
+
+    // 調速器已從 low 重新起算：25 fps 的真 rAF 只剩 min 一級可降（沒同步的話會從 high 的階梯吐出 mid）
+    for (let i = 0; i < 130; i++) await page.clock.fastForward(40);
+    expect(await seen()).toEqual(['low', 'min']);
+    expect(await page.evaluate(() => stageOf().debug.tier())).toBe('min');
+  });
+
+  test('第一次 feedFrameTime 起調速器改吃虛擬時間，從目前的 tier 重新暖機（之前真的 rAF 收過的時間不會混進來）', async ({ page }) => {
+    await open(page, HIGH);
+    await setPose(page, 'land');
+    await run(page, 200); // 真的 rAF 已經餵過調速器（時間軸是假時鐘的 performance.now，與虛擬時間無關）
+    const fed = await feed(page, 40, 20_000);
+    expect(fed.events.map((e) => e.tier)).toEqual(['mid', 'low', 'min']);
+    // 第一格在虛擬時間 40 ms：暖機到 2040、再兩個 1 秒視窗，第一次降級在 4040；若暖機還記著真的 rAF 的起點，會晚很多
+    expect(fed.events[0]!.at, '從虛擬時間 0 重新暖機').toBeGreaterThanOrEqual(4000);
+    expect(fed.events[0]!.at, '從虛擬時間 0 重新暖機').toBeLessThanOrEqual(4100);
+  });
+
+  test('已在 min：怎麼餵都不動', async ({ page }) => {
+    await open(page);
+    const before = await generation(page);
+    const fed = await feed(page, 100, 30_000);
+    expect(fed.events).toEqual([]);
+    expect(fed.tier).toBe('min');
+    expect(fed.generation).toBe(before);
+  });
+
+  test('真的 rAF 也會餵調速器：每個 rAF 相隔 40 ms（fastForward 一次只觸發一格）→ 約 4 秒後 low → min；相隔 16 ms 則不降', async ({ page }) => {
+    await open(page, LOW);
+    await setPose(page, 'land');
+    await run(page, 5000); // 62 fps：超過暖機 2 秒＋兩個 1 秒視窗，還是沒降
+    expect(await page.evaluate(() => stageOf().debug.tier())).toBe('low');
+
+    for (let i = 0; i < 130; i++) await page.clock.fastForward(40); // 25 fps
+    expect(await page.evaluate(() => stageOf().debug.tier())).toBe('min');
+    expect(await page.evaluate(() => document.documentElement.dataset.qiTier)).toBe('min');
+    expect(await page.evaluate(() => stageOf().debug.pose())).toBe('land');
+  });
+
+  test.describe('減少動態', () => {
+    test.use({ reducedMotion: 'reduce' });
+
+    test('沒有模擬就沒有幀成本：餵再慢的幀也不降級', async ({ page }) => {
+      await open(page, HIGH);
+      await setPose(page, 'land');
+      const fed = await feed(page, 100, 30_000);
+      expect(fed.events).toEqual([]);
+      expect(fed.tier).toBe('high');
+      expect(fed.virtualMs, '虛擬時間照常累計').toBe(30_000);
+    });
+  });
+});
