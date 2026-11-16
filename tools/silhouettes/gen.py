@@ -84,11 +84,11 @@ def build_prompt(prompts_file, name):
         P = json.load(f)
     a = P["assets"][name]
     p = a["prompt"]
-    # a placeholder in the prompt needs its common block: a missing key is an error, never silently an empty string
+    # a placeholder in the prompt needs its common block: a missing or empty block is an error, never silently an empty string
     for token, key in (("{FIG}", "_common_fig"), ("{KID}", "_common_kid"), ("{SCENE}", "_common_scene")):
         if token in p:
-            if key not in P:
-                raise SystemExit(f"{name}: prompt uses {token} but {key} is missing from {prompts_file}")
+            if not str(P.get(key, "")).strip():
+                raise SystemExit(f"{name}: prompt uses {token} but {key} is missing or empty in {prompts_file}")
             p = p.replace(token, P[key])
     if a.get("retry_note"):
         p += " IMPORTANT CORRECTION: " + a["retry_note"]

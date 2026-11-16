@@ -28,7 +28,6 @@ PAD = 8
 #   close: closing radius (px) to bridge hairline white strokes inside the shape
 #   fill:  fill enclosed holes smaller than this area (px); bigger holes are kept as design cut-outs
 #   crop:  'bbox' (trim all sides) | 'rows' (keep full width, trim empty rows only)
-#   min_w: (optional, figures) pad the canvas symmetrically to at least this width, e.g. 500 = the gate's minimum side
 SEL = {
     "fig-dingzhou":  ("v3", "fig",   dict(close=3, fill=400,  crop="bbox")),
     "fig-zhenjiao":  ("v1", "fig",   dict(close=3, fill=400,  crop="bbox")),
@@ -65,7 +64,7 @@ SEL3 = {
 }
 # Batch 4 (run with --batch 4): the adult fist-and-palm salute (Task 7).
 SEL4 = {
-    "fig-salute": ("v3", "fig", dict(close=3, fill=400, crop="bbox", min_w=500)),
+    "fig-salute": ("v1", "fig", dict(close=3, fill=400, crop="bbox")),
 }
 SELECTIONS = {"1": SEL, "2": SEL2, "3": SEL3, "4": SEL4}
 
@@ -135,11 +134,8 @@ def process(name, sel, raw, out_dir, work, preview):
     touches = dict(left=bool(x0 == 0), right=bool(x1 == W - 1), top=bool(y0 == 0), bottom=bool(y1 == H - 1))
     if o["crop"] == "bbox":
         if kind == "fig":
-            sw, sh = x1 - x0 + 1, y1 - y0 + 1
-            cw = max(sw + 2 * PAD, o.get("min_w", 0))  # a narrow figure is padded (never scaled) to min_w so it keeps its native resolution
-            ox = (cw - sw) // 2
-            canvas = np.zeros((sh + 2 * PAD, cw), np.uint8)
-            canvas[PAD:-PAD, ox:ox + sw] = a[y0:y1 + 1, x0:x1 + 1]
+            canvas = np.zeros((y1 - y0 + 1 + 2 * PAD, x1 - x0 + 1 + 2 * PAD), np.uint8)
+            canvas[PAD:-PAD, PAD:-PAD] = a[y0:y1 + 1, x0:x1 + 1]
             out = canvas
         else:
             out = a[y0:y1 + 1, x0:x1 + 1]
