@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { introState, shouldPlayIntro, type IntroPhase } from '../../src/qi/engine/intro';
+import { INTRO_MAX_SCROLL, introState, shouldPlayIntro, type IntroPhase } from '../../src/qi/engine/intro';
 
 const phase = (t: number): IntroPhase => introState(t).phase;
 
@@ -148,6 +148,12 @@ describe('shouldPlayIntro', () => {
 
   it('橡皮筋上拉（scrollY 為負）仍演', () => {
     expect(shouldPlayIntro({ ...base, scrollY: -40 })).toBe(true);
+  });
+
+  it('「還停在頁首」的尺是匯出的 INTRO_MAX_SCROLL（0.25 個視窗高）：首頁腳本捲過它就收尾開場，與這裡同一把', () => {
+    expect(INTRO_MAX_SCROLL).toBe(0.25);
+    expect(shouldPlayIntro({ ...base, scrollY: INTRO_MAX_SCROLL * 900 })).toBe(true);
+    expect(shouldPlayIntro({ ...base, scrollY: INTRO_MAX_SCROLL * 900 + 1 })).toBe(false);
   });
 
   it('條件互不遮蔽：任何一條不成立就不演', () => {

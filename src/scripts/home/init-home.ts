@@ -1,15 +1,17 @@
-// 首頁的光點引擎接線（Task 19）：把捲動位置、大人／小孩切換、開場、視窗變動接到 `QiStage`。
+// 首頁的光點引擎接線（Task 19、20）：把捲動位置、大人／小孩切換、開場、視窗變動接到 `QiStage`。
 //
 //   - 每個 rAF 讀 `scrollY`（另有 passive scroll 監聽喚醒）→ `scrollState` → 姿勢（`poseFor(beat, audience)`）與散開量
 //     `max(捲動 scatter, 切換 scatter)`；捲動速度（視窗高／秒）平滑後餵引擎。
 //   - 引擎對外的狀態以 `html[data-qi-*]` 與 `window.__qi`（只有 ready／frames／tier／mode；`?qi-debug=1` 才多一個 debug）暴露。
+//   - 退回靜態圖（Task 20，`fallback.ts`）：減少動態、沒有 WebGL2（`<head>` 的探測已加 `html.qi-static`）時根本不載入引擎；
+//     引擎掛不上、第一個姿勢載不到、WebGL context 中途遺失時，停掉迴圈、釋放舞台再退回。退回後這個檔案的處理器一律不再動作。
+//   - 離開頁面（`pagehide`、非 bfcache）釋放引擎與 GL context；bfcache 返回（`pageshow` persisted）重設時間戳後繼續。
 //   - 這個檔案會被打進首頁的腳本：程式字串與錯誤訊息只用英文（字型守門會掃 JS 裡的中文字）；也不得 import `config/copy.ts`。
-//   - 減少動態、沒有 WebGL 的正式退回流程是 Task 20 的事；這裡只做最小的保底（引擎掛不上就露出靜態圖）。
 
 import { CENTER_BAND_MARGIN } from '../card-carousel';
 import { BEATS, poseFor, type BeatId, type PoseId } from '../../qi/config/poses';
 import { switchScatter } from '../../qi/engine/forces';
-import { shouldPlayIntro } from '../../qi/engine/intro';
+import { INTRO_MAX_SCROLL, shouldPlayIntro } from '../../qi/engine/intro';
 import { scrollState, type BeatRect } from '../../qi/engine/scroll-model';
 import { initialTier, type TierId } from '../../qi/engine/tiers';
 import { viewportChanged } from '../../qi/engine/viewport';
@@ -19,10 +21,9 @@ import { resolveShapeUrl } from '../../qi/shapes/urls';
 import type { QiDebug, QiStage } from '../../qi/engine/qi-stage';
 import { currentAudience, observeAudience } from './audience-sync';
 import { readBeatRects } from './beats';
+import { enterStatic, onEnterStatic } from './fallback';
 import { introSeen, markIntroSeen } from './intro-gate';
 
-/** 開場播放中，捲過視窗高的這個比例就立刻收尾（與 `shouldPlayIntro` 的「還停在頁首」同一把尺）。 */
-const INTRO_MAX_SCROLL = 0.25;
 /** 捲動速度的平滑時間常數（秒）。 */
 const SPEED_TAU = 0.15;
 /** 一格最多算多少秒（分頁切走再回來時不要讓速度暴衝）。 */
@@ -60,6 +61,38 @@ export async function initHome(): Promise<void> {
     override: params.get('qi-tier'),
   });
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // window.__qi 與 html 屬性：先有殼，引擎掛上後才 ready。
+  const qi: QiGlobal = { ready: false, frames: 0, tier, mode: 'webgl' };
+  (window as unknown as { __qi?: QiGlobal }).__qi = qi;
+
+  // ── 退回與收尾 ───────────────────────────────────────────────
+  /** 這個頁面的引擎還活著嗎：退回靜態圖或離開頁面之後，所有處理器都不該再碰引擎。 */
+  let alive = true;
+  let engine: QiStage | undefined;
+  let raf = 0;
+  const teardowns: (() => void)[] = []; // 觀察者之類，收尾時一起停
+  const shutdown = (): void => {
+    if (!alive) return;
+    alive = false;
+    cancelAnimationFrame(raf); // 停掉每格迴圈
+    raf = 0;
+    for (const stop of teardowns) stop();
+    teardowns.length = 0;
+    engine?.dispose(); // 也釋放 GL context
+  };
+  onEnterStatic(() => {
+    qi.mode = 'static';
+    qi.ready = false;
+    shutdown();
+  });
+
+  // 減少動態，或 <head> 的探測已判定沒有 WebGL2（html.qi-static）：不載入引擎、不預取形體，靜態圖就是畫面。
+  if (reducedMotion || root.classList.contains('qi-static')) {
+    enterStatic(reducedMotion ? 'reduced-motion' : 'no-webgl');
+    return;
+  }
+
   const session = sessionStorageOrNull();
   const willPlayIntro = shouldPlayIntro({
     reducedMotion,
@@ -68,9 +101,6 @@ export async function initHome(): Promise<void> {
     viewportH: window.innerHeight,
   });
 
-  // window.__qi 與 html 屬性：先有殼，引擎掛上後才 ready。
-  const qi: QiGlobal = { ready: false, frames: 0, tier, mode: 'webgl' };
-  (window as unknown as { __qi?: QiGlobal }).__qi = qi;
   const written = new Map<string, string>();
   /** 只在值變了才寫 DOM（每格都會呼叫）。 */
   const setAttr = (name: string, value: string): void => {
@@ -81,16 +111,6 @@ export async function initHome(): Promise<void> {
   setAttr('qiTier', tier);
   setAttr('qiScatter', '0.00');
   if (!willPlayIntro) setAttr('qiIntro', 'skipped');
-
-  // 靜態圖退回（最小保底；Task 20 會換成正式的 fallback.ts）。
-  const enterStatic = (): void => {
-    root.classList.add('qi-static');
-    qi.mode = 'static';
-    qi.ready = false;
-    setAttr('qiMode', 'static');
-    const skip = document.querySelector<HTMLElement>('[data-skip-intro]');
-    if (skip) skip.hidden = true;
-  };
 
   // ── 形體載入與預取（引擎一載入完成就用得到）──────────────────────
   const loader = createShapeLoader({ fetch: fetchBytes, resolveUrl: resolveShapeUrl });
@@ -117,24 +137,56 @@ export async function initHome(): Promise<void> {
   let stage: QiStage;
   try {
     const { mountQiStage } = await import('../../qi/engine/qi-stage');
-    stage = await mountQiStage({ canvas, tier, loader, reducedMotion, debug: params.get('qi-debug') === '1' });
+    stage = await mountQiStage({
+      canvas,
+      tier,
+      loader,
+      reducedMotion: false,
+      debug: params.get('qi-debug') === '1',
+      onContextLost: () => enterStatic('context-lost'), // RF5：靜態圖接手，DOM 內容不變
+    });
   } catch (error) {
     console.warn('The qi engine could not start; showing still images.', error);
-    enterStatic();
+    enterStatic('init-failed');
     return;
   }
+  engine = stage;
   if (stage.debug) qi.debug = stage.debug;
+
+  // ── 視窗（先於第一個姿勢掛上）─────────────────────────────────
+  // prev 是「上次取景時的尺寸」，不是上一個 resize 事件的（RF1）：網址列伸縮的小抖動不取景，累計超過門檻才取景。
+  // 起點是引擎掛上當下的尺寸（這一行與 mountQiStage 之間沒有 await，與引擎量到的一致）；監聽器也在載入第一個姿勢之前就掛上，
+  // 載入途中視窗變了，引擎一樣會重新取景。
+  let fitted = { w: window.innerWidth, h: window.innerHeight };
+  window.addEventListener('resize', () => {
+    if (!alive) return;
+    const next = { w: window.innerWidth, h: window.innerHeight };
+    if (viewportChanged(fitted, next)) {
+      stage.resize(canvas.clientWidth, canvas.clientHeight);
+      fitted = next;
+    }
+  });
 
   // ── 姿勢 ─────────────────────────────────────────────────────
   let requested: PoseId | null = null;
-  /** 換姿勢。載入失敗就留在原姿勢；`data-qi-pose` 只在「最後一次要求」載入完成後才更新。 */
+  const failedPoses = new Set<PoseId>();
+  /**
+   * 換姿勢。載入失敗就留在原姿勢（`requested` 不退回，所以停在同一段時不會每格重發請求），並 warn 一次；
+   * 之後載入成功再失敗會再 warn。`data-qi-pose` 只在「最後一次要求」載入完成後才更新。
+   */
   const requestPose = (pose: PoseId, burst: boolean): void => {
+    if (!alive) return;
     requested = pose;
     stage.setPose(pose, { burst }).then(
       () => {
-        if (requested === pose) setAttr('qiPose', pose);
+        failedPoses.delete(pose);
+        if (alive && requested === pose) setAttr('qiPose', pose);
       },
-      () => undefined,
+      (error: unknown) => {
+        if (!alive || failedPoses.has(pose)) return;
+        failedPoses.add(pose);
+        console.warn(`The pose "${pose}" could not be loaded; keeping the previous one.`, error);
+      },
     );
   };
 
@@ -142,11 +194,11 @@ export async function initHome(): Promise<void> {
     const initial = poseFor(first, currentAudience());
     requested = initial;
     await stage.setPose(initial, { burst: false });
+    if (!alive) return; // 載入途中退回靜態圖了（context 遺失）
     setAttr('qiPose', initial);
   } catch (error) {
     console.warn('The first pose could not be loaded; showing still images.', error);
-    stage.dispose();
-    enterStatic();
+    enterStatic('init-failed');
     return;
   }
   setAttr('qiBeat', first);
@@ -161,7 +213,7 @@ export async function initHome(): Promise<void> {
   };
   /** 開場提前收尾（略過、捲走、跳段落）：不播任何特效，引擎停在 land；之後的姿勢由捲動位置決定。 */
   const endIntro = (reason: 'done' | 'skipped'): void => {
-    if (intro !== 'playing') return;
+    if (!alive || intro !== 'playing') return;
     setIntro(reason);
     stage.playIntro({ skip: true });
   };
@@ -205,42 +257,60 @@ export async function initHome(): Promise<void> {
     setAttr('qiScatter', scatter.toFixed(2));
   };
 
-  // 有動態時每個 rAF 都跑（引擎自己也是）；減少動態沒有 rAF 迴圈，只在事件發生時跑一格。
-  let raf = 0;
+  // 每個 rAF 都跑（引擎自己也是）。先排下一格、再算這一格（try/finally）：tick 丟錯時錯誤照常冒出，但迴圈不會永久停擺。
   const schedule = (): void => {
-    if (raf !== 0) return;
+    if (!alive || raf !== 0) return;
     raf = requestAnimationFrame(() => {
       raf = 0;
-      tick();
-      if (!reducedMotion) schedule();
+      try {
+        tick();
+      } finally {
+        schedule();
+      }
     });
   };
   window.addEventListener('scroll', schedule, { passive: true });
 
   // ── 對象切換 ─────────────────────────────────────────────────
-  observeAudience((audience) => {
-    switchAt = performance.now(); // 切換的散開從 0 ms 起算
+  teardowns.push(
+    observeAudience((audience) => {
+      if (!alive) return;
+      switchAt = performance.now(); // 切換的散開從 0 ms 起算
+      refreshBeats();
+      const beat = locate().beat?.id ?? first;
+      requestPose(poseFor(beat, audience), true);
+      prefetchAround(beat);
+      schedule();
+    }),
+  );
+
+  // ── 視窗：版面位移 ───────────────────────────────────────────
+  window.addEventListener('resize', () => {
+    if (!alive) return;
     refreshBeats();
-    const beat = locate().beat?.id ?? first;
-    requestPose(poseFor(beat, audience), true);
-    prefetchAround(beat);
     schedule();
+  });
+  const layoutObserver = new ResizeObserver(refreshBeats); // 圖片、字型等讓版面位移
+  layoutObserver.observe(main);
+  teardowns.push(() => layoutObserver.disconnect());
+  void document.fonts?.ready.then(() => {
+    if (alive) refreshBeats();
   });
 
-  // ── 視窗 ─────────────────────────────────────────────────────
-  // prev 是「上次取景時的尺寸」，不是上一個 resize 事件的（RF1）：網址列伸縮的小抖動不取景，累計超過門檻才取景。
-  let fitted = { w: window.innerWidth, h: window.innerHeight };
-  window.addEventListener('resize', () => {
+  // ── 離開頁面、bfcache ────────────────────────────────────────
+  window.addEventListener('pagehide', (event) => {
+    if (event.persisted) return; // 進 bfcache：引擎原封不動，pageshow 回來繼續
+    shutdown(); // 真的離開：釋放引擎與 GL context
+  });
+  window.addEventListener('pageshow', (event) => {
+    if (!event.persisted || !alive) return;
+    // 從 bfcache 回來：時間戳與捲動位置都過期了，重設後再排一格（context 若被瀏覽器收走，會走 webglcontextlost 退回靜態圖）
+    lastTick = performance.now();
+    lastY = window.scrollY;
+    speed = 0;
     refreshBeats();
-    const next = { w: window.innerWidth, h: window.innerHeight };
-    if (viewportChanged(fitted, next)) {
-      stage.resize(canvas.clientWidth, canvas.clientHeight);
-      fitted = next;
-    }
     schedule();
   });
-  new ResizeObserver(refreshBeats).observe(main); // 圖片、字型等讓版面位移
-  void document.fonts?.ready.then(refreshBeats);
 
   // ── 略過 ─────────────────────────────────────────────────────
   skipButton?.addEventListener('click', () => endIntro('skipped'));
@@ -253,11 +323,13 @@ export async function initHome(): Promise<void> {
   if (coachCards.length > 0) {
     const observer = new IntersectionObserver(
       (entries) => {
+        if (!alive) return;
         for (const entry of entries) if (entry.isIntersecting) stage.pulse();
       },
       { rootMargin: CENTER_BAND_MARGIN },
     );
     for (const card of coachCards) observer.observe(card);
+    teardowns.push(() => observer.disconnect());
   }
 
   // ── 就緒、開場 ───────────────────────────────────────────────

@@ -53,6 +53,12 @@ export function introState(t: number): IntroState {
 }
 
 /**
+ * 「還停在頁首」的尺：捲動量不超過這個比例的視窗高。`shouldPlayIntro` 用它決定要不要演；
+ * 首頁腳本在開場播放中捲過它就立刻收尾（RF2），兩邊必須是同一把尺，所以匯出共用。
+ */
+export const INTRO_MAX_SCROLL = 0.25;
+
+/**
  * 要不要演開場：每個工作階段第一次進站、沒有偏好減少動態、而且還停在頁首附近
  * （帶 `#hash` 進站或重新整理後還原了捲動位置，就不演）。
  */
@@ -62,5 +68,5 @@ export function shouldPlayIntro(env: {
   scrollY: number;
   viewportH: number;
 }): boolean {
-  return !env.reducedMotion && !env.seen && env.scrollY <= 0.25 * env.viewportH;
+  return !env.reducedMotion && !env.seen && env.scrollY <= INTRO_MAX_SCROLL * env.viewportH;
 }

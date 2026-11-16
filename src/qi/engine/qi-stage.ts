@@ -42,6 +42,11 @@ export interface QiStageOptions {
   reducedMotion: boolean;
   /** 暴露 `stage.debug`（`?qi-debug=1`）。預設不暴露。 */
   debug?: boolean;
+  /**
+   * WebGL context 中途遺失時呼叫一次（RF5）。引擎不會自己復原：呼叫端應 `dispose()` 並退回靜態圖。
+   * `dispose` 之後遺失的不呼叫。
+   */
+  onContextLost?: () => void;
 }
 
 export interface QiStage {
@@ -71,6 +76,7 @@ export interface QiStage {
   resize(w: number, h: number): void;
   /** 重建 GPGPU（同一個 tier 也會重建）；保留目前姿勢。 */
   setTier(t: TierId): Promise<void>;
+  /** 釋放資源並把 GL context 還給瀏覽器（這個 canvas 之後不能再掛引擎）；重複呼叫無妨。 */
   dispose(): void;
   /** 只在 `debug: true`（`?qi-debug=1`）時存在。 */
   readonly debug?: QiDebug;
@@ -128,6 +134,19 @@ const STILL = new Vector3();
 const clamp = (x: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, x));
 const finiteOr = (x: number, fallback: number): number => (Number.isFinite(x) ? x : fallback);
 
+/**
+ * 把 GL context 還給瀏覽器：`renderer.dispose()` 只釋放 three 自己建的資源，不會放掉 context，
+ * 而頁面（或這個 canvas）可能還活著，context 名額與 GPU 記憶體要馬上還。已經遺失的不能再叫 `loseContext`
+ * （會多一則 console 警告），所以先看一眼。
+ */
+function releaseContext(renderer: WebGLRenderer): void {
+  try {
+    if (!renderer.getContext().isContextLost()) renderer.forceContextLoss();
+  } catch {
+    // context 已經不在了：沒有東西可放
+  }
+}
+
 export async function mountQiStage(o: QiStageOptions): Promise<QiStage> {
   if (!Object.hasOwn(TIERS, o.tier)) throw new RangeError(`Unknown tier: ${String(o.tier)}`);
   const renderer = new WebGLRenderer({ canvas: o.canvas, antialias: false, powerPreference: 'high-performance' });
@@ -141,6 +160,7 @@ export async function mountQiStage(o: QiStageOptions): Promise<QiStage> {
     pointer?.dispose();
     stage?.dispose();
     renderer.dispose();
+    releaseContext(renderer); // 掛載失敗：呼叫端退回靜態圖，這個 context 不會再用
     throw error;
   }
 }
@@ -484,6 +504,13 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
     project: (x, y, z) => stage.project(x, y, z),
   };
 
+  // ── WebGL context 中途遺失（RF5）──────────────────────────────────
+  // three 自己的監聽器先收到（preventDefault、之後不再畫）；這裡通知呼叫端，由它 `dispose()` 並退回靜態圖。
+  const onContextLost = (): void => {
+    if (!disposed) o.onContextLost?.();
+  };
+  canvas.addEventListener('webglcontextlost', onContextLost);
+
   // ── 公開 API ───────────────────────────────────────────────────
   return {
     async setPose(next, opts) {
@@ -582,10 +609,12 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
       if (disposed) return;
       disposed = true;
       cancelAnimationFrame(rafId);
+      canvas.removeEventListener('webglcontextlost', onContextLost);
       pointer?.dispose();
       releaseGeneration();
       stage.dispose();
       renderer.dispose();
+      releaseContext(renderer); // 把 GL context 還給瀏覽器（頁面可能還活著）
     },
     ...(o.debug ? { debug } : {}),
   };
