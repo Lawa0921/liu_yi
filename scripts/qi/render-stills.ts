@@ -5,7 +5,7 @@
  *
  * 渲染（`renderStill`）：
  *   1. 取景：形體的 xy 外框置中、等比放大到佔滿影像的 80% 高或 88% 寬（先到者為準）；暗底 `#0b0a09`。
- *   2. Float32 加色高斯點：每個形體點一顆，顏色與透明度照引擎（試作 `src/lab/qi/shaders.ts`）——人形由金到米白、
+ *   2. Float32 加色高斯點：每個形體點一顆，顏色與透明度照引擎（已刪除的 /lab/ 試作的 `shaders.ts`（歷史在 commit `e56a090`））——人形由金到米白、
  *      靠輪廓越近越亮；鋼＝米白、銅＝金、暗色＝暗金、氣＝很淡的金；朱印＝朱紅。光點半徑隨形體在影像上的大小而定
  *      （點數固定為 16 384，形體越大點越要大才蓋得住）。人形再疊三樣東西：
  *      沿身體縱向流動的「氣脈」（亮度與色相的起伏，加上深處的霧與短尾筆觸；都只放在離輪廓夠遠的深處，
@@ -44,7 +44,7 @@ import { commitStaged, hashMatches, sizeOf } from './staged-output';
 const STILL_VERSION = 1;
 const MANIFEST = 'stills.json';
 
-// ── 色彩（與引擎同一組，見試作 `src/lab/qi/main.ts`）───────────────────────────
+// ── 色彩（與引擎同一組，見已刪除的 /lab/ 試作的 `main.ts`（歷史在 commit `e56a090`））───────────────────────────
 const BACKGROUND = '#0b0a09';
 const GOLD = '#b3924f';
 const PAPER = '#f1e3c6';

@@ -1,5 +1,5 @@
 /**
- * 固定種子的亂數（mulberry32 的變體；搬自試作 `src/lab/qi/shapes.ts` 的 `rng`）。
+ * 固定種子的亂數（mulberry32 的變體；搬自已刪除的 /lab/ 試作的 `shapes.ts`（歷史在 commit `e56a090`） 的 `rng`）。
  * 回傳 [0, 1) 的函式，同 seed 同序列。人形與兵器的取樣共用，每次載入都長一樣。
  */
 export function rng(seed: number): () => number {

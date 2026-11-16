@@ -1,7 +1,7 @@
 /*
  * 全站基本排版與共用樣式。
  * 元件專屬樣式寫在各 .astro 檔的 <style> 裡；這裡只放 reset、排版、共用的 class。
- * 紋樣、匾額、方印、顆粒、進場效果在 ornament.css；固定外框在 chrome.css；3D 兵器、刀光、震腳在 arsenal.css。
+ * 紋樣、匾額、方印、顆粒、進場效果在 ornament.css；固定外框在 chrome.css；3D 兵器在 arsenal.css。
  */
 
 @import './tokens.css';

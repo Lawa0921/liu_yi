@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 // 第二階段的行為：手機選單展開時鎖住捲動、沒有 JavaScript 時海報仍可看、海報站內放大、課程頁照片切換。
-// 首頁三幕（釘選、data-acts）已隨首頁改版移除，首頁的行為見 home.spec.ts 與 home-fallback.spec.ts。
+// 舊首頁的三幕與釘選捲動已隨首頁改版移除，首頁的行為見 home.spec.ts 與 home-fallback.spec.ts。
 
 test.describe('手機寬度', () => {
   test.use({ viewport: { width: 390, height: 844 } });

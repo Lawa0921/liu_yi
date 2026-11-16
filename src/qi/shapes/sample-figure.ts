@@ -1,5 +1,5 @@
 /**
- * 把剪影取樣成 count 個光點的目標位置（人形形體）。規則搬自試作 `src/lab/qi/shapes.ts` 的 `sampleFigure`，
+ * 把剪影取樣成 count 個光點的目標位置（人形形體）。規則搬自已刪除的 /lab/ 試作的 `shapes.ts`（歷史在 commit `e56a090`） 的 `sampleFigure`，
  * 改成純函式（輸入 alpha 陣列，不碰 canvas），好在 Node 的建置腳本與單元測試裡跑：
  *
  *   - 取樣網格 0.32（每 px 原圖縮成多少格），格內不透明像素過半才算「在剪影內」；

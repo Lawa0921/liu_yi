@@ -4,7 +4,7 @@
  * 只有這個腳本（與 `tests/unit/qi-weapon-snapshot.test.ts` 的比對）會載入它。改了 `weapons.ts` 的造型就要重跑一次。
  *
  * 材質：`weapons.ts` 的建模函式要一組材質，這裡只要幾何，所以給一組只帶 `userData.cls` 的空殼
- * （搬自試作 `src/lab/qi/shapes.ts` 的 `taggedMaterials`）：2 鋼、3 銅、4 紅纓、5 暗色（柄、桿）。
+ * （搬自已刪除的 /lab/ 試作的 `shapes.ts`（歷史在 commit `e56a090`） 的 `taggedMaterials`）：2 鋼、3 銅、4 紅纓、5 暗色（柄、桿）。
  * 同一種 cls 的 mesh 併成一個零件（鋼、銅、紅纓、暗色各最多一個）：取樣的面積權重（面積^0.6 × 種類加權）以零件為單位，
  * 若維持一個 mesh 一個零件，許多細小的銅箍、劍首會因為開次方而各自分到過多的點，把鋼與暗色擠掉。
  *

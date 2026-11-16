@@ -1,5 +1,5 @@
 /**
- * 共用的 GLSL 片段：雜湊與 curl noise（搬自試作 `src/lab/qi/shaders.ts`）。
+ * 共用的 GLSL 片段：雜湊與 curl noise（搬自已刪除的 /lab/ 試作的 `shaders.ts`（歷史在 commit `e56a090`））。
  * GLSL 字串會被打進引擎 chunk，字型守門會掃它：字串內不放中文（TS 註解可以）。
  */
 

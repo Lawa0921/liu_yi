@@ -1,5 +1,5 @@
 /**
- * 把兵器快照取樣成 count 個光點的目標位置（兵器形體）。規則搬自試作 `src/lab/qi/shapes.ts` 的 `sampleWeapon`，
+ * 把兵器快照取樣成 count 個光點的目標位置（兵器形體）。規則搬自已刪除的 /lab/ 試作的 `shapes.ts`（歷史在 commit `e56a090`） 的 `sampleWeapon`，
  * 改成純函式（輸入快照，不碰 three），好在 Node 的建置腳本與單元測試裡跑：
  *
  *   - 單位形（D13）：長軸 +x、鋒尖朝 +x、置中、全長 1。快照是長軸 +Y 的原座標，這裡轉 −90°（繞 Z）：(x, y, z) → (y, −x, z)，
