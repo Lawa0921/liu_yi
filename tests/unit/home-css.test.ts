@@ -77,3 +77,26 @@ describe('home.css 的退回與海報規則（Task 20）', () => {
     expect(css).toMatch(/\[data-home\]:focus\s*\{[^}]*outline\s*:\s*none/);
   });
 });
+
+describe('home.css 的朱印點擊區規則（Task 21）', () => {
+  it('引擎在跑（html.js:not(.qi-static)）時 .seal-hit 預設 display:none，要等腳本標 data-placed 才顯示、定位在 --seal-* 上', () => {
+    const base = /html\.js:not\(\.qi-static\)\s+\.seal-hit\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(base).toMatch(/position\s*:\s*fixed/);
+    expect(base).toMatch(/display\s*:\s*none/);
+    for (const name of ['--seal-x', '--seal-y', '--seal-w', '--seal-h']) expect(base).toContain(`var(${name}`);
+    expect(css).toMatch(/html\.js:not\(\.qi-static\)\s+\.seal-hit\[data-placed\]\s*\{[^}]*display\s*:\s*block/);
+  });
+
+  it('靜態圖（其餘情況）時 .seal-hit 絕對定位在朱印靜態圖的盒子裡、對齊圖上的印，不是隱藏也不是 pointer-events:none', () => {
+    const rule = /(?:^|\})\s*\.seal-hit\s*\{([^}]*)\}/m.exec(css)?.[1] ?? '';
+    expect(rule).toMatch(/position\s*:\s*absolute/);
+    expect(rule).toMatch(/inset\s*:/);
+    expect(rule).not.toMatch(/display\s*:\s*none|pointer-events\s*:\s*none/);
+    expect(/\.seal-stage\s*\{([^}]*)\}/.exec(css)?.[1] ?? '').toMatch(/position\s*:\s*relative/);
+  });
+
+  it('BookingBeat 把靜態圖與 .seal-hit 包在同一個 .seal-stage 裡（同一個座標系），.seal-hit 對讀屏與 Tab 隱藏', () => {
+    const booking = readFileSync(new URL('../../src/components/home/BookingBeat.astro', import.meta.url), 'utf8');
+    expect(booking).toMatch(/<div class="seal-stage">\s*<Still name="seal" \/>\s*<a class="seal-hit"[^>]*tabindex="-1"[^>]*aria-hidden="true"/);
+  });
+});

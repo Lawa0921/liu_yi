@@ -571,15 +571,49 @@ html:not([data-audience]) .beat--course {
 
 /* ── 預約 ─────────────────────────────────────────── */
 
-/* 蓋在朱印（光點或靜態圖）上的透明點擊區。 */
-.seal-hit {
+/*
+ * 朱印的靜態圖與蓋在它上面的點擊區包在同一個盒子裡，兩者才有同一個座標系。
+ * 靜態圖是 4:3、高度不超過一段的可用高（與 .beat__still 的 max-height 同一把尺），所以盒子的寬度由高度反推：
+ * 圖剛好填滿盒子，沒有 object-fit 留白，點擊區用百分比對圖就準。
+ */
+.seal-stage {
+  position: relative;
   grid-column: 2;
   grid-row: 1;
   justify-self: center;
-  align-self: center;
-  width: min(24rem, 90%);
-  aspect-ratio: 1;
+  width: min(100%, calc((var(--stage-height) - 6rem) * 4 / 3));
+}
+
+.seal-stage .beat__still {
+  display: block;
+}
+
+/*
+ * 蓋在朱印上的透明點擊區（<a>，aria-hidden、tabindex -1：鍵盤與讀屏用旁邊的按鈕）。
+ * 靜態圖（沒有 JS、減少動態、沒有 WebGL）：對齊圖上的印。靜態圖產線（scripts/qi/render-stills.ts）把印置中、取 80% 圖高，
+ * 加上光暈外擴一點，實測紅色外框是圖寬的 19.5%–80.5%、圖高的 9.3%–90.5%（e2e 量圖上的紅色像素驗證）。
+ */
+.seal-hit {
+  position: absolute;
+  inset: 9.5% 19.5%;
   cursor: pointer;
+}
+
+/*
+ * 引擎在跑：朱印畫在光點裡，沒有印的矩形（光點還沒聚合、或不在預約段）就不可點——不是一塊空白的隱形按鈕。
+ * 引擎量到矩形後，腳本寫 --seal-*（視窗座標）並標 data-placed，這時才顯示、定位在印上。
+ * 退回靜態圖（html.qi-static）後這組規則不再適用，上面對齊靜態圖的規則接手。
+ */
+html.js:not(.qi-static) .seal-hit {
+  position: fixed;
+  inset: var(--seal-y, 0) auto auto var(--seal-x, 0);
+  width: var(--seal-w, 0);
+  height: var(--seal-h, 0);
+  display: none;
+}
+
+html.js:not(.qi-static) .seal-hit[data-placed] {
+  display: block;
 }
 
 /* ── 大人｜小孩切換鈕 ─────────────────────────────── */
@@ -712,9 +746,9 @@ html:not(.js) .home-rail {
     max-height: 38svh;
   }
 
-  .seal-hit {
+  .seal-stage {
     grid-column: 1;
-    width: min(60vw, 16rem);
+    width: min(100%, calc(38svh * 4 / 3));
   }
 
   .audience-switch__inner {

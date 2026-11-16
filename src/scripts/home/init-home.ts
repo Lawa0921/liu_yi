@@ -216,6 +216,33 @@ export async function initHome(): Promise<void> {
     stage.playIntro({ skip: true });
   };
 
+  // ── 朱印（Task 21）─────────────────────────────────────────────
+  // 預約段的印是畫在光點裡的；`.seal-hit` 是蓋在印上的透明連結，只有引擎量得到印（光點聚合之後，`getSealRect()` 非 null）才定位並顯示，
+  // 之前、以及捲離預約段之後都不可點（home.css：`display: none`，不是一塊空白的隱形按鈕）。位置寫成 CSS 變數、取整數像素，值沒變不寫。
+  // 退回靜態圖後 home.css 改用另一組規則（對齊靜態圖），這些變數就沒人讀了。
+  const sealHit = document.querySelector<HTMLElement>('.seal-hit');
+  let sealKey = '';
+  const placeSeal = (): void => {
+    if (!sealHit) return;
+    const rect = stage.getSealRect();
+    const key = rect ? [rect.x, rect.y, rect.w, rect.h].map(Math.round).join(',') : '';
+    if (key === sealKey) return;
+    sealKey = key;
+    if (!rect) {
+      delete sealHit.dataset.placed;
+      return;
+    }
+    const [x, y, w, h] = key.split(',');
+    sealHit.style.setProperty('--seal-x', `${x}px`);
+    sealHit.style.setProperty('--seal-y', `${y}px`);
+    sealHit.style.setProperty('--seal-w', `${w}px`);
+    sealHit.style.setProperty('--seal-h', `${h}px`);
+    sealHit.dataset.placed = '';
+  };
+  teardowns.push(() => {
+    if (sealHit) delete sealHit.dataset.placed;
+  });
+
   // ── 每一格 ───────────────────────────────────────────────────
   let switchAt: number | null = null; // 對象切換的時間（performance.now）；null ＝ 還沒切換過
   let currentBeat: BeatId = first;
@@ -253,6 +280,7 @@ export async function initHome(): Promise<void> {
     stage.setScatter(scatter);
     stage.setScrollSpeed(speed);
     setAttr('qiScatter', scatter.toFixed(2));
+    placeSeal();
   };
 
   // 每個 rAF 都跑（引擎自己也是）。先排下一格、再算這一格（try/finally）：tick 丟錯時錯誤照常冒出，但迴圈不會永久停擺。

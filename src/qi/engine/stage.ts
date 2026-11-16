@@ -90,6 +90,11 @@ export interface Stage {
   render(): void;
   /** 人物本地座標的一點 → 螢幕座標（CSS 像素，與滑鼠座標同一個空間）。 */
   project(x: number, y: number, z: number, out?: { x: number; y: number }): { x: number; y: number };
+  /**
+   * 人物本地座標、z = 0 平面上的矩形（`x`、`y` 是左下角）→ 螢幕上的外框（CSS 像素）。四個角各投影一次再取外框，
+   * 所以人物群組轉一點點（視差）、相機呼吸時仍框得住。
+   */
+  projectRect(x: number, y: number, w: number, h: number): { x: number; y: number; w: number; h: number };
   /** 目前 pixel ratio 與 drawing buffer 尺寸（讀像素用）。 */
   bufferSize(): { width: number; height: number; pixelRatio: number };
   uniforms(): Record<string, number>;
@@ -347,6 +352,26 @@ export function createStage(renderer: WebGLRenderer, canvas: HTMLCanvasElement):
       out.x = rect.left + (v.x * 0.5 + 0.5) * rect.width;
       out.y = rect.top + (-v.y * 0.5 + 0.5) * rect.height;
       return out;
+    },
+    projectRect(x, y, w, h) {
+      const corner = { x: 0, y: 0 };
+      let left = Infinity;
+      let top = Infinity;
+      let right = -Infinity;
+      let bottom = -Infinity;
+      for (const [cx, cy] of [
+        [x, y],
+        [x + w, y],
+        [x, y + h],
+        [x + w, y + h],
+      ] as const) {
+        stage.project(cx, cy, 0, corner);
+        left = Math.min(left, corner.x);
+        right = Math.max(right, corner.x);
+        top = Math.min(top, corner.y);
+        bottom = Math.max(bottom, corner.y);
+      }
+      return { x: left, y: top, w: right - left, h: bottom - top };
     },
     bufferSize() {
       const gl = renderer.getContext();

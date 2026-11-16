@@ -2,6 +2,7 @@
 // 頁尾：海水紋帶、題字、導覽、聯絡方式（只有 Facebook 與 LINE QR）。
 // #line 是「預約體驗」在沒有 JavaScript 時的落點，id 不要改。
 // 地址、電話、營業時間等業主提供後再加（設計文件 §5、§13-4）；沒有就不顯示，不留空位。
+// 版權行下面的「印文字形」是首頁朱印的姓名標示（崇羲篆體的 CC BY-ND 3.0 TW 要求標示作者）；朱印只在首頁，但頁尾全站共用，標示跟著頁尾。
 import { Image } from 'astro:assets';
 import titleArt from '../assets/images/text_transparent.png';
 import lineQr from '../assets/images/line.png';
@@ -52,6 +53,7 @@ import { url } from '../lib/url';
   <div class="container">
     <span class="rule rule--faint" aria-hidden="true"></span>
     <p class="site-footer__copyright">&copy; {SITE.name}</p>
+    <p class="site-footer__copyright site-footer__credit">印文字形：崇羲篆體（中央研究院，CC BY-ND 3.0 TW）</p>
   </div>
 </footer>
 
@@ -160,6 +162,11 @@ import { url } from '../lib/url';
     color: var(--color-text-muted);
     font-size: var(--text-xs);
     letter-spacing: 0.2em;
+  }
+
+  /* 首頁朱印的字形出處（CC BY 的姓名標示）：緊接在版權行下面，同一種小字。 */
+  .site-footer__credit {
+    margin-top: var(--space-1);
   }
 
   @media (min-width: 60rem) {

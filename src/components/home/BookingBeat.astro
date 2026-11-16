@@ -1,6 +1,8 @@
 ---
 // 預約（beat: booking）：光點收進一顆朱印，印就是「LINE 預約」按鈕（設計 §2）。
-// 印是畫在光點裡的，所以 .seal-hit 是蓋在印上的透明點擊區（滑鼠與觸控可點，鍵盤與讀屏用旁邊的按鈕）；
+// 印是畫在光點裡的，所以 .seal-hit 是蓋在印上的透明點擊區（滑鼠與觸控可點，鍵盤與讀屏用旁邊的按鈕）：
+//   - 引擎在跑：光點聚成印之後，腳本（init-home.ts 的 placeSeal）才把它定位到引擎量到的印的矩形並顯示；在那之前它不可點。
+//   - 靜態圖（減少動態、沒有 WebGL、沒有 JS）：朱印是靜態圖，.seal-hit 對齊圖上的印（所以兩者包在同一個 .seal-stage 裡）。
 // 按鈕文字沿用 BOOKING_LABEL，點了開啟既有的 #line-dialog；沒有 JS 時退回頁尾的 LINE QR（#line）。
 import Still from './Still.astro';
 import { BOOKING_ANCHOR, BOOKING_LABEL } from '../../lib/site';
@@ -16,7 +18,9 @@ import { COPY } from '../../qi/config/copy';
         <a class="button button--solid" href={BOOKING_ANCHOR} data-line-open>{BOOKING_LABEL}</a>
       </p>
     </div>
-    <Still name="seal" />
-    <a class="seal-hit" href={BOOKING_ANCHOR} data-line-open tabindex="-1" aria-hidden="true"></a>
+    <div class="seal-stage">
+      <Still name="seal" />
+      <a class="seal-hit" href={BOOKING_ANCHOR} data-line-open tabindex="-1" aria-hidden="true"></a>
+    </div>
   </div>
 </section>

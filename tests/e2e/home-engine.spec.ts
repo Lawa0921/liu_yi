@@ -489,3 +489,218 @@ test.describe('window.__qi（D27）', () => {
     expect(await page.evaluate(() => Object.keys((window as unknown as W).__qi).sort())).toEqual(['debug', 'frames', 'mode', 'ready', 'tier']);
   });
 });
+
+// ── 朱印預約（Task 21）─────────────────────────────────────────────
+// 光點收進朱印：引擎量得到印的螢幕矩形（`sealRect`，聚合前是 null），`.seal-hit` 才定位到它並可點；
+// 沒有引擎（減少動態、沒有 WebGL）時朱印是靜態圖，`.seal-hit` 對齊圖上的印。按鈕永遠是鍵盤與讀屏的入口。
+
+interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+const SEAL_DEVICES = [
+  { name: '桌機 1440×900', viewport: { width: 1440, height: 900 } },
+  { name: '手機 390×844', viewport: { width: 390, height: 844 } },
+] as const;
+const LINE_DIALOG = '#line-dialog';
+const BOOKING_BUTTON = '#booking a.button--solid';
+
+const sealRect = (page: Page) => page.evaluate(() => (window as unknown as W).__qi.debug.sealRect());
+const rectOf = (page: Page, selector: string): Promise<Rect> =>
+  page.locator(selector).evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return { x: r.left, y: r.top, w: r.width, h: r.height };
+  });
+const overlap = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+for (const device of SEAL_DEVICES) {
+  test.describe(`朱印預約（引擎）：${device.name}`, () => {
+    test.use({ viewport: device.viewport });
+
+    test('聚合前沒有朱印矩形、.seal-hit 不可點；聚合後矩形在視窗內、框住朱紅的印、不壓到按鈕，.seal-hit 對齊它', async ({ page }) => {
+      await open(page);
+      expect(await sealRect(page), '開場段（不是 seal 姿勢）').toBeNull();
+      await expect(page.locator('.seal-hit'), '開場段').toBeHidden();
+
+      await scrollToBeat(page, 'booking');
+      await run(page, 100);
+      await expect(html(page)).toHaveAttribute('data-qi-pose', 'seal');
+      expect(await sealRect(page), '剛換成 seal（光點還在飛）').toBeNull();
+      await expect(page.locator('.seal-hit'), '光點還在飛').toBeHidden();
+
+      // 矩形出現的那一刻，光點就該已經聚成印了（不是「時間到了」而光點還在飛）
+      let waited = 100;
+      while ((await sealRect(page)) === null && waited < 5000) {
+        await run(page, 50);
+        waited += 50;
+      }
+      expect(await sealRect(page), `聚合後（等了 ${waited} ms）`).not.toBeNull();
+      expect(await page.evaluate(() => (window as unknown as W).__qi.debug.meanError()), '矩形出現的那一刻光點已聚合').toBeLessThan(0.06);
+      await run(page, 1000);
+      const rect = await sealRect(page);
+      expect(rect, '再過 1 秒仍在').not.toBeNull();
+      const { x, y, w, h } = rect!;
+      const view = await page.evaluate(() => ({ w: window.innerWidth, h: window.innerHeight }));
+      expect(w).toBeGreaterThan(80);
+      expect(h).toBeGreaterThan(80);
+      expect(Math.abs(w / h - 1), '朱印是方的').toBeLessThan(0.1);
+      expect(x, '在視窗內（左）').toBeGreaterThanOrEqual(0);
+      expect(y, '在視窗內（上）').toBeGreaterThanOrEqual(0);
+      expect(x + w, '在視窗內（右）').toBeLessThanOrEqual(view.w);
+      expect(y + h, '在視窗內（下）').toBeLessThanOrEqual(view.h);
+      expect(overlap(rect!, await rectOf(page, BOOKING_BUTTON)), '不壓到預約按鈕').toBe(false);
+
+      // 光點真的聚成印了，而且印的紅都在這個矩形裡（量畫布像素）
+      expect(await page.evaluate(() => (window as unknown as W).__qi.debug.meanError()), '光點聚合').toBeLessThan(0.03);
+      const canvas = await rectOf(page, 'canvas[data-qi-canvas]');
+      const reds = await page.evaluate(
+        ([region, offset]) => {
+          const debug = (window as unknown as W).__qi.debug;
+          const inside = debug.snapshot({ x: region.x - offset.x, y: region.y - offset.y, w: region.w, h: region.h }).red;
+          return { inside, all: debug.snapshot().red };
+        },
+        [rect!, canvas] as const,
+      );
+      expect(reds.all, '畫面上有朱紅').toBeGreaterThan(200);
+      expect(reds.inside / reds.all, '朱紅都在矩形內').toBeGreaterThan(0.9);
+
+      // .seal-hit 對齊矩形，且現在可見
+      const hit = page.locator('.seal-hit');
+      await expect(hit).toBeVisible();
+      const placed = await rectOf(page, '.seal-hit');
+      for (const key of ['x', 'y', 'w', 'h'] as const) expect(Math.abs(placed[key] - rect![key]), `.seal-hit ${key}`).toBeLessThanOrEqual(2);
+      expect(overlap(placed, await rectOf(page, BOOKING_BUTTON)), '.seal-hit 不壓到預約按鈕').toBe(false);
+
+      // 捲離預約段：印散了又換姿勢，矩形回到 null、.seal-hit 不可點
+      await scrollToBeat(page, 'pricing');
+      await run(page, 300);
+      expect(await sealRect(page), '回到收費段').toBeNull();
+      await expect(hit, '回到收費段').toBeHidden();
+    });
+
+    test('點朱印（.seal-hit 的中心）開啟 LINE 視窗，Esc 關閉', async ({ page }) => {
+      await open(page);
+      await scrollToBeat(page, 'booking');
+      await run(page, 3000);
+      const rect = (await sealRect(page))!;
+      expect(rect).not.toBeNull();
+      await expect(page.locator(LINE_DIALOG)).toBeHidden();
+
+      await page.mouse.click(rect.x + rect.w / 2, rect.y + rect.h / 2);
+      await expect(page.locator(LINE_DIALOG)).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(page.locator(LINE_DIALOG)).toBeHidden();
+
+      await page.locator('.seal-hit').click(); // 透過元素點也一樣（Playwright 會檢查點擊位置沒被別的東西蓋住）
+      await expect(page.locator(LINE_DIALOG)).toBeVisible();
+    });
+
+    test('鍵盤：Tab 到「預約體驗」按鈕（不會停在 .seal-hit）、Enter 開啟、Esc 關閉；.seal-hit 對讀屏與 Tab 隱藏', async ({ page }) => {
+      await open(page);
+      const hit = page.locator('.seal-hit');
+      await expect(hit).toHaveAttribute('aria-hidden', 'true');
+      await expect(hit).toHaveAttribute('tabindex', '-1');
+      await expect(hit).toHaveAttribute('href', '#line');
+      await expect(hit).toHaveAttribute('data-line-open', '');
+
+      await page.locator('#pricing a').last().focus();
+      await page.keyboard.press('Tab');
+      await expect(page.locator(BOOKING_BUTTON)).toBeFocused();
+      await page.keyboard.press('Enter');
+      await expect(page.locator(LINE_DIALOG)).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(page.locator(LINE_DIALOG)).toBeHidden();
+      await expect(page.locator(BOOKING_BUTTON), '關閉後焦點回到按鈕').toBeFocused();
+
+      await page.keyboard.press('Tab');
+      expect(await page.evaluate(() => document.activeElement?.classList.contains('seal-hit')), 'Tab 不會停在 .seal-hit').toBe(false);
+    });
+  });
+}
+
+for (const device of SEAL_DEVICES) {
+  test.describe(`朱印預約（靜態圖：減少動態）：${device.name}`, () => {
+    test.use({ viewport: device.viewport, reducedMotion: 'reduce' });
+
+    test('朱印靜態圖可見；.seal-hit 對齊圖上的印（量圖上的紅色外框），點它與按鈕都開得了視窗', async ({ page }) => {
+      await page.goto('./');
+      await expect(html(page)).toHaveAttribute('data-qi-mode', 'static');
+      const still = page.locator('#booking .beat__still');
+      await still.scrollIntoViewIfNeeded();
+      await expect(still).toBeVisible();
+      await expect.poll(() => still.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBeGreaterThan(0);
+
+      // 印在圖上的位置：紅色像素的外框，換算成頁面座標（object-fit: contain）
+      const mark = await still.evaluate((img: HTMLImageElement) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext('2d')!;
+        ctx.drawImage(img, 0, 0);
+        const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        let [x0, y0, x1, y1] = [canvas.width, canvas.height, -1, -1];
+        for (let y = 0; y < canvas.height; y++) {
+          for (let x = 0; x < canvas.width; x++) {
+            const i = (y * canvas.width + x) * 4;
+            if (data[i]! > 110 && data[i + 1]! < 70 && data[i + 2]! < 70) {
+              x0 = Math.min(x0, x);
+              x1 = Math.max(x1, x);
+              y0 = Math.min(y0, y);
+              y1 = Math.max(y1, y);
+            }
+          }
+        }
+        const box = img.getBoundingClientRect();
+        const scale = Math.min(box.width / canvas.width, box.height / canvas.height);
+        const left = box.left + (box.width - canvas.width * scale) / 2;
+        const top = box.top + (box.height - canvas.height * scale) / 2;
+        return { x: left + x0 * scale, y: top + y0 * scale, w: (x1 - x0 + 1) * scale, h: (y1 - y0 + 1) * scale };
+      });
+      expect(mark.w, '圖上找得到朱紅的印').toBeGreaterThan(40);
+
+      const hit = page.locator('.seal-hit');
+      await expect(hit).toBeVisible();
+      const placed = await rectOf(page, '.seal-hit');
+      const slack = Math.max(4, mark.w * 0.04);
+      for (const key of ['x', 'y', 'w', 'h'] as const) expect(Math.abs(placed[key] - mark[key]), `.seal-hit ${key} 對齊靜態圖的印`).toBeLessThanOrEqual(slack);
+      expect(overlap(placed, await rectOf(page, BOOKING_BUTTON)), '.seal-hit 不壓到預約按鈕').toBe(false);
+
+      await hit.click();
+      await expect(page.locator(LINE_DIALOG)).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(page.locator(LINE_DIALOG)).toBeHidden();
+
+      await page.locator(BOOKING_BUTTON).click();
+      await expect(page.locator(LINE_DIALOG)).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(page.locator(LINE_DIALOG)).toBeHidden();
+    });
+  });
+}
+
+test.describe('頁尾：LINE 區塊不變，加崇羲篆體的姓名標示（CC BY-ND 3.0 TW）', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test('#line 與 QR 不變；標示在頁尾、看得見、不壓到 QR、字型與版權行一致', async ({ page }) => {
+    await page.goto('./');
+    const line = page.locator('footer #line');
+    await line.scrollIntoViewIfNeeded();
+    await expect(line.getByRole('heading', { name: '預約體驗', level: 2 })).toBeVisible();
+    await expect(line.getByRole('img', { name: /LINE 好友 QR code/ })).toBeVisible();
+    await expect(line.getByRole('link', { name: '用 LINE 加入' })).toHaveAttribute('href', 'https://lin.ee/CIOGR8n');
+
+    const credit = page.locator('footer').getByText('印文字形：崇羲篆體（中央研究院，CC BY-ND 3.0 TW）');
+    await expect(credit).toHaveCount(1);
+    await credit.scrollIntoViewIfNeeded();
+    await expect(credit).toBeVisible();
+    const box = await credit.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return { x: r.left, y: r.top, w: r.width, h: r.height };
+    });
+    expect(overlap(await rectOf(page, 'footer .site-footer__qr'), box), '不壓到 QR').toBe(false);
+    const family = (selector: string) => page.locator(selector).first().evaluate((el) => getComputedStyle(el).fontFamily);
+    expect(await credit.evaluate((el) => getComputedStyle(el).fontFamily), '字型與版權行一致（站上的 TW-Kai）').toBe(await family('footer .site-footer__copyright'));
+  });
+});

@@ -10,12 +10,13 @@
  *   - 武器的擺放依視窗寬窄（D13）：寬窄翻轉時重展開武器的目標，姿勢不變。
  *   - 補強（Task 16）：換招拖尾（`uStreak`，由衝量的包絡決定）、落地演出（`playLanding`：雙圈衝擊波、白閃、鏡頭震）、
  *     開場演出（`playIntro`：吸氣流線，時間軸見 `intro.ts`）。這些都只在有模擬時才動（減少動態沒有）。
+ *   - 朱印（Task 21）：`getSealRect` 量印的螢幕矩形（光點聚合後才有），首頁把 `.seal-hit` 定位上去。
  * 注意：會被打進引擎 chunk，所以錯誤訊息只用英文。
  */
 
 import { DataTexture, FloatType, RGBAFormat, Vector3, WebGLRenderer } from 'three';
 import { BURSTS, type Burst, type PoseId } from '../config/poses';
-import { SHAPES } from '../config/shapes';
+import { SEAL_CENTER_Y, SEAL_WORLD_SIZE, SHAPES } from '../config/shapes';
 import { ambientField, expandTargets, flowTargets, weaponLayout, type AmbientField } from '../shapes/expand';
 import type { Shape } from '../shapes/format';
 import type { ShapeLoader } from '../shapes/loader';
@@ -73,6 +74,13 @@ export interface QiStage {
    * 沒有演出（減少動態、已在演）時不會呼叫；`dispose` 也不呼叫。
    */
   playIntro(opts?: { skip?: boolean; onEnd?: () => void }): void;
+  /**
+   * 朱印在螢幕上的矩形（CSS 像素，與滑鼠座標同一個空間；首頁用來把 `.seal-hit` 定位到印上）。
+   * 光點還沒聚成印就回 `null`：姿勢不是 `seal`、散開量超過 `SEAL_SCATTER_MAX`、或聚合後還沒安定滿 `SEAL_SETTLE_S`
+   * （模擬秒；換姿勢、又散開之後重新計時）。減少動態沒有模擬，光點直接畫在目標上，所以姿勢是 `seal` 就有。
+   * 印隨視差與相機呼吸有一點點移動，所以每格重量；外框只含印本身（`SEAL_WORLD_SIZE` 見方），不含光暈。
+   */
+  getSealRect(): Box | null;
   /** 只動相機與 render target，不重建模擬、不動姿勢。 */
   resize(w: number, h: number): void;
   /** 重建 GPGPU（同一個 tier 也會重建）；保留目前姿勢。 */
@@ -106,6 +114,8 @@ export interface QiDebug {
   feedFrameTime(ms: number): void;
   /** 人物本地座標的一點在螢幕上的位置（CSS 像素，與滑鼠座標同一個空間）；測試用來知道人形在哪裡。 */
   project(x: number, y: number, z: number): { x: number; y: number };
+  /** 同 `QiStage.getSealRect`（正式頁在 `stage.getSealRect()`；`?qi-debug=1` 才多這一個，e2e 用）。 */
+  sealRect(): Box | null;
 }
 
 /** 一個姿勢展開後的目標：貼圖給 GPU，原始資料留給讀回比對。 */
@@ -126,6 +136,13 @@ const LANDING_BURST: Burst = { dir: [0, -1, 0], power: 0.9, mode: 2, hold: 0 };
 const LANDING_SNAP = 0.5;
 /** 衝擊波只算到落地後這麼久（秒），之後地面回到平靜。 */
 const SHOCK_SECONDS = 3;
+/**
+ * 朱印算「聚合」的條件（`getSealRect`）：散開量不超過 `SEAL_SCATTER_MAX`，且姿勢是 `seal`，並且這樣持續了 `SEAL_SETTLE_S` 模擬秒。
+ * 光點從別的姿勢（或散開）飛回印上要一點時間：實測（min tier，彈簧與 tier 無關）從 flow 換成 seal，1.2 秒時光點與目標的平均距離
+ * 還有 0.2（印寬 1.6），2 秒時約 0.03、3 秒時 0.008。所以取 2 秒；e2e 在矩形出現的那一刻量 `meanError()` 把關。
+ */
+const SEAL_SCATTER_MAX = 0.1;
+const SEAL_SETTLE_S = 2;
 /** 人形的中心（讀回「往中心」用）。 */
 const CENTER = new Vector3(0, 1, 0);
 /** 手在畫面外（掌風碰不到任何光點）與靜止的速度。 */
@@ -224,6 +241,7 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
   let introExhaled = false;
   let introLanded = false;
   let introOnEnd: (() => void) | null = null; // `playIntro` 的 `onEnd`：這一次開場結束時呼叫一次
+  let sealCalm = 0; // 姿勢是 seal 且散開量夠低，已經持續幾模擬秒（`getSealRect` 的「聚合」條件）
   const impulse = { dir: new Vector3(), power: 0, mode: 0 };
   let pulses = 0;
   let virtualMs = 0;
@@ -277,6 +295,7 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
   };
 
   const apply = (next: PoseId, made: Target, burst: boolean): void => {
+    if (next !== pose) sealCalm = 0; // 換了姿勢：光點要重新飛一趟
     pose = next;
     target = made;
     if (sim) {
@@ -358,6 +377,7 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
   const advance = (dt: number, now: number): void => {
     if (!sim) return;
     time += dt;
+    sealCalm = pose === 'seal' && scatter <= SEAL_SCATTER_MAX ? sealCalm + dt : 0;
     const intro = stepIntro(dt);
     const snap = time < snapUntil;
     const forces = forcesFor({
@@ -402,6 +422,14 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
   if (!reducedMotion) rafId = requestAnimationFrame(frame);
 
   // ── 除錯（?qi-debug=1）─────────────────────────────────────────
+  /** 朱印的螢幕矩形；還沒聚合就 null（條件見 `QiStage.getSealRect`）。 */
+  const getSealRect = (): Box | null => {
+    if (disposed || pose !== 'seal' || !target || scatter > SEAL_SCATTER_MAX) return null;
+    if (sim && sealCalm < SEAL_SETTLE_S) return null; // 減少動態沒有模擬：光點直接在目標上
+    const half = SEAL_WORLD_SIZE / 2;
+    return stage.projectRect(-half, SEAL_CENTER_Y - half, SEAL_WORLD_SIZE, SEAL_WORLD_SIZE);
+  };
+
   const positions = (): Float32Array => (sim ? sim.readPositions() : (target?.data ?? new Float32Array(0)));
   const velocities = (): Float32Array => (sim ? sim.readVelocities() : new Float32Array(positions().length));
   const screen = { x: 0, y: 0 };
@@ -503,6 +531,7 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
       virtualMs += ms;
     },
     project: (x, y, z) => stage.project(x, y, z),
+    sealRect: getSealRect,
   };
 
   // ── WebGL context 中途遺失（RF5）──────────────────────────────────
@@ -580,6 +609,7 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
         },
       );
     },
+    getSealRect,
     resize(w, h) {
       if (disposed) return;
       cssWidth = Math.max(1, w);
