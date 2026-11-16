@@ -41,6 +41,8 @@ export async function checkDist(opts: { distDir: string; charsetFile: string; al
 
   const scan = await scanDist(distDir);
   assertHasHtml(scan, distDir);
+  // 有 .html 卻掃不到任何字，代表掃描壞了或頁面是空殼：不能把「沒有用字」當成「沒有缺字」而報綠燈（`fonts:subset` 有同樣的防線）
+  if (scan.chars.size === 0) throw new Error(`掃描 ${distDir} 得到 0 個字，無法判斷缺字：請確認建置有產出頁面內容`);
 
   const subset = parseCharList(charsetText);
   const allowed = parseCharList(await readOptional(allowedFile));

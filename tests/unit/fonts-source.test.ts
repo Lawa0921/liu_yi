@@ -1,9 +1,18 @@
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { rename } from 'node:fs/promises';
 import { zipSync } from 'fflate';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TWKAI_SOURCE, ensureSourceFont, extractEntry, sha256Hex } from '../../scripts/fonts/source';
+
+// 預設照原樣轉給真的 rename；個別測試用 mockRejectedValueOnce 模擬 Windows 上 rename 的暫時性失敗。
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return { ...actual, rename: vi.fn(actual.rename) };
+});
+
+const errnoError = (code: string) => Object.assign(new Error(`${code}: operation not permitted, rename`), { code });
 
 const enc = new TextEncoder();
 const ENTRY = 'TW-Kai.ttf';
@@ -71,6 +80,7 @@ describe('ensureSourceFont', () => {
   beforeEach(() => {
     tmp = mkdtempSync(join(tmpdir(), 'fonts-source-'));
     cacheDir = join(tmp, 'cache', 'fonts');
+    vi.mocked(rename).mockReset(); // 清掉呼叫紀錄，並回到「轉給真的 rename」
   });
 
   afterEach(() => {
@@ -167,6 +177,69 @@ describe('ensureSourceFont', () => {
     expect(a).toBe(b);
     expect(readdirSync(cacheDir)).toEqual([ENTRY]);
     expect(Buffer.from(readFileSync(a)).equals(Buffer.from(fakeTtf))).toBe(true);
+  });
+
+  // 原因（2026-11-17 在 Windows 上實測重現）：兩個呼叫各自驗證完、同時 rename 到同一個目標時，晚到的那個會拿到 EPERM
+  // （Windows 的 rename 蓋過正在被別人取代的檔會被拒）。實測約每 10 次並行有 1 次；單一呼叫 300 次 0 次。
+  // 所以這不是測試的偶發雜訊，是 ensureSourceFont 在並行下真的會失敗。
+  it('並行呼叫重複 30 回合：每一回合都成功（Windows 上 rename 同一目標會偶發 EPERM）', async () => {
+    const fetchEach = vi.fn<typeof fetch>(async () => new Response(buildZip({ [ENTRY]: fakeTtf }) as BlobPart));
+
+    for (let round = 0; round < 30; round++) {
+      const dir = join(tmp, `race-${round}`);
+      const [a, b] = await Promise.all([
+        ensureSourceFont({ cacheDir: dir, fetch: fetchEach, source: source() }),
+        ensureSourceFont({ cacheDir: dir, fetch: fetchEach, source: source() }),
+      ]);
+      expect(a).toBe(b);
+      expect(readdirSync(dir)).toEqual([ENTRY]);
+    }
+  });
+
+  it('rename 暫時被拒（EPERM）：稍後重試就成功，快取目錄只剩目標檔', async () => {
+    vi.mocked(rename).mockRejectedValueOnce(errnoError('EPERM')).mockRejectedValueOnce(errnoError('EBUSY'));
+    const fetchFake = fakeFetchOf(buildZip({ [ENTRY]: fakeTtf }));
+
+    const path = await ensureSourceFont({ cacheDir, fetch: fetchFake, source: source() });
+
+    expect(vi.mocked(rename)).toHaveBeenCalledTimes(3);
+    expect(readdirSync(cacheDir)).toEqual([ENTRY]);
+    expect(Buffer.from(readFileSync(path)).equals(Buffer.from(fakeTtf))).toBe(true);
+  });
+
+  it('rename 被拒、但並行的另一個呼叫已把驗證過的目標放好：視為成功，不重試也不丟錯', async () => {
+    const fetchFake = fakeFetchOf(buildZip({ [ENTRY]: fakeTtf }));
+    vi.mocked(rename).mockImplementationOnce(async () => {
+      // 這一刻另一個呼叫剛好把目標換好了
+      writeFileSync(join(cacheDir, ENTRY), fakeTtf);
+      throw errnoError('EPERM');
+    });
+
+    const path = await ensureSourceFont({ cacheDir, fetch: fetchFake, source: source() });
+
+    expect(vi.mocked(rename)).toHaveBeenCalledTimes(1);
+    expect(readdirSync(cacheDir)).toEqual([ENTRY]);
+    expect(Buffer.from(readFileSync(path)).equals(Buffer.from(fakeTtf))).toBe(true);
+  });
+
+  it('rename 一直被拒、目標也不存在：重試有上限，最後丟出原本的 EPERM，暫存檔不殘留', async () => {
+    vi.mocked(rename).mockRejectedValue(errnoError('EPERM'));
+    const fetchFake = fakeFetchOf(buildZip({ [ENTRY]: fakeTtf }));
+
+    await expect(ensureSourceFont({ cacheDir, fetch: fetchFake, source: source() })).rejects.toMatchObject({ code: 'EPERM' });
+    expect(vi.mocked(rename).mock.calls.length).toBeGreaterThan(1);
+    expect(vi.mocked(rename).mock.calls.length).toBeLessThanOrEqual(8);
+    expect(readdirSync(cacheDir)).toEqual([]);
+  });
+
+  it('EPERM 以外的 rename 錯誤不重試，直接丟出', async () => {
+    vi.mocked(rename).mockRejectedValueOnce(errnoError('ENOSPC'));
+    const fetchFake = fakeFetchOf(buildZip({ [ENTRY]: fakeTtf }));
+
+    await expect(ensureSourceFont({ cacheDir, fetch: fetchFake, source: source() })).rejects.toMatchObject({ code: 'ENOSPC' });
+
+    expect(vi.mocked(rename)).toHaveBeenCalledTimes(1);
+    expect(readdirSync(cacheDir)).toEqual([]);
   });
 
   it('zip 內缺目標檔時丟出含 entry 名稱的錯誤', async () => {

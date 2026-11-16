@@ -108,6 +108,19 @@ describe('checkDist', () => {
     await expect(checkDist({ distDir: dist, charsetFile })).rejects.toThrow(/\.html/);
   });
 
+  it('有 .html 但掃不到任何字就丟錯（不能對沒有用字的產物報綠燈）', async () => {
+    writePage('index.html', '');
+    writePage('courses/index.html', '   \n  ');
+
+    await expect(checkDist({ distDir: dist, charsetFile })).rejects.toThrow(/0 個字|沒有掃到任何字/);
+  });
+
+  it('只有一個字也算掃到：不丟錯', async () => {
+    writePage('index.html', '<p>六</p>');
+
+    await expect(checkDist({ distDir: dist, charsetFile })).resolves.toMatchObject({ ok: true });
+  });
+
   it('掃描失敗時錯誤訊息帶檔名（未知的 entity）', async () => {
     writePage('courses/index.html', '<p>&notanentity;</p>');
 

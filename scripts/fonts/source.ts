@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { unzipSync } from 'fflate';
 
 /**
@@ -40,6 +41,29 @@ async function readIfExists(path: string): Promise<Uint8Array | null> {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
     throw error;
+  }
+}
+
+const RENAME_RETRYABLE = new Set(['EPERM', 'EBUSY', 'EACCES']);
+const RENAME_ATTEMPTS = 5;
+
+/**
+ * 把已驗證的暫存檔換進快取路徑。Windows 上，兩個並行呼叫同時 rename 到同一個目標時，晚到的會拿到 EPERM
+ * （蓋過正在被別人取代的檔會被拒；防毒掃描剛寫好的檔也會有 EBUSY／EACCES）。這種失敗是暫時的：
+ * 目標已由並行的呼叫放好且雜湊相符就算成功；否則短暫等待後重試，仍失敗才把原本的錯誤丟出去。
+ */
+async function installVerified(temp: string, target: string, sha256: string): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await rename(temp, target);
+      return;
+    } catch (error) {
+      if (!RENAME_RETRYABLE.has((error as NodeJS.ErrnoException).code ?? '')) throw error;
+      const existing = await readIfExists(target).catch(() => null);
+      if (existing && sha256Hex(existing) === sha256) return;
+      if (attempt >= RENAME_ATTEMPTS) throw error;
+      await sleep(15 * 2 ** (attempt - 1));
+    }
   }
 }
 
@@ -87,7 +111,7 @@ export async function ensureSourceFont(opts: {
   const temp = `${target}.${process.pid}.${randomBytes(4).toString('hex')}.download`;
   try {
     await writeFile(temp, font);
-    await rename(temp, target);
+    await installVerified(temp, target, source.sha256);
   } finally {
     await rm(temp, { force: true });
   }
