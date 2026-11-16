@@ -4,11 +4,16 @@ node_modules/
 # build output
 dist/
 dist-root/
+dist-ph/
 .astro/
+
+# 剪影的臨時佔位檔（只給開發與版面檢查用；正式素材在 src/assets/silhouettes/）
+src/assets/_placeholder-silhouettes/
 
 # tests
 playwright-report/
 test-results/
+.vitest/
 
 # env / logs / OS
 .env

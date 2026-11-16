@@ -13,7 +13,8 @@ export default defineConfig({
   output: 'static',
   trailingSlash: 'always',
   build: { format: 'directory' },
-  integrations: [sitemap()],
+  // /lab/ 底下是給業主看方向的拋棄式試作，不進 sitemap。
+  integrations: [sitemap({ filter: (page) => !page.includes('/lab/') })],
   image: {
     // <Image>／<Picture> 預設輸出 srcset 與 sizes；原圖最大 4080px，不會原尺寸輸出。
     layout: 'constrained',
