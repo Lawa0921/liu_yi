@@ -20,26 +20,57 @@ type W = { __qiStage: QiStage & { debug: Debug } };
  */
 declare function stageOf(): QiStage & { debug: Debug };
 
-const errors = new WeakMap<Page, string[]>();
+interface Seen {
+  errors: string[];
+  warnings: string[];
+  /** 預期會出現的 warning（模擬沒有某個擴充的裝置時，three 會自己印「extension not supported」）。 */
+  expected: RegExp[];
+}
+const seenBy = new WeakMap<Page, Seen>();
 
-async function open(page: Page, url = HARNESS): Promise<void> {
-  const seen: string[] = [];
-  errors.set(page, seen);
-  page.on('pageerror', (error) => seen.push(`pageerror: ${error}`));
+interface OpenOptions {
+  /** 讓 `getContext('webgl2').getExtension(name)` 回 null 的擴充（模擬沒有這些擴充的裝置）。 */
+  blockExtensions?: string[];
+  /** 預期 harness 掛上 stage（ready）還是掛不上（error）。 */
+  expect?: 'ready' | 'error';
+}
+
+async function open(page: Page, url = HARNESS, options: OpenOptions = {}): Promise<void> {
+  const seen: Seen = { errors: [], warnings: [], expected: (options.blockExtensions ?? []).map((name) => new RegExp(`${name} extension not supported`)) };
+  seenBy.set(page, seen);
+  page.on('pageerror', (error) => seen.errors.push(`pageerror: ${error}`));
   page.on('console', (message) => {
-    if (message.type() === 'error') seen.push(`console.error: ${message.text()}`);
+    if (message.type() === 'error') seen.errors.push(`console.error: ${message.text()}`);
+    if (message.type() === 'warning') seen.warnings.push(`console.warning: ${message.text()}`);
   });
   await page.addInitScript(() => {
     (window as unknown as { stageOf: () => unknown }).stageOf = () => (window as unknown as W).__qiStage;
   });
+  if (options.blockExtensions?.length) {
+    await page.addInitScript((blocked) => {
+      const proto = WebGL2RenderingContext.prototype as unknown as { getExtension(name: string): unknown };
+      const original = proto.getExtension;
+      proto.getExtension = function (this: WebGL2RenderingContext, name: string) {
+        return blocked.includes(name) ? null : original.call(this, name);
+      };
+    }, options.blockExtensions);
+  }
   await page.clock.install({ time: T0 });
   await page.goto(url);
-  await expect(page.locator('html')).toHaveAttribute('data-harness', 'ready', READY);
+  await expect(page.locator('html')).toHaveAttribute('data-harness', options.expect ?? 'ready', READY);
   await page.clock.pauseAt(T1);
 }
 
+/** Chromium 在 debug 讀回像素時印的效能提示（warning）；已知的雜訊，其餘 warning 一律不允許。 */
+const KNOWN_WARNING = /GPU stall due to ReadPixels/;
+
 test.afterEach(async ({ page }) => {
-  expect(errors.get(page) ?? [], '頁面全程不得有 pageerror 或 console.error').toEqual([]);
+  const seen = seenBy.get(page) ?? { errors: [], warnings: [], expected: [] };
+  expect(seen.errors, '頁面全程不得有 pageerror 或 console.error').toEqual([]);
+  expect(
+    seen.warnings.filter((w) => !KNOWN_WARNING.test(w) && !seen.expected.some((re) => re.test(w))),
+    '頁面全程不得有 console.warning（已知的 ReadPixels 效能提示、與刻意封鎖的擴充相對應的 three 提示除外）',
+  ).toEqual([]);
 });
 
 const run = (page: Page, ms: number) => page.clock.runFor(ms);
@@ -49,6 +80,8 @@ const setPose = (page: Page, pose: Parameters<QiStage['setPose']>[0], burst?: bo
 const generation = (page: Page) => page.evaluate(() => stageOf().debug.simGeneration());
 const uniforms = (page: Page) => page.evaluate(() => stageOf().debug.uniforms());
 const snapshot = (page: Page) => page.evaluate(() => stageOf().debug.snapshot());
+const draws = (page: Page) => page.evaluate(() => stageOf().debug.draws());
+const resources = (page: Page) => page.evaluate(() => stageOf().debug.resources());
 
 test.describe('光點引擎核心（桌機，tier=min）', () => {
   test.use({ viewport: { width: 1280, height: 720 } });
@@ -119,6 +152,7 @@ test.describe('光點引擎核心（桌機，tier=min）', () => {
     await run(page, 500);
 
     const before = await generation(page);
+    const drawn = await draws(page);
     for (const [w, h] of [
       [1000, 700],
       [1280, 720],
@@ -129,6 +163,7 @@ test.describe('光點引擎核心（桌機，tier=min）', () => {
       await page.evaluate(([a, b]) => stageOf().resize(a, b), [w, h] as const);
     }
     expect(await generation(page)).toBe(before);
+    expect(await draws(page), '每次 resize 補畫一格（時鐘停住，沒有 rAF 的格）').toBe(drawn + 5);
 
     await page.evaluate(() => stageOf().setTier('min'));
     expect(await generation(page)).toBe(before + 1);
@@ -142,12 +177,13 @@ test.describe('光點引擎核心（桌機，tier=min）', () => {
     await setPose(page, 'kao');
     await run(page, 1500);
 
+    const drawn = await draws(page);
     await page.evaluate(() => stageOf().setTier('low')); // 112² → 144²
+    expect(await draws(page), 'setTier 重建清掉了緩衝，要立刻補畫一格（snapshot 自己會重畫，所以看計數）').toBe(drawn + 1);
     expect(await page.evaluate(() => stageOf().debug.tier())).toBe('low');
     expect(await page.evaluate(() => stageOf().debug.pose())).toBe('kao');
     expect(await meanError(page)).toBeLessThan(0.01); // 還沒推進任何一格，就已經在目標上
-    const shot = await snapshot(page); // 重建完立刻補畫，不是黑畫面
-    expect(shot.covered).toBeGreaterThanOrEqual(0.01);
+    expect((await snapshot(page)).covered).toBeGreaterThanOrEqual(0.01);
     await run(page, 1500);
     expect(await meanError(page)).toBeLessThan(0.05);
   });
@@ -156,8 +192,10 @@ test.describe('光點引擎核心（桌機，tier=min）', () => {
     await open(page);
     await setPose(page, 'land');
     await run(page, 2000);
+    const drawn = await draws(page);
     await page.evaluate(() => stageOf().resize(1100, 640));
-    const shot = await snapshot(page); // 沒有推進時間：看的是 resize 當下補畫的那一格
+    expect(await draws(page), 'resize 立刻補畫一格，不等下一個 rAF').toBe(drawn + 1);
+    const shot = await snapshot(page);
     expect(shot.width).toBe(1100);
     expect(shot.covered).toBeGreaterThanOrEqual(0.01);
     expect(await page.evaluate(() => stageOf().debug.pose())).toBe('land');
@@ -169,8 +207,10 @@ test.describe('光點引擎核心（桌機，tier=min）', () => {
     await run(page, 2000);
     expect(await meanError(page)).toBeLessThan(0.05);
     const before = await generation(page);
+    const drawn = await draws(page);
 
     await page.evaluate(() => stageOf().resize(700, 1000)); // 寬 → 窄：長槍變短、傾角變大
+    expect(await draws(page), '翻轉重展開目標也只補畫一格').toBe(drawn + 1);
     expect(await meanError(page)).toBeGreaterThan(0.2); // 目標換了，光點還在舊位置
     expect(await generation(page)).toBe(before);
     expect((await uniforms(page)).uImpulsePower).toBe(0);
@@ -325,6 +365,7 @@ test.describe('光暈（桌機級 tier=high）', () => {
     await setPose(page, 'land');
     await run(page, 1500);
     expect((await uniforms(page)).uPixelRatio).toBe(0.5); // DPR 1 × 場景 RT 的 1/2
+    expect((await uniforms(page)).glow).toBe(1);
     const shot = await snapshot(page);
     expect(shot.covered).toBeGreaterThan(0.06);
     expect(shot.bright).toBeGreaterThan(0.01);
@@ -340,21 +381,125 @@ test.describe('光暈（桌機級 tier=high）', () => {
 test.describe('減少動態（reducedMotion）', () => {
   test.use({ viewport: { width: 1280, height: 720 }, reducedMotion: 'reduce' });
 
-  test('不跑模擬、不排 rAF：姿勢直接畫在目標上，時間推進也不動', async ({ page }) => {
+  test('不跑模擬、不排 rAF：姿勢直接畫在目標上，狀態一變才補畫一格，時間推進也不動', async ({ page }) => {
     await open(page);
+    expect(await draws(page)).toBe(0); // 還沒有姿勢，沒有東西可畫
     await setPose(page, 'dingzhou');
-    const shot = await snapshot(page); // 沒有推進任何時間
+    expect(await draws(page), '換姿勢畫一格（沒有 rAF）').toBe(1);
+    const shot = await snapshot(page); // snapshot 自己會重畫一格
     expect(shot.covered).toBeGreaterThanOrEqual(0.01);
     expect(shot.bright).toBeGreaterThanOrEqual(0.0005);
     expect(await meanError(page)).toBe(0);
     await run(page, 1000);
+    expect(await draws(page), '時間推進不會有任何一格（沒有 rAF）').toBe(2);
     expect((await uniforms(page)).uTime).toBe(0);
 
     await setPose(page, 'kao'); // 換招直接換，沒有炸開
+    expect(await draws(page)).toBe(3);
     expect(await meanError(page)).toBe(0);
     await page.evaluate(() => stageOf().resize(900, 600));
-    expect((await snapshot(page)).covered).toBeGreaterThanOrEqual(0.01);
+    expect(await draws(page), 'resize 補畫一格').toBe(4);
     await page.evaluate(() => stageOf().setTier('low'));
+    expect(await draws(page), 'setTier 補畫一格').toBe(5);
     expect((await snapshot(page)).covered).toBeGreaterThanOrEqual(0.01);
+  });
+
+  test('光暈退路：連半精度的 render target 都沒有（兩個浮點擴充都不在）→ 退成不開光暈，不是黑畫面', async ({ page }) => {
+    await open(page, './lab/qi-harness/?qi-tier=high&qi-debug=1', { blockExtensions: ['EXT_color_buffer_float', 'EXT_color_buffer_half_float'] });
+    await setPose(page, 'land');
+    const u = await uniforms(page);
+    expect(u.glow).toBe(0);
+    expect(u.uPixelRatio).toBe(1); // 直接畫到螢幕，沒有半解析度的場景 RT
+    const shot = await snapshot(page);
+    expect(shot.covered).toBeGreaterThanOrEqual(0.01);
+    expect(shot.bright).toBeGreaterThanOrEqual(0.0005);
+  });
+
+  test('對照組：擴充都在時，同樣的設定會開光暈', async ({ page }) => {
+    await open(page, './lab/qi-harness/?qi-tier=high&qi-debug=1');
+    await setPose(page, 'land');
+    const u = await uniforms(page);
+    expect(u.glow).toBe(1);
+    expect(u.uPixelRatio).toBe(0.5);
+    expect((await snapshot(page)).covered).toBeGreaterThan(0.06);
+  });
+});
+
+test.describe('半精度退路（沒有 EXT_color_buffer_float 的裝置，例如部分 iOS）', () => {
+  test.use({ viewport: { width: 960, height: 600 } });
+  const NO_FLOAT = { blockExtensions: ['EXT_color_buffer_float'] };
+
+  test('tier=min（直接畫）：模擬跑在半精度 render target 上，仍聚成人形', async ({ page }) => {
+    await open(page, HARNESS, NO_FLOAT);
+    await setPose(page, 'land');
+    await run(page, 3000);
+    const u = await uniforms(page);
+    expect(u.floatTargets).toBe(0); // 真的走到半精度
+    expect(u.glow).toBe(0);
+    const shot = await snapshot(page);
+    expect(shot.covered).toBeGreaterThanOrEqual(0.01);
+    expect(shot.bright).toBeGreaterThanOrEqual(0.0005);
+    expect(await meanError(page)).toBeLessThan(0.05); // 半精度讀回（16 位元轉 float）也量得到聚合
+  });
+
+  test('tier=mid（光暈）：半精度的模擬加半精度的光暈 RT 一起跑，不黑畫面', async ({ page }) => {
+    await open(page, './lab/qi-harness/?qi-tier=mid&qi-debug=1', NO_FLOAT);
+    await setPose(page, 'land');
+    await run(page, 3000);
+    const u = await uniforms(page);
+    expect(u.floatTargets).toBe(0);
+    expect(u.glow).toBe(1); // 半精度的 RT 仍可渲染（EXT_color_buffer_half_float），光暈照開
+    const shot = await snapshot(page);
+    expect(shot.covered).toBeGreaterThanOrEqual(0.01);
+  });
+
+  test('模擬需要浮點 render target：兩個擴充都沒有 → 掛載 reject（英文訊息），不留半個畫面', async ({ page }) => {
+    await open(page, HARNESS, { blockExtensions: ['EXT_color_buffer_float', 'EXT_color_buffer_half_float'], expect: 'error' });
+    const seen = seenBy.get(page)!;
+    expect(seen.errors).toHaveLength(1);
+    expect(seen.errors[0]).toMatch(/EXT_color_buffer_float or EXT_color_buffer_half_float/);
+    seen.errors.length = 0; // 這是預期中的錯誤
+    expect(await page.evaluate(() => (window as unknown as { __qiStage?: unknown }).__qiStage)).toBeUndefined();
+  });
+});
+
+test.describe('資源不洩漏', () => {
+  test.use({ viewport: { width: 960, height: 600 } });
+
+  test('setTier 循環 10 次（min → low → min …）：貼圖、幾何、著色器程式的計數回到基線', async ({ page }) => {
+    await open(page);
+    await setPose(page, 'land');
+    // 暖機：兩種尺寸各走一遍並畫一格。著色器程式是第一次用到才編譯；而且 three 的 `GPUComputationRenderer.dispose()`
+    // 不會 dispose 它內部的 passThru 材質（`FullScreenQuad.dispose` 只丟幾何），所以每一種貼圖尺寸會留著一個小程式——
+    // 上限是 tier 的數量，不是隨重建次數增長。基線取在這之後。
+    for (const tier of ['low', 'min'] as const) {
+      await page.evaluate((t) => stageOf().setTier(t), tier);
+      await run(page, 100);
+    }
+    const base = await resources(page);
+    expect(base.textures).toBeGreaterThan(0);
+    const generationBefore = await generation(page);
+
+    for (let i = 0; i < 10; i++) {
+      await page.evaluate((tier) => stageOf().setTier(tier), (i % 2 === 0 ? 'low' : 'min') as 'low' | 'min');
+    }
+    expect(await generation(page)).toBe(generationBefore + 10);
+    expect(await page.evaluate(() => stageOf().debug.tier())).toBe('min');
+    await run(page, 100);
+    expect(await resources(page)).toEqual(base);
+    await run(page, 1500); // 重建後仍正常運轉
+    expect(await meanError(page)).toBeLessThan(0.05);
+  });
+
+  test('開關光暈的循環（min → mid → min）：光暈的 RT 也有釋放', async ({ page }) => {
+    await open(page);
+    await setPose(page, 'land');
+    for (const tier of ['mid', 'min'] as const) await page.evaluate((t) => stageOf().setTier(t), tier); // 暖機：第一次會編出光暈的著色器
+    const base = await resources(page);
+
+    for (let i = 0; i < 3; i++) {
+      for (const tier of ['mid', 'min'] as const) await page.evaluate((t) => stageOf().setTier(t), tier);
+    }
+    expect(await resources(page)).toEqual(base);
   });
 });

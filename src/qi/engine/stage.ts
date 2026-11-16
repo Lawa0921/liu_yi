@@ -25,6 +25,7 @@ import {
   type WebGLRenderer,
 } from 'three';
 import { rng } from '../shapes/rng';
+import { halfFloatTargets } from './caps';
 import { createGlow, type Glow } from './glow';
 import { GROUND, groundVertex } from './shaders/ground';
 import { POINT_PX, pointsFragment, pointsVertex } from './shaders/points';
@@ -49,7 +50,7 @@ export interface StageBuild {
   side: number;
   /** 低階：不畫倒影、地面光點較少、點稍大。 */
   lite: boolean;
-  /** 有光暈（桌機級）。 */
+  /** 要光暈（桌機級）。裝置不支援半精度 render target 時仍會退成不開。 */
   glow: boolean;
 }
 
@@ -163,8 +164,10 @@ export function createStage(renderer: WebGLRenderer, canvas: HTMLCanvasElement):
       releaseParticles();
       const { side, lite } = opts;
       const count = side * side;
-      glow.setEnabled(opts.glow);
-      renderer.setClearColor(opts.glow ? 0x000000 : BACKDROP_HEX, 1);
+      // 光暈的場景 RT 是半精度：兩個浮點 render target 擴充都沒有就退成不開光暈（直接畫到螢幕），不能黑畫面
+      const glowOn = opts.glow && halfFloatTargets(renderer);
+      glow.setEnabled(glowOn);
+      renderer.setClearColor(glowOn ? 0x000000 : BACKDROP_HEX, 1);
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, lite ? MAX_PIXEL_RATIO.lite : MAX_PIXEL_RATIO.rich));
       shared.uPx.value = lite ? POINT_PX.lite : POINT_PX.rich;
 
@@ -182,7 +185,7 @@ export function createStage(renderer: WebGLRenderer, canvas: HTMLCanvasElement):
       geometry.setAttribute('seed', new BufferAttribute(seeds, 1));
       disposables.push(geometry);
 
-      const defines = opts.glow ? {} : { QI_DIRECT: '' };
+      const defines = glowOn ? {} : { QI_DIRECT: '' };
       const material = (mirror: boolean): ShaderMaterial => {
         const m = new ShaderMaterial({
           uniforms: { ...shared, uMirror: { value: mirror ? 1 : 0 } },
@@ -303,6 +306,7 @@ export function createStage(renderer: WebGLRenderer, canvas: HTMLCanvasElement):
       for (const [name, uniform] of Object.entries(shared) as [string, IUniform][]) {
         if (typeof uniform.value === 'number') out[name] = uniform.value;
       }
+      out.glow = glow.sceneScale < 1 ? 1 : 0;
       return out;
     },
     dispose() {

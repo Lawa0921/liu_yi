@@ -17,6 +17,7 @@ import { SHAPES } from '../config/shapes';
 import { ambientField, expandTargets, flowTargets, weaponLayout, type AmbientField } from '../shapes/expand';
 import type { Shape } from '../shapes/format';
 import type { ShapeLoader } from '../shapes/loader';
+import { floatTargets } from './caps';
 import { forcesFor } from './forces';
 import { createPointer, type Pointer } from './pointer';
 import { createSim, zeroTexture, type Sim } from './sim';
@@ -72,6 +73,10 @@ export interface QiDebug {
   tier(): TierId;
   /** 目前的姿勢（還沒擺過是 null）。 */
   pose(): PoseId | null;
+  /** 到目前為止畫過幾格（每個 rAF 一格，加上 resize／setTier／減少動態換姿勢時的補畫，以及 `snapshot` 自己的重畫）。 */
+  draws(): number;
+  /** three 的資源計數（`renderer.info`）：貼圖、幾何、著色器程式。重建 tier 後要回到基線，不能洩漏。 */
+  resources(): { textures: number; geometries: number; programs: number };
   /** 以內部虛擬時間餵調速器（不依賴 rAF）。Task 17 在這裡接上 `createGovernor`；目前只累計虛擬時間（`uniforms().virtualTimeMs`）。 */
   feedFrameTime(ms: number): void;
   /** 人物本地座標的一點在螢幕上的位置（CSS 像素，與滑鼠座標同一個空間）；測試用來知道人形在哪裡。 */
@@ -198,17 +203,22 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
     return made;
   };
 
+  let draws = 0;
   /** 畫一格（綁上最新的位置與速度貼圖）。不推進模擬。 */
   const draw = (): void => {
     if (sim) stage.bind(sim.positionTexture(), sim.velocityTexture());
     else if (target && zero) stage.bind(target.texture, zero);
     stage.render();
+    draws++;
   };
 
-  /** 減少動態沒有 rAF：狀態一變就畫一格。 */
-  const drawStatic = (): void => {
+  /**
+   * 狀態變了（改畫布大小、重建 tier、減少動態換姿勢）而緩衝被清掉：立刻補畫一格，不等下一個 rAF（手機網址列伸縮時不閃）。
+   * 減少動態沒有 rAF，鏡頭也不動，所以先把鏡頭擺到定位。還沒有姿勢時沒有東西可畫。
+   */
+  const redraw = (): void => {
     if (!target) return;
-    stage.update(0, 0, { idle: true, nx: 0, ny: 0 }, false);
+    if (reducedMotion) stage.update(0, 0, { idle: true, nx: 0, ny: 0 }, false);
     draw();
   };
 
@@ -224,7 +234,6 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
       if (burst) fire(BURSTS[next]);
     }
     stage.setVisible(true);
-    if (reducedMotion) drawStatic();
   };
 
   stage.setSize(cssWidth, cssHeight);
@@ -349,12 +358,19 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
       uScatter: scatter,
       uScrollSpeed: scrollSpeed,
       uTime: time,
+      floatTargets: floatTargets(renderer) ? 1 : 0, // 0 ＝ 模擬退回半精度的 render target
       virtualTimeMs: virtualMs,
     }),
     pulseCount: () => pulses,
     simGeneration: () => generation,
     tier: () => tier,
     pose: () => pose,
+    draws: () => draws,
+    resources: () => ({
+      textures: renderer.info.memory.textures,
+      geometries: renderer.info.memory.geometries,
+      programs: renderer.info.programs?.length ?? 0,
+    }),
     feedFrameTime(ms) {
       virtualMs += ms;
     },
@@ -370,6 +386,7 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
       if (next !== 'flow' && !shapes.has(next)) shapes.set(next, await loader.load(next));
       if (disposed || token !== poseToken) return; // 載入途中被新的呼叫取代：以最後一次為準
       apply(next, makeTarget(next), opts?.burst ?? true);
+      if (reducedMotion) redraw(); // 沒有 rAF：換了姿勢就畫一格（有 rAF 時下一格自然會畫）
     },
     setScatter(v) {
       scatter = clamp(finiteOr(v, 0), 0, 1);
@@ -397,21 +414,15 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
         }
         if (pose && SHAPES[pose]?.kind === 'weapon') apply(pose, makeTarget(pose), false);
       }
-      // 改了畫布大小，緩衝會被清掉：立刻補畫一格，不等下一個 rAF（手機網址列伸縮時不閃）
-      if (target) {
-        if (reducedMotion) drawStatic();
-        else draw();
-      }
+      redraw(); // 改了畫布大小，緩衝被清掉
     },
     async setTier(next) {
       if (!Object.hasOwn(TIERS, next)) throw new RangeError(`Unknown tier: ${String(next)}`);
       if (disposed) return;
       tier = next;
       rebuild();
-      if (pose) {
-        apply(pose, makeTarget(pose), false); // 形體已載入過；光點直接落在目標上
-        if (!reducedMotion) draw(); // 重建清掉了緩衝：立刻補畫一格，不等下一個 rAF
-      }
+      if (pose) apply(pose, makeTarget(pose), false); // 形體已載入過；光點直接落在目標上
+      redraw(); // 重建清掉了緩衝
     },
     dispose() {
       if (disposed) return;

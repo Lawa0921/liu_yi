@@ -10,7 +10,7 @@ import { charsFromJs } from '../../scripts/fonts/charset';
  * `src/qi/` 的引擎、形體、設定模組會被打進首頁的引擎 chunk，所以它們的程式碼（錯誤訊息、著色器字串等）不得含 CJK；
  * 註解在轉譯時會移除，仍可寫中文。
  *
- * 檔案清單用目錄 glob 取得（遞迴、含 `engine/shaders/`），新增檔案自動納入，不必回來改這份測試。
+ * 檔案清單用目錄 glob 取得（遞迴掃整個 `src/qi`，含 `engine/shaders/`），新增檔案或子目錄自動納入，不必回來改這份測試。
  * 轉譯成 JS（移除註解）後，用守門本身的 `charsFromJs` 掃，與建置守門同一把尺。
  *
  * 唯一的例外是「只在 Node 建置腳本跑」的取樣模組（錯誤訊息是中文）：它們不得被 `src/` 內任何檔案 import，
@@ -18,7 +18,9 @@ import { charsFromJs } from '../../scripts/fonts/charset';
  * 不再含 CJK 了（已改英文）也會紅燈，提醒把它移出清單。
  */
 const root = fileURLToPath(new URL('../../', import.meta.url));
-const DIRS = ['src/qi/engine', 'src/qi/shapes', 'src/qi/config'];
+/** 整個 `src/qi`（遞迴）：之後新增的子目錄也自動納入。 */
+const ROOT_DIR = 'src/qi';
+const EXPECTED_SUBDIRS = ['src/qi/engine', 'src/qi/engine/shaders', 'src/qi/shapes', 'src/qi/config'];
 
 /** 只給 `scripts/qi/*` 的 Node 建置腳本與單元測試用的取樣模組。 */
 const NODE_ONLY = [
@@ -39,7 +41,7 @@ function filesUnder(dir: string, accept: (name: string) => boolean): string[] {
 }
 
 const isTs = (name: string): boolean => name.endsWith('.ts') && !name.endsWith('.d.ts');
-const FILES = DIRS.flatMap((dir) => filesUnder(dir, isTs)).sort();
+const FILES = filesUnder(ROOT_DIR, isTs).sort();
 
 /** 轉譯成 JS（移除註解）後取出會被字型守門掃到的 CJK 字。 */
 function cjkInCode(file: string): string[] {
@@ -50,7 +52,7 @@ function cjkInCode(file: string): string[] {
 
 describe('src/qi：程式碼字串不含 CJK（D3 字型守門）', () => {
   it('目錄 glob 找得到檔案（防止路徑改名後測試變成空轉），含遞迴的子目錄', () => {
-    for (const dir of DIRS) expect(FILES.filter((f) => f.startsWith(`${dir}/`)).length, dir).toBeGreaterThan(0);
+    for (const dir of EXPECTED_SUBDIRS) expect(FILES.filter((f) => f.startsWith(`${dir}/`)).length, dir).toBeGreaterThan(0);
     for (const file of ['src/qi/shapes/loader.ts', 'src/qi/shapes/expand.ts', 'src/qi/engine/tiers.ts', 'src/qi/config/poses.ts']) {
       expect(FILES, file).toContain(file);
     }

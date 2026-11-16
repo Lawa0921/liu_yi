@@ -3,13 +3,15 @@
  * 每一格：速度著色器（彈簧、curl noise、掌風、換招衝量）→ 位置著色器（位置 += 速度 × dt）。
  *
  * 一個 `Sim` 對應一個 tier 的貼圖尺寸（`side × side` 顆光點）；換 tier 就丟掉舊的、建新的（`dispose`），
- * 兩者共用同一個 `WebGLRenderer`。沒有 `EXT_color_buffer_float` 的裝置退回 HalfFloat（精度較差，仍能跑）。
+ * 兩者共用同一個 `WebGLRenderer`。沒有 `EXT_color_buffer_float` 的裝置退回 HalfFloat（精度較差，仍能跑）；
+ * 連半精度的 render target 都沒有就丟錯（呼叫端退回靜態圖）。
  * 注意：會被打進引擎 chunk，所以錯誤訊息只用英文。
  */
 
-import { DataTexture, FloatType, HalfFloatType, RGBAFormat, Vector3, Vector4, type IUniform, type Texture, type WebGLRenderer } from 'three';
+import { DataTexture, DataUtils, FloatType, HalfFloatType, RGBAFormat, Vector3, Vector4, type IUniform, type Texture, type WebGLRenderer } from 'three';
 import { GPUComputationRenderer, type Variable } from 'three/addons/misc/GPUComputationRenderer.js';
 import { rng } from '../shapes/rng';
+import { floatTargets, halfFloatTargets } from './caps';
 import { positionShader } from './shaders/position';
 import { HAND_RADIUS, IMPULSE_CENTER, velocityShader } from './shaders/velocity';
 
@@ -39,7 +41,7 @@ export interface Sim {
   /** 把所有光點直接擺到目標的位置、速度歸零（第一次出現與重建 tier 時用，沒有飛行過程）。 */
   place(target: Texture): void;
   step(frame: SimFrame): void;
-  /** 除錯讀回（同步，會等 GPU）：`side × side × 4` 的 RGBA。只支援 FloatType 的 render target。 */
+  /** 除錯讀回（同步，會等 GPU）：`side × side × 4` 的 RGBA（半精度的 render target 會先轉成 float）。 */
   readPositions(): Float32Array;
   readVelocities(): Float32Array;
   /** 目前的 uniform（數值型）。 */
@@ -56,8 +58,9 @@ export function zeroTexture(side: number): DataTexture {
 
 export function createSim(renderer: WebGLRenderer, side: number): Sim {
   const count = side * side;
+  if (!halfFloatTargets(renderer)) throw new Error('GPGPU needs a float render target (EXT_color_buffer_float or EXT_color_buffer_half_float)');
   const gpu = new GPUComputationRenderer(side, side, renderer);
-  const useFloat = renderer.extensions.has('EXT_color_buffer_float');
+  const useFloat = floatTargets(renderer);
   if (!useFloat) gpu.setDataType(HalfFloatType);
 
   const pos0 = gpu.createTexture();
@@ -110,12 +113,20 @@ export function createSim(renderer: WebGLRenderer, side: number): Sim {
   }
 
   const zero = zeroTexture(side);
-  const readBuffer = new Float32Array(count * 4);
 
   const read = (variable: Variable): Float32Array => {
-    if (!useFloat) throw new Error('Readback needs float render targets (EXT_color_buffer_float)');
-    renderer.readRenderTargetPixels(gpu.getCurrentRenderTarget(variable), 0, 0, side, side, readBuffer);
-    return readBuffer.slice();
+    const rt = gpu.getCurrentRenderTarget(variable);
+    if (useFloat) {
+      const out = new Float32Array(count * 4);
+      renderer.readRenderTargetPixels(rt, 0, 0, side, side, out);
+      return out;
+    }
+    // 半精度的 render target 讀回是 16 位元的位元樣式，要轉成 float
+    const raw = new Uint16Array(count * 4);
+    renderer.readRenderTargetPixels(rt, 0, 0, side, side, raw);
+    const out = new Float32Array(raw.length);
+    for (let i = 0; i < raw.length; i++) out[i] = DataUtils.fromHalfFloat(raw[i]!);
+    return out;
   };
 
   return {
