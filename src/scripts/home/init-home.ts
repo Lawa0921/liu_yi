@@ -217,14 +217,24 @@ export async function initHome(): Promise<void> {
   };
 
   // ── 朱印（Task 21）─────────────────────────────────────────────
-  // 預約段的印是畫在光點裡的；`.seal-hit` 是蓋在印上的透明連結，只有引擎量得到印（光點聚合之後，`getSealRect()` 非 null）才定位並顯示，
-  // 之前、以及捲離預約段之後都不可點（home.css：`display: none`，不是一塊空白的隱形按鈕）。位置寫成 CSS 變數、取整數像素，值沒變不寫。
+  // 預約段的印是畫在光點裡的；`.seal-hit` 是蓋在印上的透明連結，只有引擎量得到印（光點聚合之後，`getSealRect()` 非 null）、
+  // 而且整個印的矩形在垂直方向落在預約段（`.beat--booking`）之內才定位並顯示；之前、以及離開預約段之後都不可點
+  // （home.css：`display: none`，不是一塊空白的隱形按鈕）。位置寫成 CSS 變數、取整數像素，值沒變不寫。
+  // 為什麼要自己判斷「在預約段內」：頁尾在 main 外面，捲過最後一個 beat 後 scatter 恆為 0、姿勢仍是 seal，引擎照樣量得到印；
+  // 但畫布是 fixed 的，`.seal-hit` 若留著就會蓋在頁尾的 QR 與「用 LINE 加入」上，把一般連結變成開 #line-dialog。
   // 退回靜態圖後 home.css 改用另一組規則（對齊靜態圖），這些變數就沒人讀了。
   const sealHit = document.querySelector<HTMLElement>('.seal-hit');
+  const bookingBeat = document.querySelector<HTMLElement>('.beat--booking');
   let sealKey = '';
   const placeSeal = (): void => {
     if (!sealHit) return;
-    const rect = stage.getSealRect();
+    let rect = stage.getSealRect();
+    if (rect && bookingBeat) {
+      const section = bookingBeat.getBoundingClientRect();
+      if (rect.y < section.top || rect.y + rect.h > section.bottom) rect = null; // 印不是整個在預約段內（含頁尾）
+    } else {
+      rect = null; // 沒有預約段就沒有地方可放
+    }
     const key = rect ? [rect.x, rect.y, rect.w, rect.h].map(Math.round).join(',') : '';
     if (key === sealKey) return;
     sealKey = key;

@@ -513,6 +513,13 @@ const rectOf = (page: Page, selector: string): Promise<Rect> =>
     const r = el.getBoundingClientRect();
     return { x: r.left, y: r.top, w: r.width, h: r.height };
   });
+/** 捲到預約段並等光點聚成印。形體載入是真實時間、聚合是假時鐘的模擬時間：先等姿勢換成 seal（載入完成），再推進時鐘。 */
+async function settleOnSeal(page: Page): Promise<void> {
+  await scrollToBeat(page, 'booking');
+  await run(page, 100);
+  await expect(html(page)).toHaveAttribute('data-qi-pose', 'seal');
+  await run(page, 3000);
+}
 const overlap = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 
 for (const device of SEAL_DEVICES) {
@@ -582,8 +589,7 @@ for (const device of SEAL_DEVICES) {
 
     test('點朱印（.seal-hit 的中心）開啟 LINE 視窗，Esc 關閉', async ({ page }) => {
       await open(page);
-      await scrollToBeat(page, 'booking');
-      await run(page, 3000);
+      await settleOnSeal(page);
       const rect = (await sealRect(page))!;
       expect(rect).not.toBeNull();
       await expect(page.locator(LINE_DIALOG)).toBeHidden();
@@ -617,7 +623,123 @@ for (const device of SEAL_DEVICES) {
       await page.keyboard.press('Tab');
       expect(await page.evaluate(() => document.activeElement?.classList.contains('seal-hit')), 'Tab 不會停在 .seal-hit').toBe(false);
     });
+
+    test('離開預約段（捲到頁尾）：.seal-hit 隱藏，不蓋住頁尾的「用 LINE 加入」（點它導向 LINE，不開 #line-dialog）', async ({ page, context }) => {
+      // 頁尾在 main 外面，捲過最後一個 beat 後 scatter 恆為 0、姿勢仍是 seal（引擎還認為印在），所以要靠 .seal-hit 自己判斷在不在預約段
+      await context.route(/^https:\/\/lin\.ee\//, (route) => route.abort()); // 不真的連出去
+      await open(page);
+      await settleOnSeal(page);
+      await expect(page.locator('.seal-hit'), '前提：在預約段可點').toBeVisible();
+
+      await scrollToY(page, await page.evaluate(() => document.documentElement.scrollHeight));
+      await run(page, 300);
+      await expect(html(page), '前提：姿勢仍是 seal（問題就出在這裡）').toHaveAttribute('data-qi-pose', 'seal');
+      expect(await sealRect(page), '前提：引擎仍量得到印').not.toBeNull();
+      await expect(page.locator('.seal-hit')).toBeHidden();
+
+      const link = page.locator('footer #line').getByRole('link', { name: '用 LINE 加入' });
+      await expect(link).toBeInViewport();
+      const onTop = await link.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) === el;
+      });
+      expect(onTop, '連結中心最上層的元素就是連結本身').toBe(true);
+
+      const opened = context.waitForEvent('page');
+      await link.click();
+      const popup = await opened; // 預設動作照常：新分頁開 LINE（上面把請求擋掉了）
+      await popup.close();
+      await expect(page.locator(LINE_DIALOG)).toBeHidden();
+    });
+
+    test('印只有整個落在預約段內才可點：預約段的下緣捲到印的中央時隱藏，捲回來又出現', async ({ page }) => {
+      await open(page);
+      await settleOnSeal(page);
+      const hit = page.locator('.seal-hit');
+      await expect(hit).toBeVisible();
+      const home = await page.evaluate(() => window.scrollY);
+
+      const toCenter = await page.evaluate(() => {
+        const rect = (window as unknown as W).__qi.debug.sealRect()!;
+        return document.querySelector('.beat--booking')!.getBoundingClientRect().bottom - (rect.y + rect.h / 2);
+      });
+      await scrollToY(page, home + toCenter);
+      await run(page, 100);
+      await expect(hit, '預約段只剩上半（印的下半已在頁尾上）').toBeHidden();
+
+      await scrollToY(page, home);
+      await run(page, 100);
+      await expect(hit).toBeVisible();
+    });
   });
+}
+
+/** 沒有 WebGL 的裝置：任何 webgl／webgl2 的 getContext 都回 null（同 home-fallback.spec）。 */
+const blockWebGL = (page: Page) =>
+  page.addInitScript(() => {
+    const original = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, type: string, ...rest: unknown[]) {
+      if (/webgl/i.test(type)) return null;
+      return (original as (...args: unknown[]) => unknown).call(this, type, ...rest);
+    } as typeof original;
+  });
+
+/**
+ * 靜態圖模式（減少動態、沒有 WebGL 共用；呼叫前要已經 goto 首頁）：朱印靜態圖可見；.seal-hit 對齊圖上的印（量圖上的紅色外框）；
+ * 點它與按鈕都開得了視窗。
+ */
+async function expectStaticSeal(page: Page, reason: 'reduced-motion' | 'no-webgl'): Promise<void> {
+  await expect(html(page)).toHaveAttribute('data-qi-mode', 'static');
+  await expect(html(page)).toHaveAttribute('data-qi-reason', reason);
+  const still = page.locator('#booking .beat__still');
+  await still.scrollIntoViewIfNeeded();
+  await expect(still).toBeVisible();
+  await expect.poll(() => still.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBeGreaterThan(0);
+
+  // 印在圖上的位置：紅色像素的外框，換算成頁面座標（object-fit: contain）
+  const mark = await still.evaluate((img: HTMLImageElement) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(img, 0, 0);
+    const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    let [x0, y0, x1, y1] = [canvas.width, canvas.height, -1, -1];
+    for (let y = 0; y < canvas.height; y++) {
+      for (let x = 0; x < canvas.width; x++) {
+        const i = (y * canvas.width + x) * 4;
+        if (data[i]! > 110 && data[i + 1]! < 70 && data[i + 2]! < 70) {
+          x0 = Math.min(x0, x);
+          x1 = Math.max(x1, x);
+          y0 = Math.min(y0, y);
+          y1 = Math.max(y1, y);
+        }
+      }
+    }
+    const box = img.getBoundingClientRect();
+    const scale = Math.min(box.width / canvas.width, box.height / canvas.height);
+    const left = box.left + (box.width - canvas.width * scale) / 2;
+    const top = box.top + (box.height - canvas.height * scale) / 2;
+    return { x: left + x0 * scale, y: top + y0 * scale, w: (x1 - x0 + 1) * scale, h: (y1 - y0 + 1) * scale };
+  });
+  expect(mark.w, '圖上找得到朱紅的印').toBeGreaterThan(40);
+
+  const hit = page.locator('.seal-hit');
+  await expect(hit).toBeVisible();
+  const placed = await rectOf(page, '.seal-hit');
+  const slack = Math.max(4, mark.w * 0.04);
+  for (const key of ['x', 'y', 'w', 'h'] as const) expect(Math.abs(placed[key] - mark[key]), `.seal-hit ${key} 對齊靜態圖的印`).toBeLessThanOrEqual(slack);
+  expect(overlap(placed, await rectOf(page, BOOKING_BUTTON)), '.seal-hit 不壓到預約按鈕').toBe(false);
+
+  await hit.click();
+  await expect(page.locator(LINE_DIALOG)).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator(LINE_DIALOG)).toBeHidden();
+
+  await page.locator(BOOKING_BUTTON).click();
+  await expect(page.locator(LINE_DIALOG)).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator(LINE_DIALOG)).toBeHidden();
 }
 
 for (const device of SEAL_DEVICES) {
@@ -626,56 +748,18 @@ for (const device of SEAL_DEVICES) {
 
     test('朱印靜態圖可見；.seal-hit 對齊圖上的印（量圖上的紅色外框），點它與按鈕都開得了視窗', async ({ page }) => {
       await page.goto('./');
-      await expect(html(page)).toHaveAttribute('data-qi-mode', 'static');
-      const still = page.locator('#booking .beat__still');
-      await still.scrollIntoViewIfNeeded();
-      await expect(still).toBeVisible();
-      await expect.poll(() => still.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBeGreaterThan(0);
+      await expectStaticSeal(page, 'reduced-motion');
+    });
+  });
 
-      // 印在圖上的位置：紅色像素的外框，換算成頁面座標（object-fit: contain）
-      const mark = await still.evaluate((img: HTMLImageElement) => {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
-        const ctx = canvas.getContext('2d')!;
-        ctx.drawImage(img, 0, 0);
-        const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        let [x0, y0, x1, y1] = [canvas.width, canvas.height, -1, -1];
-        for (let y = 0; y < canvas.height; y++) {
-          for (let x = 0; x < canvas.width; x++) {
-            const i = (y * canvas.width + x) * 4;
-            if (data[i]! > 110 && data[i + 1]! < 70 && data[i + 2]! < 70) {
-              x0 = Math.min(x0, x);
-              x1 = Math.max(x1, x);
-              y0 = Math.min(y0, y);
-              y1 = Math.max(y1, y);
-            }
-          }
-        }
-        const box = img.getBoundingClientRect();
-        const scale = Math.min(box.width / canvas.width, box.height / canvas.height);
-        const left = box.left + (box.width - canvas.width * scale) / 2;
-        const top = box.top + (box.height - canvas.height * scale) / 2;
-        return { x: left + x0 * scale, y: top + y0 * scale, w: (x1 - x0 + 1) * scale, h: (y1 - y0 + 1) * scale };
-      });
-      expect(mark.w, '圖上找得到朱紅的印').toBeGreaterThan(40);
+  test.describe(`朱印預約（靜態圖：沒有 WebGL）：${device.name}`, () => {
+    test.use({ viewport: device.viewport });
 
-      const hit = page.locator('.seal-hit');
-      await expect(hit).toBeVisible();
-      const placed = await rectOf(page, '.seal-hit');
-      const slack = Math.max(4, mark.w * 0.04);
-      for (const key of ['x', 'y', 'w', 'h'] as const) expect(Math.abs(placed[key] - mark[key]), `.seal-hit ${key} 對齊靜態圖的印`).toBeLessThanOrEqual(slack);
-      expect(overlap(placed, await rectOf(page, BOOKING_BUTTON)), '.seal-hit 不壓到預約按鈕').toBe(false);
-
-      await hit.click();
-      await expect(page.locator(LINE_DIALOG)).toBeVisible();
-      await page.keyboard.press('Escape');
-      await expect(page.locator(LINE_DIALOG)).toBeHidden();
-
-      await page.locator(BOOKING_BUTTON).click();
-      await expect(page.locator(LINE_DIALOG)).toBeVisible();
-      await page.keyboard.press('Escape');
-      await expect(page.locator(LINE_DIALOG)).toBeHidden();
+    test('沒有 WebGL：html.qi-static、朱印靜態圖可見，.seal-hit 同樣對齊圖上的印，點它與按鈕都開得了視窗', async ({ page }) => {
+      await blockWebGL(page);
+      await page.goto('./');
+      await expect(html(page)).toHaveClass(/qi-static/);
+      await expectStaticSeal(page, 'no-webgl');
     });
   });
 }
