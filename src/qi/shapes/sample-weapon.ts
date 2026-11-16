@@ -6,13 +6,15 @@
  *     再依「全部頂點在長軸上的實際範圍」縮成長度 1 並置中。用實際範圍而不是 `tip − butt`：劍穗的結會比劍首多出約 2%，
  *     長度要把它算進去，非 AURA 點的 x 範圍才會剛好是 1。
  *   - 表面占 30%（SURFACE_SHARE）；其餘是貼著兵器的氣（kind = AURA）。
- *   - 每個零件（快照裡同一種 cls 只有一個零件）的點數 ∝ 面積^0.6 × 種類加權（鋼 ×1.8、銅 ×1、紅纓 ×1.6、暗色 ×1.4）。
- *     面積開 0.6 次方：刃面大、纓穗細，直接按面積分配穗會幾乎看不到。
+ *   - 每個零件（快照裡同一種 cls 只能有一個零件，重複會直接 throw）的點數 ∝ 面積^0.6 × 種類加權
+ *     （鋼 ×1.8、銅 ×1、紅纓 ×0.7、暗色 ×1.4）。面積開 0.6 次方：刃面大、纓穗細，直接按面積分配穗會幾乎看不到。
  *   - 補強（試作的兩個已知缺點）：
- *       纓穗（cls 4）權重由 0.5 提到 1.6，並保證至少占全部點的 3.5%（RED_MIN_SHARE），紅色才看得出來；
- *       暗色零件（cls 5：柄與桿）至少要有半徑 0.010（單位長度）的粗細：細桿（離長軸不到 0.010）的表面點改成
- *       在半徑 0.010 的垂直軸向圓盤內均勻散布，桿才看得出粗細；本來就比 0.010 粗的柄維持貼在表面。
- *       （散布是「取代」而不是「疊加」：大槍的桿半徑本身約 0.006，疊加上去離長軸的 p95 會到 0.014，桿會糊成一團。）
+ *       纓穗（cls 4）權重由 0.5 提到 0.7，並保證至少占全部點的 3.5%（RED_MIN_SHARE），紅色才看得出來。
+ *       大槍的纓（兩束共 0.35 m² 的細絲）面積大，權重 1.6 會讓紅點占到全部點的 14.9%、亮成一團；0.7 時大槍約 9%、
+ *       劍約 4.7%。保底只在自然占比低於 3.5% 時才會生效（真快照用不到，由合成快照的測試釘住）；
+ *       暗色零件（cls 5：柄與桿）至少要有半徑 0.0144（單位長度）的粗細：離長軸不到 0.0144 的表面點改成
+ *       在半徑 0.0144 的垂直軸向圓盤內均勻散布（p95 ≈ 0.0144 × √0.95 ≈ 0.014），桿才看得出粗細（大槍的桿本身半徑
+ *       只有約 0.006）；比這更粗的柄維持貼在表面。散布是「取代」而不是「疊加」，大槍的 p95 才會是 0.014 而不是更粗。
  *   - 其他零件的表面點只加一點點垂直軸向的散布（試作是 ±0.006／±0.02 世界單位，這裡按當時的兵器擺放長度換成單位長度），
  *     光點才不會全疊在同一條線上。沿長軸方向不加散布：全長要穩穩是 1。
  *   - 氣的延伸 0.03–0.35（試作的世界單位）同樣按擺放長度換成單位長度。
@@ -30,13 +32,13 @@ import type { WeaponPart, WeaponSnapshot } from './weapon-snapshot';
 const SURFACE_SHARE = 0.3;
 /** 面積權重的次方。 */
 const AREA_POWER = 0.6;
-/** 種類加權：鋼 ×1.8、暗色 ×1.4、銅 ×1、紅纓 ×1.6（試作是 0.5，補強）。 */
-const BOOST: Record<WeaponPart['cls'], number> = { 2: 1.8, 3: 1, 4: 1.6, 5: 1.4 };
+/** 種類加權：鋼 ×1.8、暗色 ×1.4、銅 ×1、紅纓 ×0.7（試作是 0.5；簡報的 1.6 會讓大槍的紅占 14.9%，裁定降到 8–10%）。 */
+const BOOST: Record<WeaponPart['cls'], number> = { 2: 1.8, 3: 1, 4: 0.7, 5: 1.4 };
 const KIND_OF: Record<WeaponPart['cls'], number> = { 2: KIND.STEEL, 3: KIND.BRASS, 4: KIND.RED, 5: KIND.DARK };
 /** 紅纓（cls 4）至少占全部點的這個比例（只要這件兵器有纓）。 */
 const RED_MIN_SHARE = 0.035;
-/** 暗色零件至少要有的粗細：垂直軸向的散布半徑（單位長度）。 */
-const DARK_SPREAD = 0.01;
+/** 暗色零件至少要有的粗細：垂直軸向的散布半徑（單位長度）；大槍的暗色點離長軸的 p95 因此約 0.014。 */
+const DARK_SPREAD = 0.0144;
 /** 試作擺放兵器時的全長（世界單位，寬螢幕）：把試作的世界單位數值換成單位長度用。 */
 const TRIAL_LENGTH: Record<WeaponSnapshot['name'], number> = { jian: 2.9, miaodao: 3.2, spear: 3.8 };
 /** 試作的表面散布（全寬，世界單位）：垂直軸向的刃寬方向 0.012、刃厚方向 0.04。 */
@@ -88,6 +90,11 @@ export function sampleWeapon(s: WeaponSnapshot, opts: { count: number; seed: num
   if (!Number.isInteger(count) || count < MIN_COUNT) throw new RangeError(`count 必須是 ≥ ${MIN_COUNT} 的整數：${count}`);
   if (!(s.tip > s.butt)) throw new RangeError(`快照的 tip（${s.tip}）必須大於 butt（${s.butt}）`);
   if (s.parts.length === 0) throw new RangeError('快照沒有零件');
+  const seen = new Set<number>();
+  for (const part of s.parts) {
+    if (seen.has(part.cls)) throw new RangeError(`快照有重複的 cls ${part.cls}：同一種 cls 只能有一個零件（面積權重以零件為單位，重複會讓配額失真）`);
+    seen.add(part.cls);
+  }
   const referenceLength = TRIAL_LENGTH[s.name];
 
   // 長軸上的實際範圍（含纓穗的結）

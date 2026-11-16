@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { decodeShape, encodeShape, KIND, SHAPE_COUNT, type Shape } from '../../src/qi/shapes/format';
 import { sampleWeapon } from '../../src/qi/shapes/sample-weapon';
-import { decodeSnapshot, type WeaponSnapshot } from '../../src/qi/shapes/weapon-snapshot';
+import { decodeSnapshot, type WeaponPart, type WeaponSnapshot } from '../../src/qi/shapes/weapon-snapshot';
 
 const NAMES = ['jian', 'miaodao', 'spear'] as const;
 const SEED: Record<(typeof NAMES)[number], number> = { jian: 301, miaodao: 302, spear: 303 };
@@ -42,6 +42,41 @@ function surfaceRange(shape: Shape, axis: number): [number, number] {
   }
   return [lo, hi];
 }
+
+/** 暗色點到長軸（y = z = 0）的距離。 */
+function darkDistances(shape: Shape): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < shape.count; i++) {
+    if (shape.kinds[i] === KIND.DARK) out.push(Math.hypot(shape.positions[i * 3 + 1]!, shape.positions[i * 3 + 2]!));
+  }
+  return out;
+}
+
+function percentile(values: number[], q: number): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length * q)]!;
+}
+
+/** 合成零件：沿 +Y 從 y0 到 y1 的圓管（半徑 radius），單位 = 長度 1 的兵器上的單位。 */
+function tube(cls: WeaponPart['cls'], radius: number, y0: number, y1: number, segments = 12): WeaponPart {
+  const positions = new Float32Array(segments * 2 * 3);
+  const indices: number[] = [];
+  for (let k = 0; k < segments; k++) {
+    const a = (k / segments) * Math.PI * 2;
+    positions.set([Math.cos(a) * radius, y0, Math.sin(a) * radius], k * 3);
+    positions.set([Math.cos(a) * radius, y1, Math.sin(a) * radius], (segments + k) * 3);
+    const next = (k + 1) % segments;
+    indices.push(k, next, segments + k, next, segments + next, segments + k);
+  }
+  return { cls, positions, indices: new Uint32Array(indices) };
+}
+
+/** 合成零件：一個三角形（頂點座標直接給）。 */
+function triangle(cls: WeaponPart['cls'], a: number[], b: number[], c: number[]): WeaponPart {
+  return { cls, positions: new Float32Array([...a, ...b, ...c]), indices: new Uint32Array([0, 1, 2]) };
+}
+
+const synthetic = (parts: WeaponPart[]): WeaponSnapshot => ({ name: 'spear', tip: 0.5, butt: -0.5, parts });
 
 describe.each(NAMES)('sampleWeapon（真快照）：%s', (name) => {
   const shape = shapes[name];
@@ -128,21 +163,16 @@ describe.each(NAMES)('sampleWeapon（真快照）：%s', (name) => {
 describe('sampleWeapon：大槍（補強桿身與紅纓）', () => {
   const spear = shapes.spear;
 
-  it('紅（KIND.RED）≥ 全部點的 3.5%，暗色（KIND.DARK，桿）≥ 10%', () => {
-    expect(share(spear, KIND.RED)).toBeGreaterThanOrEqual(0.035);
+  it('紅（KIND.RED）占全部點的 8–10%（看得出紅，又不會亮成一團），暗色（KIND.DARK，桿）≥ 10%', () => {
+    expect(share(spear, KIND.RED)).toBeGreaterThanOrEqual(0.08);
+    expect(share(spear, KIND.RED)).toBeLessThanOrEqual(0.1);
     expect(share(spear, KIND.DARK)).toBeGreaterThanOrEqual(0.1);
   });
 
-  it('桿身看得出粗細：暗色點到長軸的距離 p95 ∈ [0.005, 0.012]（單位長度）', () => {
-    const distances: number[] = [];
-    for (let i = 0; i < spear.count; i++) {
-      if (spear.kinds[i] !== KIND.DARK) continue;
-      distances.push(Math.hypot(spear.positions[i * 3 + 1]!, spear.positions[i * 3 + 2]!));
-    }
-    distances.sort((a, b) => a - b);
-    const p95 = distances[Math.floor(distances.length * 0.95)]!;
-    expect(p95).toBeGreaterThanOrEqual(0.005);
-    expect(p95).toBeLessThanOrEqual(0.012);
+  it('桿身看得出粗細：暗色點到長軸的距離 p95 ∈ [0.012, 0.018]（單位長度；真桿的半徑只有約 0.006）', () => {
+    const p95 = percentile(darkDistances(spear), 0.95);
+    expect(p95).toBeGreaterThanOrEqual(0.012);
+    expect(p95).toBeLessThanOrEqual(0.018);
   });
 
   it('桿身的散布沿整根桿都有（不是只在某一段）', () => {
@@ -177,5 +207,41 @@ describe('sampleWeapon：劍與纓穗朝下', () => {
 
   it('苗刀沒有纓：沒有紅點', () => {
     expect(shapes.miaodao.kinds.includes(KIND.RED)).toBe(false);
+  });
+});
+
+describe('sampleWeapon：合成快照（鎖住補強的行為）', () => {
+  it('細暗色圓柱（半徑 0.001）取樣後 p95 ∈ [0.012, 0.018]：細桿被加粗；拿掉加粗分支這條會紅', () => {
+    const shape = sampleWeapon(synthetic([tube(5, 0.001, -0.5, 0.5)]), { count: SHAPE_COUNT, seed: 7 });
+    const p95 = percentile(darkDistances(shape), 0.95);
+    expect(p95).toBeGreaterThanOrEqual(0.012);
+    expect(p95).toBeLessThanOrEqual(0.018);
+  });
+
+  it('本來就粗的暗色圓柱（半徑 0.03，比加粗的半徑粗）維持貼在表面，不被拉進圓盤', () => {
+    const shape = sampleWeapon(synthetic([tube(5, 0.03, -0.5, 0.5)]), { count: SHAPE_COUNT, seed: 7 });
+    const median = percentile(darkDistances(shape), 0.5);
+    expect(median).toBeGreaterThanOrEqual(0.028);
+    expect(median).toBeLessThanOrEqual(0.032);
+  });
+
+  it('紅纓保底：自然占比遠低於 3.5% 時，紅點仍有 ceil(3.5% × N) 個，表面點總數不變', () => {
+    // 鋼板（大面積）＋一個極小的紅三角形：照面積權重紅點只會有十幾個
+    const plate = tube(2, 0.05, -0.5, 0.5);
+    const tiny = triangle(4, [0, 0, 0], [0.01, 0, 0], [0, 0.01, 0]);
+    const shape = sampleWeapon(synthetic([plate, tiny]), { count: SHAPE_COUNT, seed: 7 });
+    let red = 0;
+    let aura = 0;
+    for (const k of shape.kinds) {
+      if (k === KIND.RED) red++;
+      if (k === KIND.AURA) aura++;
+    }
+    expect(red).toBe(Math.ceil(0.035 * SHAPE_COUNT));
+    expect(SHAPE_COUNT - aura).toBe(Math.round(0.3 * SHAPE_COUNT));
+  });
+
+  it('同一種 cls 有兩個零件就拒絕（面積權重以零件為單位，重複會讓配額失真）', () => {
+    const snapshot = synthetic([tube(2, 0.01, -0.5, 0), tube(2, 0.01, 0, 0.5)]);
+    expect(() => sampleWeapon(snapshot, { count: 1000, seed: 1 })).toThrow(/重複/);
   });
 });
