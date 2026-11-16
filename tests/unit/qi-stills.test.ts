@@ -1,0 +1,565 @@
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import sharp from 'sharp';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { qiAssets } from '../../integrations/qi-assets';
+import { buildAllShapes } from '../../scripts/qi/build-shapes';
+import { renderAllStills, renderStill } from '../../scripts/qi/render-stills';
+import { SHAPES } from '../../src/qi/config/shapes';
+import type { Shape } from '../../src/qi/shapes/format';
+import { rng } from '../../src/qi/shapes/rng';
+
+/** 讓測試能注入「清掉 .staging 失敗」（Windows 上檔案被別的程式鎖住時 rmSync 會丟 EBUSY／EPERM）。預設全部透傳。 */
+const inject = vi.hoisted(() => ({ stagingRmFails: false }));
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  return {
+    ...actual,
+    rmSync: (path: Parameters<typeof actual.rmSync>[0], options?: Parameters<typeof actual.rmSync>[1]) => {
+      if (inject.stagingRmFails && String(path).endsWith('.staging')) throw new Error('EBUSY: injected');
+      return actual.rmSync(path, options);
+    },
+  };
+});
+
+const ROOT = fileURLToPath(new URL('../../', import.meta.url));
+const IDS = Object.keys(SHAPES);
+const NAMES = ['hero-wide', 'hero-tall', ...IDS];
+const KB = 1024;
+
+const tmpDirs: string[] = [];
+const tmp = (): string => {
+  const dir = mkdtempSync(join(tmpdir(), 'qi-stills-'));
+  tmpDirs.push(dir);
+  return dir;
+};
+afterAll(() => {
+  for (const dir of tmpDirs) rmSync(dir, { recursive: true, force: true });
+});
+
+interface Raster {
+  data: Buffer;
+  width: number;
+  height: number;
+}
+
+async function decode(bytes: Uint8Array): Promise<Raster> {
+  const { data, info } = await sharp(bytes).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  expect(info.channels).toBe(3);
+  return { data, width: info.width, height: info.height };
+}
+const luma = (r: Raster, i: number): number => 0.2126 * r.data[i * 3]! + 0.7152 * r.data[i * 3 + 1]! + 0.0722 * r.data[i * 3 + 2]!;
+
+/** 全圖平均亮度（0–255）。 */
+function meanLuma(r: Raster): number {
+  let sum = 0;
+  for (let i = 0; i < r.width * r.height; i++) sum += luma(r, i);
+  return sum / (r.width * r.height);
+}
+
+/** 亮度高於 threshold 的像素占全圖的比例。 */
+function brightShare(r: Raster, threshold: number): number {
+  let n = 0;
+  for (let i = 0; i < r.width * r.height; i++) if (luma(r, i) > threshold) n++;
+  return n / (r.width * r.height);
+}
+
+/** 亮點（亮度 > threshold）的質心，座標正規化到 0–1。 */
+function brightCentroid(r: Raster, threshold: number): { x: number; y: number } {
+  let sx = 0;
+  let sy = 0;
+  let n = 0;
+  for (let y = 0; y < r.height; y++)
+    for (let x = 0; x < r.width; x++) {
+      if (luma(r, y * r.width + x) <= threshold) continue;
+      sx += x;
+      sy += y;
+      n++;
+    }
+  expect(n).toBeGreaterThan(0);
+  return { x: sx / n / r.width, y: sy / n / r.height };
+}
+
+/** 每一列、每一欄各有多少個亮度 > threshold 的像素。 */
+function litProfile(r: Raster, threshold: number): { rows: number[]; columns: number[] } {
+  const rows = new Array<number>(r.height).fill(0);
+  const columns = new Array<number>(r.width).fill(0);
+  for (let y = 0; y < r.height; y++)
+    for (let x = 0; x < r.width; x++)
+      if (luma(r, y * r.width + x) > threshold) {
+        rows[y]!++;
+        columns[x]!++;
+      }
+  return { rows, columns };
+}
+
+/** 一維剖面上「至少有 minCount 個亮點」的範圍（含頭尾）；沒有就回 undefined。零星的環境煙不到 minCount，所以不會把範圍撐大。 */
+function litSpan(profile: number[], minCount: number): { first: number; last: number } | undefined {
+  const first = profile.findIndex((n) => n >= minCount);
+  if (first < 0) return undefined;
+  let last = first;
+  for (let i = profile.length - 1; i > first; i--)
+    if (profile[i]! >= minCount) {
+      last = i;
+      break;
+    }
+  return { first, last };
+}
+
+/** 亮點（亮度 > threshold）的垂直範圍占影像高度的比例；每一列至少要有 3 個亮點才算（排除零星雜點）。 */
+function litHeightShare(r: Raster, threshold: number, minCount = 3): number {
+  const span = litSpan(litProfile(r, threshold).rows, minCount);
+  return span ? (span.last - span.first + 1) / r.height : 0;
+}
+
+/** 最外圈（四邊各 4%）的平均亮度：不得有滿版外發光。 */
+function borderLuma(r: Raster): number {
+  const bx = Math.round(r.width * 0.04);
+  const by = Math.round(r.height * 0.04);
+  let sum = 0;
+  let n = 0;
+  for (let y = 0; y < r.height; y++)
+    for (let x = 0; x < r.width; x++) {
+      if (x >= bx && x < r.width - bx && y >= by && y < r.height - by) continue;
+      sum += luma(r, y * r.width + x);
+      n++;
+    }
+  return sum / n;
+}
+
+/** 偏紅的亮像素數（紅纓、朱印用）：R 明顯高於 G 與 B。 */
+function redPixels(r: Raster): number {
+  let n = 0;
+  for (let i = 0; i < r.width * r.height; i++) {
+    const R = r.data[i * 3]!;
+    const G = r.data[i * 3 + 1]!;
+    const B = r.data[i * 3 + 2]!;
+    if (R >= 110 && R > G * 2.2 && R > B * 2.2) n++;
+  }
+  return n;
+}
+
+/** 合成圓盤：半徑 1、圓心在 (0.4, 1.3)（故意不在原點，驗證取景會置中）、均勻取樣。 */
+function disc(count = 3000): Shape {
+  const random = rng(7);
+  const positions = new Float32Array(count * 3);
+  const kinds = new Uint8Array(count).fill(30);
+  for (let i = 0; i < count; i++) {
+    const a = random() * Math.PI * 2;
+    const r = Math.sqrt(random());
+    positions[i * 3] = 0.4 + Math.cos(a) * r;
+    positions[i * 3 + 1] = 1.3 + Math.sin(a) * r;
+    positions[i * 3 + 2] = (random() - 0.5) * 0.2;
+  }
+  const min: [number, number, number] = [Infinity, Infinity, Infinity];
+  const max: [number, number, number] = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < count; i++)
+    for (let a = 0; a < 3; a++) {
+      min[a] = Math.min(min[a]!, positions[i * 3 + a]!);
+      max[a] = Math.max(max[a]!, positions[i * 3 + a]!);
+    }
+  return { count, positions, kinds, min, max };
+}
+
+describe('renderStill（合成圓盤）', () => {
+  const opts = { width: 1000, height: 750, seed: 11 };
+  let bytes: Uint8Array;
+  let raster: Raster;
+  beforeAll(async () => {
+    bytes = await renderStill(disc(), opts);
+    raster = await decode(bytes);
+  }, 60_000);
+
+  it('輸出是可被 sharp 解開的 WebP，尺寸與指定的一致', async () => {
+    const meta = await sharp(bytes).metadata();
+    expect(meta.format).toBe('webp');
+    expect(meta.width).toBe(1000);
+    expect(meta.height).toBe(750);
+  });
+
+  it('暗底：平均亮度在 3–60 之間；亮點（L > 120）占 0.5%–12%', () => {
+    const mean = meanLuma(raster);
+    expect(mean).toBeGreaterThanOrEqual(3);
+    expect(mean).toBeLessThanOrEqual(60);
+    const share = brightShare(raster, 120);
+    expect(share).toBeGreaterThanOrEqual(0.005);
+    expect(share).toBeLessThanOrEqual(0.12);
+  });
+
+  it('亮點質心落在影像中央 ±10%（形體不在原點也會被置中取景）', () => {
+    const c = brightCentroid(raster, 120);
+    expect(Math.abs(c.x - 0.5)).toBeLessThanOrEqual(0.1);
+    expect(Math.abs(c.y - 0.5)).toBeLessThanOrEqual(0.1);
+  });
+
+  it('同輸入逐位元相同；換種子輸出會變', async () => {
+    const again = await renderStill(disc(), opts);
+    expect(Buffer.from(again).equals(Buffer.from(bytes))).toBe(true);
+    const other = await renderStill(disc(), { ...opts, seed: 12 });
+    expect(Buffer.from(other).equals(Buffer.from(bytes))).toBe(false);
+  }, 60_000);
+
+  it('沒有滿版外發光：最外圈維持底色，glow 加大只讓亮度單調上升、仍不外溢到邊緣', async () => {
+    expect(borderLuma(raster)).toBeLessThan(18);
+    const dim = meanLuma(await decode(await renderStill(disc(), { ...opts, glow: 0 })));
+    const bright = meanLuma(await decode(await renderStill(disc(), { ...opts, glow: 2 })));
+    expect(dim).toBeLessThan(meanLuma(raster));
+    expect(meanLuma(raster)).toBeLessThan(bright);
+    expect(borderLuma(await decode(await renderStill(disc(), { ...opts, glow: 2 })))).toBeLessThan(22);
+  }, 60_000);
+
+  it('形體偏金：亮部的 R > G > B（金／米白，不是灰白或別的色相）', () => {
+    let r = 0;
+    let g = 0;
+    let b = 0;
+    let n = 0;
+    for (let i = 0; i < raster.width * raster.height; i++) {
+      if (luma(raster, i) <= 90) continue;
+      r += raster.data[i * 3]!;
+      g += raster.data[i * 3 + 1]!;
+      b += raster.data[i * 3 + 2]!;
+      n++;
+    }
+    expect(n).toBeGreaterThan(50);
+    expect(r / n).toBeGreaterThan(g / n);
+    expect(g / n).toBeGreaterThan(b / n);
+    expect((r - b) / r).toBeGreaterThan(0.15);
+  });
+
+  it('寬高、點數不合法就丟錯（不默默輸出空白圖）', async () => {
+    await expect(renderStill(disc(), { ...opts, width: 0 })).rejects.toThrow(/width/);
+    await expect(renderStill(disc(), { ...opts, height: 10.5 })).rejects.toThrow(/height/);
+    await expect(renderStill({ ...disc(), count: 0, positions: new Float32Array(0), kinds: new Uint8Array(0) }, opts)).rejects.toThrow(/count/);
+  });
+});
+
+/** 真資料：先建一份形體，再渲出全部靜態圖，供多個測試共用。 */
+const SHAPES_DIR = join(tmpdir(), `qi-stills-shapes-${process.pid}`);
+const STILLS_DIR = join(tmpdir(), `qi-stills-out-${process.pid}`);
+const rasters = new Map<string, Raster>();
+let manifest: Record<string, { width: number; height: number; bytes: number }>;
+beforeAll(async () => {
+  tmpDirs.push(SHAPES_DIR, STILLS_DIR);
+  await buildAllShapes({ root: ROOT, outDir: SHAPES_DIR });
+  await renderAllStills({ shapesDir: SHAPES_DIR, outDir: STILLS_DIR });
+  manifest = JSON.parse(readFileSync(join(STILLS_DIR, 'stills.json'), 'utf8'));
+  for (const name of NAMES) rasters.set(name, await decode(new Uint8Array(readFileSync(join(STILLS_DIR, `${name}.webp`)))));
+}, 240_000);
+
+const FIGURE_IDS = IDS.filter((id) => SHAPES[id]!.kind === 'figure');
+
+describe('renderAllStills：輸出與尺寸', () => {
+  it('恰有 hero-wide、hero-tall 與每個形體各一張 .webp，另有 stills.json、.inputs-hash，沒有殘檔', () => {
+    expect(readdirSync(STILLS_DIR).filter((f) => f.endsWith('.webp')).sort()).toEqual(NAMES.map((n) => `${n}.webp`).sort());
+    expect(existsSync(join(STILLS_DIR, 'stills.json'))).toBe(true);
+    expect(readFileSync(join(STILLS_DIR, '.inputs-hash'), 'utf8').trim()).toMatch(/^[0-9a-f]{64}$/);
+    expect(existsSync(join(STILLS_DIR, '.staging'))).toBe(false);
+    expect(readdirSync(STILLS_DIR).filter((f) => !f.endsWith('.webp')).sort()).toEqual(['.inputs-hash', 'stills.json']);
+  });
+
+  it('hero-wide 1440×810、hero-tall 780×1280、其餘每張 1000×750；stills.json 與實際檔案相符', async () => {
+    expect(Object.keys(manifest).sort()).toEqual([...NAMES].sort());
+    for (const name of NAMES) {
+      const [width, height] = name === 'hero-wide' ? [1440, 810] : name === 'hero-tall' ? [780, 1280] : [1000, 750];
+      const meta = await sharp(join(STILLS_DIR, `${name}.webp`)).metadata();
+      expect([meta.format, meta.width, meta.height], name).toEqual(['webp', width, height]);
+      expect(manifest[name], name).toEqual({ width, height, bytes: statSync(join(STILLS_DIR, `${name}.webp`)).size });
+    }
+  });
+
+  it('體積門檻：hero 兩張 ≤ 60 KB，其餘每張 ≤ 45 KB（不放寬門檻，超過就調 quality 或點徑）', () => {
+    for (const name of NAMES) {
+      const limit = name.startsWith('hero-') ? 60 * KB : 45 * KB;
+      expect(manifest[name]!.bytes, `${name}（上限 ${limit} B）`).toBeLessThanOrEqual(limit);
+    }
+  });
+});
+
+describe('renderAllStills：畫面品質（機械可驗的部分）', () => {
+  it('每張都是暗底、亮點占比合理（0.3%–25%）、最外圈維持底色（沒有滿版外發光）', () => {
+    for (const name of NAMES) {
+      const r = rasters.get(name)!;
+      const mean = meanLuma(r);
+      expect(mean, `${name} 平均亮度`).toBeGreaterThanOrEqual(8);
+      expect(mean, `${name} 平均亮度`).toBeLessThanOrEqual(60);
+      const share = brightShare(r, 120);
+      expect(share, `${name} 亮點占比`).toBeGreaterThanOrEqual(0.003);
+      expect(share, `${name} 亮點占比`).toBeLessThanOrEqual(0.25);
+      expect(borderLuma(r), `${name} 外圈`).toBeLessThan(18);
+    }
+  });
+
+  it('人形的亮部外框高度占影像 ≥ 60%（hero-wide ≥ 70%）', () => {
+    expect(litHeightShare(rasters.get('hero-wide')!, 60)).toBeGreaterThanOrEqual(0.7);
+    expect(litHeightShare(rasters.get('hero-tall')!, 60)).toBeGreaterThanOrEqual(0.6);
+    for (const id of FIGURE_IDS) expect(litHeightShare(rasters.get(id)!, 60), id).toBeGreaterThanOrEqual(0.6);
+  });
+
+  it('人形與兵器以金色為主（亮部 R > G > B）；人形幾乎沒有紅點，大槍的紅纓明顯是紅的', () => {
+    for (const name of [...FIGURE_IDS, 'jian', 'miaodao', 'spear', 'hero-wide', 'hero-tall']) {
+      const r = rasters.get(name)!;
+      let sr = 0;
+      let sg = 0;
+      let sb = 0;
+      let n = 0;
+      for (let i = 0; i < r.width * r.height; i++) {
+        if (luma(r, i) <= 90) continue;
+        sr += r.data[i * 3]!;
+        sg += r.data[i * 3 + 1]!;
+        sb += r.data[i * 3 + 2]!;
+        n++;
+      }
+      expect(n, `${name} 亮部像素`).toBeGreaterThan(100);
+      expect(sr / n, name).toBeGreaterThan(sg / n);
+      expect(sg / n, name).toBeGreaterThan(sb / n);
+    }
+    expect(redPixels(rasters.get('spear')!), 'spear 紅纓').toBeGreaterThan(300);
+    expect(redPixels(rasters.get('jian')!), 'jian 紅穗').toBeGreaterThan(300);
+    expect(redPixels(rasters.get('land')!), 'land 只有零星朱紅火星').toBeLessThan(redPixels(rasters.get('spear')!) / 2);
+    expect(redPixels(rasters.get('miaodao')!), 'miaodao 沒有紅').toBeLessThan(100);
+  });
+
+  it('朱印是朱紅色的（紅像素多，且亮部以紅為主，不是金色）', () => {
+    const seal = rasters.get('seal')!;
+    expect(redPixels(seal)).toBeGreaterThan(2000);
+    let red = 0;
+    let other = 0;
+    for (let i = 0; i < seal.width * seal.height; i++) {
+      if (luma(seal, i) <= 40) continue;
+      if (seal.data[i * 3]! > seal.data[i * 3 + 1]! * 1.8) red++;
+      else other++;
+    }
+    expect(red).toBeGreaterThan(other * 3);
+  });
+
+  it('朱印大致方正、置中：亮部外框寬高比 0.8–1.25，質心在中央 ±8%', () => {
+    const seal = rasters.get('seal')!;
+    const c = brightCentroid(seal, 50);
+    expect(Math.abs(c.x - 0.5)).toBeLessThan(0.08);
+    expect(Math.abs(c.y - 0.5)).toBeLessThan(0.08);
+    // 方印的邊框每一欄、每一列都有幾百個亮點；環境煙不到 30 個
+    const { rows, columns } = litProfile(seal, 50);
+    const across = litSpan(columns, 30)!;
+    const down = litSpan(rows, 30)!;
+    const aspect = (across.last - across.first + 1) / (down.last - down.first + 1);
+    expect(aspect).toBeGreaterThan(0.8);
+    expect(aspect).toBeLessThan(1.25);
+  });
+
+  it('兵器是橫放的長條：亮部外框寬 ≥ 影像的 70%，且寬是高的 2 倍以上', () => {
+    for (const name of ['jian', 'miaodao', 'spear']) {
+      const r = rasters.get(name)!;
+      // 兵器細長：刃身的每一欄只有十來個亮點、斜放時每一列有幾十個；環境煙更少
+      const { rows, columns } = litProfile(r, 50);
+      const across = litSpan(columns, 8)!;
+      const down = litSpan(rows, 30)!;
+      const width = across.last - across.first + 1;
+      expect(width / r.width, `${name} 寬`).toBeGreaterThanOrEqual(0.7);
+      expect(width / (down.last - down.first + 1), `${name} 長寬比`).toBeGreaterThan(2);
+    }
+  });
+
+  it('others 是四個人形橫排：連續有亮點的欄分成 4 段（人形之間有空隙），整排占影像寬的 70% 以上、高度不到一半', () => {
+    const r = rasters.get('others')!;
+    const { columns } = litProfile(r, 60);
+    const lit = columns.map((n) => n >= 12); // 人形的每一欄有幾十個亮點；環境煙不到 12 個
+    let segments = 0;
+    for (let x = 0; x < lit.length; x++) if (lit[x] && (x === 0 || !lit[x - 1])) segments++;
+    expect(segments).toBe(4);
+    const across = litSpan(columns, 12)!;
+    expect((across.last - across.first + 1) / r.width).toBeGreaterThanOrEqual(0.7);
+    expect(litHeightShare(r, 60, 12)).toBeLessThan(0.5);
+  });
+});
+
+describe('renderAllStills：失敗與跳過', () => {
+  const copyShapes = (): string => {
+    const dir = join(tmp(), 'shapes');
+    cpSync(SHAPES_DIR, dir, { recursive: true });
+    return dir;
+  };
+  const stillsOf = (dir: string): Record<string, string> =>
+    Object.fromEntries(readdirSync(dir).filter((f) => f.endsWith('.webp')).map((f) => [f, readFileSync(join(dir, f)).toString('base64')]));
+
+  it('第二次呼叫不重寫任何檔（輸入沒變就跳過）；少一張或 stills.json 不見就重建；force 一律重建', async () => {
+    const shapesDir = copyShapes();
+    const outDir = join(tmp(), 'stills');
+    const first = await renderAllStills({ shapesDir, outDir });
+    expect(first).toEqual({ built: expect.arrayContaining(NAMES), skipped: false });
+    const old = new Date('2001-01-01T00:00:00Z');
+    const files = readdirSync(outDir);
+    for (const f of files) utimesSync(join(outDir, f), old, old);
+
+    expect(await renderAllStills({ shapesDir, outDir })).toEqual({ built: [], skipped: true });
+    for (const f of files) expect(statSync(join(outDir, f)).mtimeMs, f).toBe(old.getTime());
+
+    const before = stillsOf(outDir);
+    rmSync(join(outDir, 'kao.webp'));
+    expect((await renderAllStills({ shapesDir, outDir })).skipped).toBe(false);
+    expect(stillsOf(outDir)).toEqual(before);
+
+    rmSync(join(outDir, 'stills.json'));
+    expect((await renderAllStills({ shapesDir, outDir })).skipped).toBe(false);
+    expect(existsSync(join(outDir, 'stills.json'))).toBe(true);
+
+    writeFileSync(join(outDir, 'land.webp'), new Uint8Array(20)); // 檔案被截成垃圾：大小對不上 stills.json
+    expect((await renderAllStills({ shapesDir, outDir })).skipped).toBe(false);
+    expect(stillsOf(outDir)).toEqual(before);
+
+    expect((await renderAllStills({ shapesDir, outDir, force: true })).skipped).toBe(false);
+  }, 240_000);
+
+  it('形體檔一變就重建：只有用到那個形體的靜態圖改變（kao → kao.webp，其餘逐位元不變）', async () => {
+    const shapesDir = copyShapes();
+    const outDir = join(tmp(), 'stills');
+    await renderAllStills({ shapesDir, outDir });
+    const before = stillsOf(outDir);
+
+    // 把 kao 換成 chengchui 的內容（仍是合法形體檔）
+    writeFileSync(join(shapesDir, 'kao.bin'), readFileSync(join(shapesDir, 'chengchui.bin')));
+    const manifest = JSON.parse(readFileSync(join(shapesDir, 'shapes.json'), 'utf8')) as { id: string; bytes: number; sha256: string }[];
+    const chengchui = manifest.find((e) => e.id === 'chengchui')!;
+    manifest.find((e) => e.id === 'kao')!.sha256 = chengchui.sha256;
+    writeFileSync(join(shapesDir, 'shapes.json'), JSON.stringify(manifest));
+
+    expect((await renderAllStills({ shapesDir, outDir })).skipped).toBe(false);
+    const after = stillsOf(outDir);
+    const changed = Object.keys(after).filter((f) => after[f] !== before[f]);
+    expect(changed).toEqual(['kao.webp']);
+  }, 240_000);
+
+  it('改渲染原始碼（只加註解）→ 重建，而且圖逐位元不變（渲染是確定性的）', async () => {
+    const root = tmp();
+    for (const rel of ['scripts/qi', 'src/qi']) cpSync(join(ROOT, rel), join(root, rel), { recursive: true });
+    const outDir = join(tmp(), 'stills');
+    await renderAllStills({ shapesDir: SHAPES_DIR, outDir, root });
+    const before = stillsOf(outDir);
+
+    writeFileSync(join(root, 'scripts/qi/render-stills.ts'), `${readFileSync(join(root, 'scripts/qi/render-stills.ts'), 'utf8')}\n// 只加註解\n`);
+    const second = await renderAllStills({ shapesDir: SHAPES_DIR, outDir, root });
+
+    expect(second.skipped).toBe(false);
+    expect(stillsOf(outDir)).toEqual(before);
+  }, 240_000);
+
+  it('建置中途失敗（kao.bin 被截斷）：錯誤訊息帶名稱、不留 .inputs-hash 與 .staging、舊產物原封不動；修好後重建與乾淨建置一致', async () => {
+    const shapesDir = copyShapes();
+    const outDir = join(tmp(), 'stills');
+    await renderAllStills({ shapesDir, outDir });
+    const before = stillsOf(outDir);
+    const manifestBefore = readFileSync(join(outDir, 'stills.json'), 'utf8');
+    const filesBefore = readdirSync(outDir).filter((f) => f !== '.inputs-hash').sort();
+
+    // land 在 kao 之前渲（會渲出新內容）；kao 被截斷（渲到它才失敗）
+    const good = readFileSync(join(shapesDir, 'kao.bin'));
+    writeFileSync(join(shapesDir, 'kao.bin'), good.subarray(0, 1000));
+    const land = readFileSync(join(shapesDir, 'land.bin'));
+    const tweaked = Buffer.from(land);
+    tweaked[tweaked.length - 1] = (tweaked[tweaked.length - 1]! + 1) % 100; // 改最後一個點的 kind
+    writeFileSync(join(shapesDir, 'land.bin'), tweaked);
+
+    const error = await renderAllStills({ shapesDir, outDir }).then(
+      () => undefined,
+      (caught: unknown) => caught,
+    );
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain('kao');
+    expect((error as Error).cause).toBeDefined();
+    expect(existsSync(join(outDir, '.inputs-hash'))).toBe(false);
+    expect(existsSync(join(outDir, '.staging'))).toBe(false);
+    expect(readdirSync(outDir).sort()).toEqual(filesBefore);
+    expect(stillsOf(outDir)).toEqual(before);
+    expect(readFileSync(join(outDir, 'stills.json'), 'utf8')).toBe(manifestBefore);
+
+    writeFileSync(join(shapesDir, 'kao.bin'), good);
+    writeFileSync(join(shapesDir, 'land.bin'), land);
+    await renderAllStills({ shapesDir, outDir });
+    expect(stillsOf(outDir)).toEqual(before);
+  }, 240_000);
+
+  it('換入途中失敗（kao.webp 的位置被資料夾佔住）：丟錯，stills.json 與 .inputs-hash 都不在；移走障礙後重建恢復', async () => {
+    const shapesDir = copyShapes();
+    const outDir = join(tmp(), 'stills');
+    await renderAllStills({ shapesDir, outDir });
+    const before = stillsOf(outDir);
+
+    rmSync(join(outDir, 'kao.webp'));
+    mkdirSync(join(outDir, 'kao.webp'));
+    await expect(renderAllStills({ shapesDir, outDir })).rejects.toThrow(/kao\.webp/);
+
+    expect(existsSync(join(outDir, 'stills.json'))).toBe(false);
+    expect(existsSync(join(outDir, '.inputs-hash'))).toBe(false);
+    expect(existsSync(join(outDir, '.staging'))).toBe(false);
+
+    rmSync(join(outDir, 'kao.webp'), { recursive: true });
+    expect((await renderAllStills({ shapesDir, outDir })).skipped).toBe(false);
+    expect(stillsOf(outDir)).toEqual(before);
+  }, 240_000);
+
+  it('清掉 .staging 失敗（被鎖住）：成功的建置照樣成功，只發警告；下一次建置會清掉殘留', async () => {
+    const shapesDir = copyShapes();
+    const outDir = join(tmp(), 'stills');
+    const warn = vi.fn();
+    inject.stagingRmFails = true;
+    try {
+      const ok = await renderAllStills({ shapesDir, outDir, warn });
+      expect(ok.skipped).toBe(false);
+      expect(warn).toHaveBeenCalled();
+      expect(String(warn.mock.calls[0]![0])).toContain('.staging');
+    } finally {
+      inject.stagingRmFails = false;
+    }
+    await renderAllStills({ shapesDir, outDir, force: true });
+    expect(existsSync(join(outDir, '.staging'))).toBe(false);
+  }, 240_000);
+
+  it('重建時清掉 outDir 裡已不存在的 .webp（改名或移除的形體不留殘檔）', async () => {
+    const shapesDir = copyShapes();
+    const outDir = join(tmp(), 'stills');
+    await renderAllStills({ shapesDir, outDir });
+    writeFileSync(join(outDir, 'renamed-away.webp'), new Uint8Array(8));
+
+    await renderAllStills({ shapesDir, outDir, force: true });
+
+    expect(existsSync(join(outDir, 'renamed-away.webp'))).toBe(false);
+    expect(readdirSync(outDir).filter((f) => f.endsWith('.webp')).length).toBe(NAMES.length);
+  }, 240_000);
+
+  it('shapes.json 不見或缺 land → 丟錯（沒有東西可渲，不默默產出殘缺的一組）', async () => {
+    const noManifest = copyShapes();
+    rmSync(join(noManifest, 'shapes.json'));
+    await expect(renderAllStills({ shapesDir: noManifest, outDir: join(tmp(), 'stills') })).rejects.toThrow(/shapes\.json/);
+
+    const noLand = copyShapes();
+    const list = (JSON.parse(readFileSync(join(noLand, 'shapes.json'), 'utf8')) as { id: string }[]).filter((e) => e.id !== 'land');
+    writeFileSync(join(noLand, 'shapes.json'), JSON.stringify(list));
+    await expect(renderAllStills({ shapesDir: noLand, outDir: join(tmp(), 'stills') })).rejects.toThrow(/land/);
+  }, 120_000);
+});
+
+describe('qiAssets 接上靜態圖', () => {
+  it('astro:config:setup 在 src/assets/generated/qi/stills/ 產出全部靜態圖與 stills.json，第二次跳過', async () => {
+    const root = tmp();
+    for (const rel of ['src/qi', 'src/assets/seal', 'scripts/qi']) cpSync(join(ROOT, rel), join(root, rel), { recursive: true });
+    mkdirSync(join(root, 'src/assets/silhouettes'), { recursive: true });
+    for (const name of readdirSync(join(ROOT, 'src/assets/silhouettes')))
+      if (name.endsWith('.png')) cpSync(join(ROOT, 'src/assets/silhouettes', name), join(root, 'src/assets/silhouettes', name));
+
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const hook = qiAssets().hooks['astro:config:setup'] as (params: unknown) => Promise<void>;
+    await hook({ config: { root: pathToFileURL(`${root}/`) }, logger });
+
+    const outDir = join(root, 'src/assets/generated/qi/stills');
+    expect(readdirSync(outDir).filter((f) => f.endsWith('.webp')).sort()).toEqual(NAMES.map((n) => `${n}.webp`).sort());
+    expect(Object.keys(JSON.parse(readFileSync(join(outDir, 'stills.json'), 'utf8')) as object).sort()).toEqual([...NAMES].sort());
+    expect(logger.info.mock.calls.map((c) => String(c[0])).join('\n')).toMatch(/靜態圖/);
+
+    const old = new Date('2001-01-01T00:00:00Z');
+    utimesSync(join(outDir, 'land.webp'), old, old);
+    await hook({ config: { root: pathToFileURL(`${root}/`) }, logger });
+    expect(statSync(join(outDir, 'land.webp')).mtimeMs).toBe(old.getTime());
+  }, 240_000);
+});

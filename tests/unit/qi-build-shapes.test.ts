@@ -589,7 +589,7 @@ describe('qiAssets（astro:config:setup）', () => {
 
     for (const id of IDS) expect(statSync(join(outDir, `${id}.bin`)).size, id).toBe(BIN_BYTES);
     expect(existsSync(join(outDir, 'shapes.json'))).toBe(true);
-    expect(logger.info).toHaveBeenCalledTimes(1);
+    expect(logger.info).toHaveBeenCalledTimes(2); // 形體、靜態圖各一行（靜態圖的細節在 qi-stills.test.ts）
 
     const old = new Date('2001-01-01T00:00:00Z');
     utimesSync(join(outDir, 'land.bin'), old, old);
