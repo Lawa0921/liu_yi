@@ -45,9 +45,9 @@ export const shapeFileBytes = (count: number): number => HEADER_BYTES + bodyByte
 
 export function encodeShape(s: Shape): Uint8Array {
   const { count } = s;
-  if (!Number.isInteger(count) || count < 0) throw new RangeError(`形體 count 不合法：${count}`);
-  if (s.positions.length !== count * 3) throw new RangeError(`positions 長度 ${s.positions.length} ≠ count × 3（${count * 3}）`);
-  if (s.kinds.length !== count) throw new RangeError(`kinds 長度 ${s.kinds.length} ≠ count（${count}）`);
+  if (!Number.isInteger(count) || count < 0) throw new RangeError(`Invalid shape count: ${count}`);
+  if (s.positions.length !== count * 3) throw new RangeError(`Shape positions length ${s.positions.length} does not match count × 3 (${count * 3})`);
+  if (s.kinds.length !== count) throw new RangeError(`Shape kinds length ${s.kinds.length} does not match count (${count})`);
 
   const bytes = new Uint8Array(shapeFileBytes(count));
   const view = new DataView(bytes.buffer);
@@ -78,16 +78,16 @@ export function encodeShape(s: Shape): Uint8Array {
 }
 
 export function decodeShape(b: Uint8Array): Shape {
-  if (b.byteLength < HEADER_BYTES) throw new Error(`形體檔長度 ${b.byteLength} B 不足 header（${HEADER_BYTES} B）`);
+  if (b.byteLength < HEADER_BYTES) throw new Error(`Shape file length ${b.byteLength} B is shorter than the header (${HEADER_BYTES} B)`);
   const view = new DataView(b.buffer, b.byteOffset, b.byteLength);
   for (let i = 0; i < MAGIC.length; i++) {
-    if (b[i] !== MAGIC[i]) throw new Error('形體檔魔數不符（應為 QSH1）');
+    if (b[i] !== MAGIC[i]) throw new Error('Shape file magic mismatch (expected QSH1)');
   }
   const version = view.getUint16(4, true);
-  if (version !== VERSION) throw new Error(`不支援的形體檔版本 ${version}（只認 ${VERSION}）`);
+  if (version !== VERSION) throw new Error(`Unsupported shape file version ${version} (only ${VERSION} is supported)`);
   const count = view.getUint32(8, true);
   const expected = shapeFileBytes(count);
-  if (b.byteLength !== expected) throw new Error(`形體檔長度 ${b.byteLength} B ≠ 預期 ${expected} B（count = ${count}）`);
+  if (b.byteLength !== expected) throw new Error(`Shape file length ${b.byteLength} B does not match the expected ${expected} B (count = ${count})`);
 
   const min: [number, number, number] = [view.getFloat32(12, true), view.getFloat32(16, true), view.getFloat32(20, true)];
   const max: [number, number, number] = [view.getFloat32(24, true), view.getFloat32(28, true), view.getFloat32(32, true)];
@@ -107,7 +107,7 @@ export function decodeShape(b: Uint8Array): Shape {
 
 /** kind → 著色器用的 w：人形 0–99 → 0–1；STEEL..AURA → 2..6；SEAL → 7。 */
 export function kindToW(kind: number): number {
-  if (!Number.isInteger(kind) || kind < 0 || kind > KIND.SEAL) throw new RangeError(`未定義的 kind：${kind}`);
+  if (!Number.isInteger(kind) || kind < 0 || kind > KIND.SEAL) throw new RangeError(`Undefined kind: ${kind}`);
   if (kind <= 99) return kind / 99;
   return kind - 98;
 }
