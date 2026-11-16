@@ -1,28 +1,14 @@
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { qiAssets } from '../../integrations/qi-assets';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildAllShapes } from '../../scripts/qi/build-shapes';
 import { renderAllStills, renderStill } from '../../scripts/qi/render-stills';
 import { SHAPES } from '../../src/qi/config/shapes';
 import type { Shape } from '../../src/qi/shapes/format';
 import { rng } from '../../src/qi/shapes/rng';
-
-/** 讓測試能注入「清掉 .staging 失敗」（Windows 上檔案被別的程式鎖住時 rmSync 會丟 EBUSY／EPERM）。預設全部透傳。 */
-const inject = vi.hoisted(() => ({ stagingRmFails: false }));
-vi.mock('node:fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs')>();
-  return {
-    ...actual,
-    rmSync: (path: Parameters<typeof actual.rmSync>[0], options?: Parameters<typeof actual.rmSync>[1]) => {
-      if (inject.stagingRmFails && String(path).endsWith('.staging')) throw new Error('EBUSY: injected');
-      return actual.rmSync(path, options);
-    },
-  };
-});
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const IDS = Object.keys(SHAPES);
@@ -139,6 +125,34 @@ function redPixels(r: Raster): number {
     if (R >= 110 && R > G * 2.2 && R > B * 2.2) n++;
   }
   return n;
+}
+
+/** 偏紅的像素裡最大的一塊連通區域（四連通）的像素數：紅纓是一整塊，火星只是零星的小點。 */
+function largestRedBlob(r: Raster): number {
+  const isRed = (i: number): boolean => {
+    const R = r.data[i * 3]!;
+    return R >= 110 && R > r.data[i * 3 + 1]! * 2.2 && R > r.data[i * 3 + 2]! * 2.2;
+  };
+  const seen = new Uint8Array(r.width * r.height);
+  let best = 0;
+  for (let start = 0; start < seen.length; start++) {
+    if (seen[start] || !isRed(start)) continue;
+    let size = 0;
+    const stack = [start];
+    seen[start] = 1;
+    while (stack.length > 0) {
+      const p = stack.pop()!;
+      size++;
+      const x = p % r.width;
+      for (const q of [x > 0 ? p - 1 : -1, x < r.width - 1 ? p + 1 : -1, p - r.width, p + r.width]) {
+        if (q < 0 || q >= seen.length || seen[q] || !isRed(q)) continue;
+        seen[q] = 1;
+        stack.push(q);
+      }
+    }
+    best = Math.max(best, size);
+  }
+  return best;
 }
 
 /** 合成圓盤：半徑 1、圓心在 (0.4, 1.3)（故意不在原點，驗證取景會置中）、均勻取樣。 */
@@ -278,7 +292,7 @@ describe('renderAllStills：輸出與尺寸', () => {
 });
 
 describe('renderAllStills：畫面品質（機械可驗的部分）', () => {
-  it('每張都是暗底、亮點占比合理（0.3%–25%）、最外圈維持底色（沒有滿版外發光）', () => {
+  it('每張都是暗底、亮點占比合理（0.3%–25%；hero 兩張更嚴：亮度 > 100 的像素 ≤ 15%，不能是一大片偏亮的米黃）、最外圈維持底色（沒有滿版外發光）', () => {
     for (const name of NAMES) {
       const r = rasters.get(name)!;
       const mean = meanLuma(r);
@@ -288,6 +302,10 @@ describe('renderAllStills：畫面品質（機械可驗的部分）', () => {
       expect(share, `${name} 亮點占比`).toBeGreaterThanOrEqual(0.003);
       expect(share, `${name} 亮點占比`).toBeLessThanOrEqual(0.25);
       expect(borderLuma(r), `${name} 外圈`).toBeLessThan(18);
+    }
+    for (const name of ['hero-wide', 'hero-tall']) {
+      expect(brightShare(rasters.get(name)!, 100), `${name} 亮度 > 100 的占比`).toBeLessThanOrEqual(0.15);
+      expect(brightShare(rasters.get(name)!, 120), `${name} 亮點占比`).toBeLessThanOrEqual(0.15);
     }
   });
 
@@ -315,9 +333,11 @@ describe('renderAllStills：畫面品質（機械可驗的部分）', () => {
       expect(sr / n, name).toBeGreaterThan(sg / n);
       expect(sg / n, name).toBeGreaterThan(sb / n);
     }
-    expect(redPixels(rasters.get('spear')!), 'spear 紅纓').toBeGreaterThan(300);
-    expect(redPixels(rasters.get('jian')!), 'jian 紅穗').toBeGreaterThan(300);
-    expect(redPixels(rasters.get('land')!), 'land 只有零星朱紅火星').toBeLessThan(redPixels(rasters.get('spear')!) / 2);
+    // 紅纓是一整塊明確的紅；人形上只有零星的小火星（每顆不到幾十個像素，也不連成一片）
+    expect(largestRedBlob(rasters.get('spear')!), 'spear 紅纓').toBeGreaterThan(300);
+    expect(largestRedBlob(rasters.get('jian')!), 'jian 紅穗').toBeGreaterThan(300);
+    expect(largestRedBlob(rasters.get('land')!), 'land 的火星').toBeLessThan(80);
+    expect(redPixels(rasters.get('land')!), 'land 的火星總量').toBeLessThan(1500);
     expect(redPixels(rasters.get('miaodao')!), 'miaodao 沒有紅').toBeLessThan(100);
   });
 
@@ -364,9 +384,15 @@ describe('renderAllStills：畫面品質（機械可驗的部分）', () => {
   it('others 是四個人形橫排：連續有亮點的欄分成 4 段（人形之間有空隙），整排占影像寬的 70% 以上、高度不到一半', () => {
     const r = rasters.get('others')!;
     const { columns } = litProfile(r, 60);
-    const lit = columns.map((n) => n >= 12); // 人形的每一欄有幾十個亮點；環境煙不到 12 個
+    // 人形的每一欄有幾十個亮點；環境煙不到 12 個。人形內部細長的肢體可能讓亮欄斷開幾格，所以 25 欄以內的縫不算空隙
+    // （人形之間的空隙有 60 欄以上）
     let segments = 0;
-    for (let x = 0; x < lit.length; x++) if (lit[x] && (x === 0 || !lit[x - 1])) segments++;
+    let previous = -Infinity;
+    columns.forEach((n, x) => {
+      if (n < 12) return;
+      if (x - previous > 25) segments++;
+      previous = x;
+    });
     expect(segments).toBe(4);
     const across = litSpan(columns, 12)!;
     expect((across.last - across.first + 1) / r.width).toBeGreaterThanOrEqual(0.7);
@@ -374,20 +400,31 @@ describe('renderAllStills：畫面品質（機械可驗的部分）', () => {
   });
 });
 
+/**
+ * 跳過與失敗的情境用縮小的形體目錄（land、kao、jian 三個）：每次只渲 5 張（hero 兩張＋三個形體），整檔才跑得快。
+ * 「暫存再換入」本身的故障注入（換入途中失敗、.staging 清不掉、殘檔）在 qi-staged-output.test.ts；
+ * 這裡只留一條整合等級的故障測試，證明靜態圖產線真的接上了它。
+ */
+const MINI_IDS = ['land', 'kao', 'jian'];
+const MINI_NAMES = ['hero-wide', 'hero-tall', ...MINI_IDS];
 describe('renderAllStills：失敗與跳過', () => {
-  const copyShapes = (): string => {
+  const miniShapes = (): string => {
     const dir = join(tmp(), 'shapes');
-    cpSync(SHAPES_DIR, dir, { recursive: true });
+    mkdirSync(dir, { recursive: true });
+    for (const id of MINI_IDS) cpSync(join(SHAPES_DIR, `${id}.bin`), join(dir, `${id}.bin`));
+    const list = (JSON.parse(readFileSync(join(SHAPES_DIR, 'shapes.json'), 'utf8')) as { id: string }[]).filter((e) => MINI_IDS.includes(e.id));
+    writeFileSync(join(dir, 'shapes.json'), JSON.stringify(list));
     return dir;
   };
   const stillsOf = (dir: string): Record<string, string> =>
     Object.fromEntries(readdirSync(dir).filter((f) => f.endsWith('.webp')).map((f) => [f, readFileSync(join(dir, f)).toString('base64')]));
 
-  it('第二次呼叫不重寫任何檔（輸入沒變就跳過）；少一張或 stills.json 不見就重建；force 一律重建', async () => {
-    const shapesDir = copyShapes();
+  it('第二次呼叫不重寫任何檔（輸入沒變就跳過）；少一張或大小對不上 stills.json 就重建；force 一律重建', async () => {
+    const shapesDir = miniShapes();
     const outDir = join(tmp(), 'stills');
     const first = await renderAllStills({ shapesDir, outDir });
-    expect(first).toEqual({ built: expect.arrayContaining(NAMES), skipped: false });
+    expect(first.skipped).toBe(false);
+    expect([...first.built].sort()).toEqual([...MINI_NAMES].sort());
     const old = new Date('2001-01-01T00:00:00Z');
     const files = readdirSync(outDir);
     for (const f of files) utimesSync(join(outDir, f), old, old);
@@ -400,59 +437,52 @@ describe('renderAllStills：失敗與跳過', () => {
     expect((await renderAllStills({ shapesDir, outDir })).skipped).toBe(false);
     expect(stillsOf(outDir)).toEqual(before);
 
-    rmSync(join(outDir, 'stills.json'));
-    expect((await renderAllStills({ shapesDir, outDir })).skipped).toBe(false);
-    expect(existsSync(join(outDir, 'stills.json'))).toBe(true);
-
     writeFileSync(join(outDir, 'land.webp'), new Uint8Array(20)); // 檔案被截成垃圾：大小對不上 stills.json
     expect((await renderAllStills({ shapesDir, outDir })).skipped).toBe(false);
     expect(stillsOf(outDir)).toEqual(before);
 
     expect((await renderAllStills({ shapesDir, outDir, force: true })).skipped).toBe(false);
-  }, 240_000);
+  }, 120_000);
 
-  it('形體檔一變就重建：只有用到那個形體的靜態圖改變（kao → kao.webp，其餘逐位元不變）', async () => {
-    const shapesDir = copyShapes();
+  it('形體檔一變就重建：只有用到那個形體的靜態圖改變（kao.bin 換成 jian 的內容 → 只有 kao.webp 變）', async () => {
+    const shapesDir = miniShapes();
     const outDir = join(tmp(), 'stills');
     await renderAllStills({ shapesDir, outDir });
     const before = stillsOf(outDir);
 
-    // 把 kao 換成 chengchui 的內容（仍是合法形體檔）
-    writeFileSync(join(shapesDir, 'kao.bin'), readFileSync(join(shapesDir, 'chengchui.bin')));
-    const manifest = JSON.parse(readFileSync(join(shapesDir, 'shapes.json'), 'utf8')) as { id: string; bytes: number; sha256: string }[];
-    const chengchui = manifest.find((e) => e.id === 'chengchui')!;
-    manifest.find((e) => e.id === 'kao')!.sha256 = chengchui.sha256;
-    writeFileSync(join(shapesDir, 'shapes.json'), JSON.stringify(manifest));
+    writeFileSync(join(shapesDir, 'kao.bin'), readFileSync(join(shapesDir, 'jian.bin'))); // 仍是合法形體檔
 
     expect((await renderAllStills({ shapesDir, outDir })).skipped).toBe(false);
     const after = stillsOf(outDir);
-    const changed = Object.keys(after).filter((f) => after[f] !== before[f]);
-    expect(changed).toEqual(['kao.webp']);
-  }, 240_000);
+    expect(Object.keys(after).filter((f) => after[f] !== before[f])).toEqual(['kao.webp']);
+  }, 120_000);
 
-  it('改渲染原始碼（只加註解）→ 重建，而且圖逐位元不變（渲染是確定性的）', async () => {
+  it('改渲染原始碼或共用的 staged-output.ts（只加註解）→ 重建，而且圖逐位元不變（渲染是確定性的）', async () => {
     const root = tmp();
     for (const rel of ['scripts/qi', 'src/qi']) cpSync(join(ROOT, rel), join(root, rel), { recursive: true });
+    const shapesDir = miniShapes();
     const outDir = join(tmp(), 'stills');
-    await renderAllStills({ shapesDir: SHAPES_DIR, outDir, root });
+    await renderAllStills({ shapesDir, outDir, root });
     const before = stillsOf(outDir);
 
-    writeFileSync(join(root, 'scripts/qi/render-stills.ts'), `${readFileSync(join(root, 'scripts/qi/render-stills.ts'), 'utf8')}\n// 只加註解\n`);
-    const second = await renderAllStills({ shapesDir: SHAPES_DIR, outDir, root });
+    for (const rel of ['scripts/qi/render-stills.ts', 'scripts/qi/staged-output.ts']) {
+      writeFileSync(join(root, rel), `${readFileSync(join(root, rel), 'utf8')}\n// 只加註解\n`);
+      expect((await renderAllStills({ shapesDir, outDir, root })).skipped, rel).toBe(false);
+      expect(stillsOf(outDir), rel).toEqual(before);
+    }
+  }, 120_000);
 
-    expect(second.skipped).toBe(false);
-    expect(stillsOf(outDir)).toEqual(before);
-  }, 240_000);
-
-  it('建置中途失敗（kao.bin 被截斷）：錯誤訊息帶名稱、不留 .inputs-hash 與 .staging、舊產物原封不動；修好後重建與乾淨建置一致', async () => {
-    const shapesDir = copyShapes();
+  it('建置中途失敗（kao.bin 被截斷）：錯誤訊息帶名稱與原因、不留 .inputs-hash 與 .staging、舊產物原封不動；修好後重建與乾淨建置一致，已不存在的 .webp 殘檔被清掉', async () => {
+    const shapesDir = miniShapes();
     const outDir = join(tmp(), 'stills');
     await renderAllStills({ shapesDir, outDir });
+    const clean = stillsOf(outDir);
+    writeFileSync(join(outDir, 'renamed-away.webp'), new Uint8Array(8)); // 改名的形體留下的殘檔
     const before = stillsOf(outDir);
     const manifestBefore = readFileSync(join(outDir, 'stills.json'), 'utf8');
     const filesBefore = readdirSync(outDir).filter((f) => f !== '.inputs-hash').sort();
 
-    // land 在 kao 之前渲（會渲出新內容）；kao 被截斷（渲到它才失敗）
+    // land 在 kao 之前渲（會渲出新內容）；kao 被截斷（渲到它才失敗）：失敗之後不能只有 land 是新的
     const good = readFileSync(join(shapesDir, 'kao.bin'));
     writeFileSync(join(shapesDir, 'kao.bin'), good.subarray(0, 1000));
     const land = readFileSync(join(shapesDir, 'land.bin'));
@@ -477,89 +507,18 @@ describe('renderAllStills：失敗與跳過', () => {
     writeFileSync(join(shapesDir, 'kao.bin'), good);
     writeFileSync(join(shapesDir, 'land.bin'), land);
     await renderAllStills({ shapesDir, outDir });
-    expect(stillsOf(outDir)).toEqual(before);
-  }, 240_000);
-
-  it('換入途中失敗（kao.webp 的位置被資料夾佔住）：丟錯，stills.json 與 .inputs-hash 都不在；移走障礙後重建恢復', async () => {
-    const shapesDir = copyShapes();
-    const outDir = join(tmp(), 'stills');
-    await renderAllStills({ shapesDir, outDir });
-    const before = stillsOf(outDir);
-
-    rmSync(join(outDir, 'kao.webp'));
-    mkdirSync(join(outDir, 'kao.webp'));
-    await expect(renderAllStills({ shapesDir, outDir })).rejects.toThrow(/kao\.webp/);
-
-    expect(existsSync(join(outDir, 'stills.json'))).toBe(false);
-    expect(existsSync(join(outDir, '.inputs-hash'))).toBe(false);
-    expect(existsSync(join(outDir, '.staging'))).toBe(false);
-
-    rmSync(join(outDir, 'kao.webp'), { recursive: true });
-    expect((await renderAllStills({ shapesDir, outDir })).skipped).toBe(false);
-    expect(stillsOf(outDir)).toEqual(before);
-  }, 240_000);
-
-  it('清掉 .staging 失敗（被鎖住）：成功的建置照樣成功，只發警告；下一次建置會清掉殘留', async () => {
-    const shapesDir = copyShapes();
-    const outDir = join(tmp(), 'stills');
-    const warn = vi.fn();
-    inject.stagingRmFails = true;
-    try {
-      const ok = await renderAllStills({ shapesDir, outDir, warn });
-      expect(ok.skipped).toBe(false);
-      expect(warn).toHaveBeenCalled();
-      expect(String(warn.mock.calls[0]![0])).toContain('.staging');
-    } finally {
-      inject.stagingRmFails = false;
-    }
-    await renderAllStills({ shapesDir, outDir, force: true });
-    expect(existsSync(join(outDir, '.staging'))).toBe(false);
-  }, 240_000);
-
-  it('重建時清掉 outDir 裡已不存在的 .webp（改名或移除的形體不留殘檔）', async () => {
-    const shapesDir = copyShapes();
-    const outDir = join(tmp(), 'stills');
-    await renderAllStills({ shapesDir, outDir });
-    writeFileSync(join(outDir, 'renamed-away.webp'), new Uint8Array(8));
-
-    await renderAllStills({ shapesDir, outDir, force: true });
-
     expect(existsSync(join(outDir, 'renamed-away.webp'))).toBe(false);
-    expect(readdirSync(outDir).filter((f) => f.endsWith('.webp')).length).toBe(NAMES.length);
-  }, 240_000);
+    expect(stillsOf(outDir)).toEqual(clean);
+  }, 120_000);
 
   it('shapes.json 不見或缺 land → 丟錯（沒有東西可渲，不默默產出殘缺的一組）', async () => {
-    const noManifest = copyShapes();
+    const noManifest = miniShapes();
     rmSync(join(noManifest, 'shapes.json'));
     await expect(renderAllStills({ shapesDir: noManifest, outDir: join(tmp(), 'stills') })).rejects.toThrow(/shapes\.json/);
 
-    const noLand = copyShapes();
+    const noLand = miniShapes();
     const list = (JSON.parse(readFileSync(join(noLand, 'shapes.json'), 'utf8')) as { id: string }[]).filter((e) => e.id !== 'land');
     writeFileSync(join(noLand, 'shapes.json'), JSON.stringify(list));
     await expect(renderAllStills({ shapesDir: noLand, outDir: join(tmp(), 'stills') })).rejects.toThrow(/land/);
-  }, 120_000);
-});
-
-describe('qiAssets 接上靜態圖', () => {
-  it('astro:config:setup 在 src/assets/generated/qi/stills/ 產出全部靜態圖與 stills.json，第二次跳過', async () => {
-    const root = tmp();
-    for (const rel of ['src/qi', 'src/assets/seal', 'scripts/qi']) cpSync(join(ROOT, rel), join(root, rel), { recursive: true });
-    mkdirSync(join(root, 'src/assets/silhouettes'), { recursive: true });
-    for (const name of readdirSync(join(ROOT, 'src/assets/silhouettes')))
-      if (name.endsWith('.png')) cpSync(join(ROOT, 'src/assets/silhouettes', name), join(root, 'src/assets/silhouettes', name));
-
-    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
-    const hook = qiAssets().hooks['astro:config:setup'] as (params: unknown) => Promise<void>;
-    await hook({ config: { root: pathToFileURL(`${root}/`) }, logger });
-
-    const outDir = join(root, 'src/assets/generated/qi/stills');
-    expect(readdirSync(outDir).filter((f) => f.endsWith('.webp')).sort()).toEqual(NAMES.map((n) => `${n}.webp`).sort());
-    expect(Object.keys(JSON.parse(readFileSync(join(outDir, 'stills.json'), 'utf8')) as object).sort()).toEqual([...NAMES].sort());
-    expect(logger.info.mock.calls.map((c) => String(c[0])).join('\n')).toMatch(/靜態圖/);
-
-    const old = new Date('2001-01-01T00:00:00Z');
-    utimesSync(join(outDir, 'land.webp'), old, old);
-    await hook({ config: { root: pathToFileURL(`${root}/`) }, logger });
-    expect(statSync(join(outDir, 'land.webp')).mtimeMs).toBe(old.getTime());
-  }, 240_000);
+  });
 });

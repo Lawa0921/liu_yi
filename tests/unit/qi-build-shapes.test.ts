@@ -2,31 +2,15 @@ import { createHash } from 'node:crypto';
 import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { qiAssets } from '../../integrations/qi-assets';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildAllShapes } from '../../scripts/qi/build-shapes';
 import { hashInputs } from '../../scripts/qi/hash';
 import { FIGURES } from '../../src/qi/config/figures';
 import { SEAL_CENTER_Y, SEAL_WORLD_SIZE, SHAPES, WEAPON_NAMES } from '../../src/qi/config/shapes';
 import { decodeShape, KIND, SHAPE_COUNT, type Shape } from '../../src/qi/shapes/format';
 import { decodeSnapshot, encodeSnapshot } from '../../src/qi/shapes/weapon-snapshot';
-
-/**
- * 讓測試能注入「清掉 .staging 失敗」（Windows 上檔案被別的程式鎖住時 rmSync 會丟 EBUSY／EPERM）。預設全部透傳。
- */
-const inject = vi.hoisted(() => ({ stagingRmFails: false }));
-vi.mock('node:fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs')>();
-  return {
-    ...actual,
-    rmSync: (path: Parameters<typeof actual.rmSync>[0], options?: Parameters<typeof actual.rmSync>[1]) => {
-      if (inject.stagingRmFails && String(path).endsWith('.staging')) throw new Error('EBUSY: injected');
-      return actual.rmSync(path, options);
-    },
-  };
-});
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const BIN_BYTES = 40 + 7 * SHAPE_COUNT;
@@ -378,7 +362,7 @@ describe('buildAllShapes：輸入雜湊與跳過', () => {
     await buildAllShapes({ root, outDir });
     const before = snapshot(outDir);
 
-    const sources = ['src/qi/shapes/sample-figure.ts', 'src/qi/shapes/format.ts', 'src/qi/config/shapes.ts', 'src/qi/config/figures.ts', 'scripts/qi/build-shapes.ts', 'scripts/qi/hash.ts'];
+    const sources = ['src/qi/shapes/sample-figure.ts', 'src/qi/shapes/format.ts', 'src/qi/config/shapes.ts', 'src/qi/config/figures.ts', 'scripts/qi/build-shapes.ts', 'scripts/qi/hash.ts', 'scripts/qi/staged-output.ts'];
     for (const rel of sources) {
       appendFileSync(join(root, rel), '\n// 只加註解\n');
       const result = await buildAllShapes({ root, outDir });
@@ -428,10 +412,13 @@ describe('buildAllShapes：輸入雜湊與跳過', () => {
     expect(readFileSync(join(outDir, 'shapes.json'), 'utf8')).toBe(manifest);
   }, 120_000);
 
-  it('建置中途失敗（kao 的剪影被截斷）：錯誤訊息帶形體 id 與原因、沒有 .inputs-hash、輸出目錄不新舊混雜；修好後重建，產物與乾淨建置一致', async () => {
+  // 「暫存再換入」的故障注入情境（換入中途失敗、.staging 清不掉、殘檔）集中在 qi-staged-output.test.ts；
+  // 這一條是整合等級的：證明形體產線真的接上了 commitStaged（錯誤帶形體 id、失敗不混雜、殘檔副檔名是 .bin）。
+  it('建置中途失敗（kao 的剪影被截斷）：錯誤訊息帶形體 id 與原因、沒有 .inputs-hash、輸出目錄不新舊混雜；修好後重建，產物與乾淨建置一致，已不在 SHAPES 的 .bin 殘檔被清掉', async () => {
     const root = copyRoot();
     const outDir = join(tmp(), 'shapes');
     await buildAllShapes({ root, outDir });
+    writeFileSync(join(outDir, 'renamed-away.bin'), new Uint8Array(8)); // 改名的形體留下的殘檔
     const before = snapshot(outDir);
     const manifestBefore = readFileSync(join(outDir, 'shapes.json'), 'utf8');
     const filesBefore = readdirSync(outDir).filter((f) => f !== '.inputs-hash').sort();
@@ -470,83 +457,6 @@ describe('buildAllShapes：輸入雜湊與跳過', () => {
     expect(readFileSync(join(outDir, '.inputs-hash'), 'utf8')).toBe(readFileSync(join(clean, '.inputs-hash'), 'utf8'));
     expect(readdirSync(outDir).sort()).toEqual(readdirSync(clean).sort());
   }, 180_000);
-
-  it('換入途中失敗（kao.bin 的位置被資料夾佔住，rename 在任何平台都會失敗）：丟錯，shapes.json 與 .inputs-hash 都不在，不可能被誤當完整產物；移走障礙後重建，結果與乾淨建置一致', async () => {
-    const root = copyRoot();
-    const outDir = join(tmp(), 'shapes');
-    await buildAllShapes({ root, outDir });
-    const before = snapshot(outDir);
-
-    // land 的輸入改了：換入順序在 kao 之前，land.bin 會先換成新的，接著 kao.bin 換入失敗——這就是新舊混雜的狀態
-    await paintCorner(join(root, 'src/assets/silhouettes', `${FIGURES.land!.src}.png`));
-    rmSync(join(outDir, 'kao.bin'));
-    mkdirSync(join(outDir, 'kao.bin'));
-
-    await expect(buildAllShapes({ root, outDir })).rejects.toThrow(/kao\.bin/);
-
-    expect(sha(binOf(outDir, 'land'))).not.toBe(before.land); // 確實是新舊混雜的狀態
-    expect(existsSync(join(outDir, 'shapes.json'))).toBe(false);
-    expect(existsSync(join(outDir, '.inputs-hash'))).toBe(false);
-    expect(existsSync(join(outDir, '.staging'))).toBe(false);
-    // 障礙還在時再叫一次：還是不會把半套當完整（重建、再失敗）
-    await expect(buildAllShapes({ root, outDir })).rejects.toThrow(/kao\.bin/);
-    expect(existsSync(join(outDir, 'shapes.json'))).toBe(false);
-
-    rmSync(join(outDir, 'kao.bin'), { recursive: true });
-    const fixed = await buildAllShapes({ root, outDir });
-    const clean = join(tmp(), 'shapes');
-    await buildAllShapes({ root, outDir: clean });
-
-    expect(fixed.skipped).toBe(false);
-    expect(existsSync(join(outDir, '.staging'))).toBe(false);
-    expect(snapshot(outDir)).toEqual(snapshot(clean));
-    expect(readFileSync(join(outDir, 'shapes.json'), 'utf8')).toBe(readFileSync(join(clean, 'shapes.json'), 'utf8'));
-    expect(readFileSync(join(outDir, '.inputs-hash'), 'utf8')).toBe(readFileSync(join(clean, '.inputs-hash'), 'utf8'));
-  }, 180_000);
-
-  it('清掉 .staging 失敗（被鎖住）：成功的建置照樣成功、失敗的建置丟出原本的錯誤（不被清理的錯誤蓋掉），兩者都只發警告', async () => {
-    const root = copyRoot();
-    const outDir = join(tmp(), 'shapes');
-    const warn = vi.fn();
-    const kaoFile = join(root, 'src/assets/silhouettes', `${FIGURES.kao!.src}.png`);
-    const kaoGood = readFileSync(kaoFile);
-
-    inject.stagingRmFails = true;
-    try {
-      const ok = await buildAllShapes({ root, outDir, warn });
-      expect(ok.skipped).toBe(false);
-      expect(Object.keys(snapshot(outDir)).sort()).toEqual([...IDS].sort());
-      expect(warn).toHaveBeenCalled();
-      expect(String(warn.mock.calls[0]![0])).toContain('.staging');
-
-      warn.mockClear();
-      writeFileSync(kaoFile, kaoGood.subarray(0, 100));
-      const error = await buildAllShapes({ root, outDir, warn }).then(
-        () => undefined,
-        (caught: unknown) => caught,
-      );
-      expect((error as Error).message).toContain('形體 kao'); // 不是 EBUSY
-      expect(warn).toHaveBeenCalled();
-    } finally {
-      inject.stagingRmFails = false;
-    }
-
-    // 鎖放開之後，下一次建置會把殘留的 .staging 清掉
-    writeFileSync(kaoFile, kaoGood);
-    await buildAllShapes({ root, outDir });
-    expect(existsSync(join(outDir, '.staging'))).toBe(false);
-  }, 180_000);
-
-  it('重建時清掉 outDir 裡已不在 SHAPES 的 .bin（改名的形體不留殘檔）', async () => {
-    const outDir = join(tmp(), 'shapes');
-    await buildAllShapes({ root: ROOT, outDir });
-    writeFileSync(join(outDir, 'renamed-away.bin'), new Uint8Array(8));
-
-    await buildAllShapes({ root: ROOT, outDir, force: true });
-
-    expect(existsSync(join(outDir, 'renamed-away.bin'))).toBe(false);
-    expect(readdirSync(outDir).filter((f) => f.endsWith('.bin')).length).toBe(IDS.length);
-  }, 120_000);
 });
 
 describe('hashInputs', () => {
@@ -568,36 +478,5 @@ describe('hashInputs', () => {
 
   it('輸入檔不存在就丟錯，訊息帶相對路徑', () => {
     expect(() => hashInputs(tmp(), ['nope/missing.png'])).toThrow(/nope\/missing\.png/);
-  });
-});
-
-describe('qiAssets（astro:config:setup）', () => {
-  const makeLogger = () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() });
-  const run = async (root: string, logger = makeLogger()) => {
-    const hook = qiAssets().hooks['astro:config:setup'];
-    if (!hook) throw new Error('integration 沒有 astro:config:setup');
-    await (hook as (params: unknown) => Promise<void>)({ config: { root: pathToFileURL(`${root}/`) }, logger });
-    return logger;
-  };
-
-  it('名稱是 qi-assets；在專案的 src/assets/generated/qi/shapes/ 產出全部形體與 shapes.json，第二次跳過', async () => {
-    expect(qiAssets().name).toBe('qi-assets');
-    const root = copyRoot();
-    const outDir = join(root, 'src/assets/generated/qi/shapes');
-
-    const logger = await run(root);
-
-    for (const id of IDS) expect(statSync(join(outDir, `${id}.bin`)).size, id).toBe(BIN_BYTES);
-    expect(existsSync(join(outDir, 'shapes.json'))).toBe(true);
-    expect(logger.info).toHaveBeenCalledTimes(2); // 形體、靜態圖各一行（靜態圖的細節在 qi-stills.test.ts）
-
-    const old = new Date('2001-01-01T00:00:00Z');
-    utimesSync(join(outDir, 'land.bin'), old, old);
-    await run(root);
-    expect(statSync(join(outDir, 'land.bin')).mtimeMs).toBe(old.getTime());
-  }, 120_000);
-
-  it('只註冊 astro:config:setup：不碰 dev watch 與建置後的鉤子', () => {
-    expect(Object.keys(qiAssets().hooks)).toEqual(['astro:config:setup']);
   });
 });

@@ -24,26 +24,25 @@
  * 每個形體各一張 `<id>.webp`（1000×750）；`stills.json` ＝ `{ [name]: { width, height, bytes } }`（name 不含副檔名）。
  * 兵器的 `.bin` 是橫放的單位形，靜態圖照引擎寬螢幕的擺法加上仰角（`WEAPON_TILT`）。
  *
- * 寫檔紀律同 `build-shapes.ts`：先全部渲到 `outDir/.staging/`，都成功才換入；換入前先刪 `stills.json`；
- * 失敗不留看起來完整的混雜產物（沒有 `stills.json` 也沒有 `.inputs-hash`），下一次整批重建；`.staging` 的清理是盡力而為。
- * 輸入雜湊 ＝ 各 `.bin` 的內容雜湊＋本檔與 `hash.ts`、`format.ts`、`rng.ts` 的原始碼＋sharp 版本；沒變、檔案齊全就跳過。
+ * 寫檔紀律同 `build-shapes.ts`，由共用的 `staged-output.ts` 的 `commitStaged` 負責：先全部渲到 `outDir/.staging/`，都成功才換入；
+ * 失敗不留看起來完整的混雜產物（沒有 `stills.json` 也沒有 `.inputs-hash`），下一次整批重建；殘檔清除；`.staging` 的清理是盡力而為。
+ * 輸入雜湊 ＝ 各 `.bin` 的內容雜湊＋本檔與 `hash.ts`、`staged-output.ts`、`format.ts`、`rng.ts` 的原始碼＋sharp 版本；沒變、檔案齊全就跳過。
  *
  * 固定種子（由名稱雜湊而來）＋純函式渲染：同輸入逐位元相同。
  */
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { decodeShape, KIND, type Shape } from '../../src/qi/shapes/format';
 import { rng } from '../../src/qi/shapes/rng';
 import { hashInputs, sha256 } from './hash';
+import { commitStaged, hashMatches, sizeOf } from './staged-output';
 
 /** 渲染邏輯的版本（改了畫法但原始碼雜湊沒涵蓋到的地方，例如調參數以外的格式變動，手動加一）。 */
 const STILL_VERSION = 1;
-const HASH_FILE = '.inputs-hash';
 const MANIFEST = 'stills.json';
-const STAGING = '.staging';
 
 // ── 色彩（與引擎同一組，見試作 `src/lab/qi/main.ts`）───────────────────────────
 const BACKGROUND = '#0b0a09';
@@ -152,7 +151,7 @@ const STREAK_LENGTH = 0.045; // 世界單位，以身高 2 為準（見 `streakL
 const STREAK_STAMPS = 6;
 /** 光暈：近、遠兩層的模糊半徑（相對影像短邊）與權重；來源是各色獨立壓縮（x / (1 + x)）的光，所以光暈保留金或朱紅的色相。 */
 const GLOW_NEAR = { sigma: 0.0055, weight: 0.45 };
-const GLOW_FAR = { sigma: 0.02, weight: 0.32 };
+const GLOW_FAR = { sigma: 0.02, weight: 0.2 };
 const GLOW_SOURCE_GAIN = 1.0;
 /** WebP 品質：實測 hero 約 28–43 KB（預算 60）、其餘約 21–34 KB（預算 45）；體積門檻由單元測試把關。 */
 const WEBP_QUALITY = 80;
@@ -269,7 +268,7 @@ function pointLook(kind: number, tone: number, veinValue: number): { color: Vec3
     // 人形：內部是金，氣脈處更亮、偏米白；輪廓帶（99）是亮的金米色
     const rim = kind >= 90;
     const t = rim ? 0.3 + tone * 0.3 : clamp01(tone * 0.16 + (kind / 99) * 0.45 + veinValue * 0.2);
-    const alpha = rim ? 0.55 * RIM_BOOST : 0.55 * (0.25 + 1.0 * veinValue);
+    const alpha = rim ? 0.55 * RIM_BOOST : 0.55 * (0.18 + 0.85 * veinValue);
     return { color: mixColor(C_GOLD, C_PAPER, t), alpha, size: 1 };
   }
   switch (kind) {
@@ -436,7 +435,7 @@ const HEROES = [
 ] as const;
 const POSE_SIZE = { width: 1000, height: 750 } as const;
 /** 影響渲染結果的原始碼（相對專案根目錄）。 */
-const SOURCES = ['scripts/qi/render-stills.ts', 'scripts/qi/hash.ts', 'src/qi/shapes/format.ts', 'src/qi/shapes/rng.ts'];
+const SOURCES = ['scripts/qi/render-stills.ts', 'scripts/qi/hash.ts', 'scripts/qi/staged-output.ts', 'src/qi/shapes/format.ts', 'src/qi/shapes/rng.ts'];
 const DEFAULT_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
 /** 名稱 → 32 位元種子（sha256 的前 8 個十六進位字元）：不依賴出圖順序，加減形體不會讓其他圖的點跑掉。 */
@@ -461,22 +460,6 @@ function placed(id: string, shape: Shape): Shape {
     positions[i * 3 + 2] = shape.positions[i * 3 + 2]!;
   }
   return { ...shape, positions };
-}
-
-function sizeOf(path: string): number | undefined {
-  try {
-    return statSync(path).size;
-  } catch {
-    return undefined;
-  }
-}
-
-function discardStaging(staging: string, warn: (message: string) => void): void {
-  try {
-    rmSync(staging, { recursive: true, force: true, maxRetries: 3 });
-  } catch (cause) {
-    warn(`清不掉暫存目錄 ${staging}（${cause instanceof Error ? cause.message : String(cause)}），下一次建置會再清一次`);
-  }
 }
 
 /** `shapes.json` 列出的形體 id（形體檔的權威清單）。 */
@@ -532,56 +515,44 @@ export async function renderAllStills(opts: {
   }
   const salt = `qst${STILL_VERSION}:sharp${sharp.versions.sharp}:${ids.map((id) => `${id}=${sha256(bins.get(id)!)}`).join(',')}`;
   const inputsHash = hashInputs(root, SOURCES, salt);
-  const hashFile = join(outDir, HASH_FILE);
 
-  const upToDate = !opts.force && existsSync(hashFile) && readFileSync(hashFile, 'utf8').trim() === inputsHash && manifestMatches(outDir, names);
+  const upToDate = !opts.force && hashMatches(outDir, inputsHash) && manifestMatches(outDir, names);
   if (upToDate) return { built: [], skipped: true };
 
-  mkdirSync(outDir, { recursive: true });
-  // 先拿掉舊雜湊：之後不管在哪一步失敗或被中斷，下一次一定重建
-  rmSync(hashFile, { force: true });
-
-  const staging = join(outDir, STAGING);
-  discardStaging(staging, warn);
-  mkdirSync(staging, { recursive: true });
-  try {
-    const manifest: Record<string, { width: number; height: number; bytes: number }> = {};
-    const shapes = new Map<string, Shape>();
-    const shapeOf = (id: string): Shape => {
-      let shape = shapes.get(id);
-      if (!shape) {
-        shape = placed(id, decodeShape(bins.get(id)!));
-        shapes.set(id, shape);
+  await commitStaged({
+    outDir,
+    files: names.map((name) => `${name}.webp`),
+    manifest: MANIFEST,
+    hash: inputsHash,
+    ext: '.webp',
+    warn,
+    build: async (staging) => {
+      const manifest: Record<string, { width: number; height: number; bytes: number }> = {};
+      const shapes = new Map<string, Shape>();
+      const shapeOf = (id: string): Shape => {
+        let shape = shapes.get(id);
+        if (!shape) {
+          shape = placed(id, decodeShape(bins.get(id)!));
+          shapes.set(id, shape);
+        }
+        return shape;
+      };
+      const jobs = [
+        ...HEROES.map((h) => ({ name: h.name, source: h.source, width: h.width, height: h.height })),
+        ...ids.map((id) => ({ name: id, source: id, ...POSE_SIZE })),
+      ];
+      for (const { name, source, width, height } of jobs) {
+        let bytes: Uint8Array;
+        try {
+          bytes = await renderStill(shapeOf(source), { width, height, seed: seedOf(name) });
+        } catch (cause) {
+          throw failedStill(name, cause);
+        }
+        writeFileSync(join(staging, `${name}.webp`), bytes);
+        manifest[name] = { width, height, bytes: bytes.byteLength };
       }
-      return shape;
-    };
-    const jobs = [
-      ...HEROES.map((h) => ({ name: h.name, source: h.source, width: h.width, height: h.height })),
-      ...ids.map((id) => ({ name: id, source: id, ...POSE_SIZE })),
-    ];
-    for (const { name, source, width, height } of jobs) {
-      let bytes: Uint8Array;
-      try {
-        bytes = await renderStill(shapeOf(source), { width, height, seed: seedOf(name) });
-      } catch (cause) {
-        throw failedStill(name, cause);
-      }
-      writeFileSync(join(staging, `${name}.webp`), bytes);
-      manifest[name] = { width, height, bytes: bytes.byteLength };
-    }
-    writeFileSync(join(staging, MANIFEST), `${JSON.stringify(manifest, null, 2)}\n`);
-
-    // 全部成功才換入。先刪 stills.json：換入到一半失敗時 .webp 可能新舊混雜，
-    // 但目錄裡既沒有 stills.json 也沒有 .inputs-hash，一看就是不完整，下一次整批重建。
-    rmSync(join(outDir, MANIFEST), { force: true });
-    for (const name of names) renameSync(join(staging, `${name}.webp`), join(outDir, `${name}.webp`));
-    renameSync(join(staging, MANIFEST), join(outDir, MANIFEST));
-    // 改名或移除的形體不留殘檔（頁面用 glob 收 `*.webp`，殘檔會被一起打進 dist）
-    const known = new Set(names.map((name) => `${name}.webp`));
-    for (const file of readdirSync(outDir)) if (file.endsWith('.webp') && !known.has(file)) rmSync(join(outDir, file));
-    writeFileSync(hashFile, `${inputsHash}\n`);
-  } finally {
-    discardStaging(staging, warn);
-  }
+      writeFileSync(join(staging, MANIFEST), `${JSON.stringify(manifest, null, 2)}\n`);
+    },
+  });
   return { built: names, skipped: false };
 }

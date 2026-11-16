@@ -3,23 +3,18 @@
  * 另寫 `shapes.json`（`[{ id, bytes, sha256 }]`）與 `.inputs-hash`。輸出在 `src/assets/generated/qi/shapes/`（已忽略，不進 git）。
  *
  * 輸入雜湊 = 配方用到的剪影 PNG、朱印遮罩 PNG、兵器 `.geo` 快照，加上 `config/{figures,shapes}.ts`、`shapes/*.ts`、
- * 本腳本與 `hash.ts` 的原始碼，以及形體檔格式版本。雜湊沒變、檔案齊全就跳過（不重寫任何檔）。
+ * 本腳本與 `hash.ts`、`staged-output.ts` 的原始碼，以及形體檔格式版本。雜湊沒變、檔案齊全就跳過（不重寫任何檔）。
  * 本腳本自己也進雜湊：朱印取樣、合成排列的邏輯寫在這裡，改了它產物就該重建。
  * 「檔案齊全」包含大小：每個 `.bin` 必須恰為 `shapeFileBytes(SHAPE_COUNT)`，被截斷的檔會觸發重建。
  *
- * 失敗不留半套產物（不會有看起來完整、其實新舊混雜的輸出目錄）：
- *   - 重建開始就刪 `.inputs-hash`；
- *   - 全部形體先建到 `outDir/.staging/`。建置階段任何一個形體失敗，錯誤訊息帶形體 id（`形體 kao：…`，原始錯誤在 `cause`），
- *     正式位置維持上一次完整的產物（`shapes.json` 與 `.bin` 彼此相符，只是沒有 `.inputs-hash`，下一次會重建）；
- *   - 都成功之後才換入正式位置，換入前先刪 `shapes.json`：換入途中失敗（例如某個 `.bin` 被別的程式鎖住）時，
- *     `.bin` 可能新舊混雜，但目錄裡既沒有 `shapes.json` 也沒有 `.inputs-hash`，一看就知道不完整，下一次整批重建；
- *   - `.staging` 的清理是盡力而為：清不掉只發警告，不讓成功的建置變失敗，也不蓋掉建置本身的錯誤。
+ * 寫檔紀律（失敗不留半套產物、錯誤帶形體 id）：建置階段任何一個形體失敗，錯誤訊息帶形體 id（`形體 kao：…`，原始錯誤在 `cause`）；
+ * 其餘的「先建到 .staging、全部成功才換入、清單最後換入、殘檔清除」由 `staged-output.ts` 的 `commitStaged` 負責（與靜態圖共用）。
  *
  * 只用 Node 與入庫的檔案（CI 沒有 Python、字型原檔，也不 import `weapons.ts`：兵器取樣吃 `.geo` 快照，見 D29）。
  * 固定種子（由形體 id 雜湊而來）＋純函式取樣：同輸入逐位元相同。
  */
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import sharp from 'sharp';
 import { FIGURES, figureScale } from '../../src/qi/config/figures';
@@ -31,14 +26,12 @@ import { sampleFigure, type FigureImage } from '../../src/qi/shapes/sample-figur
 import { sampleWeapon } from '../../src/qi/shapes/sample-weapon';
 import { decodeSnapshot } from '../../src/qi/shapes/weapon-snapshot';
 import { hashInputs, listFiles, sha256 } from './hash';
+import { commitStaged, hashMatches, sizeOf } from './staged-output';
 
 const SEAL_MASK = 'src/assets/seal/seal-liuyi.png';
 /** 朱印的深度：z 在 ±這個值內（人形約 ±0.3，印是薄薄一片）。 */
 const SEAL_HALF_DEPTH = 0.02;
-const HASH_FILE = '.inputs-hash';
 const MANIFEST = 'shapes.json';
-/** 建置時先寫到 `outDir/.staging/`，全部成功才換入；失敗就整個丟掉。 */
-const STAGING = '.staging';
 
 /** 配方引用的人形：剪影檔與比例。查 `FIGURES` 與算 `figureScale`（頭部對齊或 scaleOverride）只在這裡做一次。 */
 function resolveFigure(figure: string): { file: string; scale: number } {
@@ -82,6 +75,7 @@ function allInputs(root: string): string[] {
     ...listFiles(root, 'src/qi/shapes', '.ts'),
     'scripts/qi/build-shapes.ts',
     'scripts/qi/hash.ts',
+    'scripts/qi/staged-output.ts',
   ];
 }
 
@@ -193,24 +187,6 @@ async function buildShape(root: string, id: string, recipe: ShapeRecipe): Promis
   }
 }
 
-/** 檔案大小；不存在回 undefined。 */
-function sizeOf(path: string): number | undefined {
-  try {
-    return statSync(path).size;
-  } catch {
-    return undefined;
-  }
-}
-
-/** 盡力清掉暫存目錄：失敗（Windows 上被別的程式鎖住等）只警告，下一次建置開始時會再清一次。 */
-function discardStaging(staging: string, warn: (message: string) => void): void {
-  try {
-    rmSync(staging, { recursive: true, force: true, maxRetries: 3 });
-  } catch (cause) {
-    warn(`清不掉暫存目錄 ${staging}（${cause instanceof Error ? cause.message : String(cause)}），下一次建置會再清一次`);
-  }
-}
-
 export async function buildAllShapes(opts: {
   root: string;
   outDir: string;
@@ -222,51 +198,37 @@ export async function buildAllShapes(opts: {
   const warn = opts.warn ?? ((message: string) => console.warn(message));
   const ids = Object.keys(SHAPES);
   const inputsHash = hashInputs(root, allInputs(root), `qsh${SHAPE_FORMAT_VERSION}:${SHAPE_COUNT}`);
-  const hashFile = join(outDir, HASH_FILE);
 
   // 跳過＝雜湊相符、shapes.json 在、每個 .bin 都在且大小正確（被截斷的檔不算數）
   const binBytes = shapeFileBytes(SHAPE_COUNT);
   const upToDate =
     !opts.force &&
-    existsSync(hashFile) &&
-    readFileSync(hashFile, 'utf8').trim() === inputsHash &&
+    hashMatches(outDir, inputsHash) &&
     existsSync(join(outDir, MANIFEST)) &&
     ids.every((id) => sizeOf(join(outDir, `${id}.bin`)) === binBytes);
   if (upToDate) return { built: [], skipped: true };
 
-  mkdirSync(outDir, { recursive: true });
-  // 先拿掉舊雜湊：之後不管在哪一步失敗或被中斷，下一次一定重建，不會把半成品當成「輸入沒變」
-  rmSync(hashFile, { force: true });
-
-  const staging = join(outDir, STAGING);
-  discardStaging(staging, warn);
-  mkdirSync(staging, { recursive: true });
-  try {
-    // 先全部建到暫存目錄：任何一個形體失敗，正式位置維持上一次完整的產物，不會新舊混雜
-    const manifest: { id: string; bytes: number; sha256: string }[] = [];
-    for (const id of ids) {
-      let bytes: Uint8Array;
-      try {
-        bytes = encodeShape(await buildShape(root, id, SHAPES[id]!));
-      } catch (cause) {
-        throw failedShape(id, cause);
+  await commitStaged({
+    outDir,
+    files: ids.map((id) => `${id}.bin`),
+    manifest: MANIFEST,
+    hash: inputsHash,
+    ext: '.bin',
+    warn,
+    build: async (staging) => {
+      const manifest: { id: string; bytes: number; sha256: string }[] = [];
+      for (const id of ids) {
+        let bytes: Uint8Array;
+        try {
+          bytes = encodeShape(await buildShape(root, id, SHAPES[id]!));
+        } catch (cause) {
+          throw failedShape(id, cause);
+        }
+        writeFileSync(join(staging, `${id}.bin`), bytes);
+        manifest.push({ id, bytes: bytes.byteLength, sha256: sha256(bytes) });
       }
-      writeFileSync(join(staging, `${id}.bin`), bytes);
-      manifest.push({ id, bytes: bytes.byteLength, sha256: sha256(bytes) });
-    }
-    writeFileSync(join(staging, MANIFEST), `${JSON.stringify(manifest, null, 2)}\n`);
-
-    // 全部成功才換入（同一個檔案系統內的 rename）。先刪 shapes.json：換入到一半失敗時 .bin 可能新舊混雜，
-    // 但目錄裡既沒有 shapes.json 也沒有 .inputs-hash，一看就是不完整，下一次整批重建。
-    rmSync(join(outDir, MANIFEST), { force: true });
-    for (const id of ids) renameSync(join(staging, `${id}.bin`), join(outDir, `${id}.bin`));
-    renameSync(join(staging, MANIFEST), join(outDir, MANIFEST));
-    // 改名或移除的形體不留殘檔：執行時用 glob 收 `*.bin`，殘檔會被一起打進 dist
-    const known = new Set(ids.map((id) => `${id}.bin`));
-    for (const name of readdirSync(outDir)) if (name.endsWith('.bin') && !known.has(name)) rmSync(join(outDir, name));
-    writeFileSync(hashFile, `${inputsHash}\n`);
-  } finally {
-    discardStaging(staging, warn);
-  }
+      writeFileSync(join(staging, MANIFEST), `${JSON.stringify(manifest, null, 2)}\n`);
+    },
+  });
   return { built: ids, skipped: false };
 }
