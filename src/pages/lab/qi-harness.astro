@@ -1,0 +1,77 @@
+---
+// 「氣」光點引擎的開發用 harness（D26：Task 22 會和 /lab/qi/ 一起刪除）：只有一張全螢幕畫布與一支腳本，
+// 給引擎 e2e 與截圖用。不進 sitemap、不給搜尋引擎收錄。
+//   ?qi-tier=high|mid|low|min  覆寫光點數分級（沒給或不認得就依視窗判斷）
+//   ?qi-debug=1                暴露 stage.debug（讀回、虛擬時間餵調速器）
+import { SITE } from '../../lib/site';
+---
+
+<!doctype html>
+<html lang={SITE.lang}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>qi harness</title>
+    <meta name="theme-color" content="#0b0a09" />
+  </head>
+  <body>
+    <canvas id="qi-canvas" aria-hidden="true"></canvas>
+
+    <script>
+      import { initialTier } from '../../qi/engine/tiers';
+      import { fetchBytes } from '../../qi/shapes/fetch';
+      import { createShapeLoader } from '../../qi/shapes/loader';
+      import { resolveShapeUrl } from '../../qi/shapes/urls';
+      import type { QiStage } from '../../qi/engine/qi-stage';
+
+      // 引擎是動態載入的 chunk（和正式首頁一樣）：載入、掛上 stage、再通知測試。
+      const root = document.documentElement;
+      const canvas = document.querySelector<HTMLCanvasElement>('#qi-canvas')!;
+      const params = new URLSearchParams(location.search);
+      const tier = initialTier({
+        touch: matchMedia('(pointer: coarse)').matches,
+        width: innerWidth,
+        override: params.get('qi-tier'),
+      });
+      const loader = createShapeLoader({ fetch: fetchBytes, resolveUrl: resolveShapeUrl });
+
+      async function start(): Promise<void> {
+        const { mountQiStage } = await import('../../qi/engine/qi-stage');
+        const stage: QiStage = await mountQiStage({
+          canvas,
+          tier,
+          loader,
+          reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
+          debug: params.get('qi-debug') === '1',
+        });
+        (window as unknown as { __qiStage: QiStage }).__qiStage = stage;
+        addEventListener('resize', () => stage.resize(innerWidth, innerHeight));
+        root.dataset.harness = 'ready';
+      }
+
+      start().catch((error: unknown) => {
+        console.error(error);
+        root.dataset.harness = 'error';
+      });
+    </script>
+
+    <style is:global>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #0b0a09;
+        overflow: hidden;
+      }
+
+      #qi-canvas {
+        position: fixed;
+        inset: 0;
+        width: 100vw;
+        height: 100vh;
+        display: block;
+      }
+    </style>
+  </body>
+</html>
