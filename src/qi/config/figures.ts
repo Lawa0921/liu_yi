@@ -12,7 +12,10 @@ export interface FigureDef {
   id: string;
   /** `src/assets/silhouettes/` 下的檔名，無副檔名。 */
   src: string;
-  /** 原圖中的頭高（px）。 */
+  /**
+   * 原圖中的頭高（px）。多數是 `measureHeadHeight` 的實測值；lift／dingzhou／chengchui／kao 四張是由
+   * `scaleOverride` 反推的值，不是實測（見 `FIGURES` 內註解）。
+   */
   headPx: number;
   /** 直接指定 scale（試作時由使用者看過核可的值），優先於頭部對齊。 */
   scaleOverride?: number;
@@ -36,10 +39,10 @@ export const FIGURES: Record<string, FigureDef> = {
   kao: { id: 'kao', src: 'fig-kao', headPx: 162, scaleOverride: 1.12, audience: 'adult' },
 
   // ── 新增的剪影（Task 6–7）：headPx 為 measureHeadHeight 的四捨五入值 ──
-  // 正面像：頸最窄處（量測值 141）落在頸的中段，而側面像的頸谷貼著領口（land：谷在肩線上方 23 px，這張是 44 px），
-  // 量法本身偏高約半個頸長；取 150（比量測值高 6%，在 12% 閘門內）。
-  // 這張剪影約 8.5 頭身（落地那張約 6.4），頭部對齊後世界身高約 2.5，比 land 的 2.0 高。
-  salute: { id: 'salute', src: 'fig-salute', headPx: 150, audience: 'both' },
+  // headPx 141 是實測值。這張剪影約 8.5 頭身（落地那張約 6.4），照頭部對齊會得到 scale 1.28、世界身高 2.67，
+  // 比 land 的 2.0 高三成（教練段的取景是照 2.0 左右的人形抓的），所以比照舊五張給 scaleOverride：
+  // 0.96 讓世界身高 ≈ 1.99，與 land 相差 < 1%（控制者裁定；單元測試要求 ≤ 5%）。
+  salute: { id: 'salute', src: 'fig-salute', headPx: 141, scaleOverride: 0.96, audience: 'both' },
   'kid-wushu': { id: 'kid-wushu', src: 'fig-kid-wushu', headPx: 158, audience: 'kid' },
   'kid-defense-a': { id: 'kid-defense-a', src: 'fig-kid-defense-a', headPx: 202, audience: 'kid' },
   'kid-defense-b': { id: 'kid-defense-b', src: 'fig-kid-defense-b', headPx: 177, audience: 'kid' },

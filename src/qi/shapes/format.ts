@@ -94,7 +94,9 @@ export function decodeShape(b: Uint8Array): Shape {
       positions[i * 3 + a] = min[a]! + (view.getUint16(base + i * 2, true) / QUANT) * range;
     }
   }
-  const kinds = b.slice(HEADER_BYTES + count * 6, expected);
+  // 明確拷貝：Node 的 Buffer.slice 與 subarray 一樣共用記憶體，不能依賴 slice 的語意
+  const kinds = new Uint8Array(count);
+  kinds.set(b.subarray(HEADER_BYTES + count * 6, expected));
   return { count, positions, kinds, min, max };
 }
 

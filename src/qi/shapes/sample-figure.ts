@@ -19,6 +19,8 @@
 
 import { WORLD_UNIT_PER_LAND_PX } from '../config/figures';
 import type { Shape } from './format';
+import { OPAQUE } from './head';
+import { rng } from './rng';
 
 /** 取樣網格：每 px 原圖縮成多少格。 */
 const GRID = 0.32;
@@ -26,7 +28,6 @@ const GRID = 0.32;
 const RIM_SHARE = 0.22;
 /** 輪廓帶＝距離 < 1.7 格。 */
 const RIM_DISTANCE = 1.7;
-const OPAQUE = 128;
 /** 在同一格內重抽的次數，之後改取該格第一個不透明像素。 */
 const RETRIES = 8;
 /** z 的絕對上限（世界單位）。略低於 0.30，留給 Float32 與 u16 量化的取整。 */
@@ -37,17 +38,6 @@ export interface FigureImage {
   alpha: Uint8Array;
   width: number;
   height: number;
-}
-
-/** 固定種子的亂數（mulberry32 的變體；試作的 `rng`）。 */
-export function rng(seed: number): () => number {
-  let t = seed >>> 0;
-  return () => {
-    t = (t + 0x6d2b79f5) >>> 0;
-    let r = Math.imul(t ^ (t >>> 15), t | 1);
-    r ^= r + Math.imul(r ^ (r >>> 7), r | 61);
-    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
-  };
 }
 
 /** 內部到輪廓的距離（chamfer 3-4，單位：格）。 */

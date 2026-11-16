@@ -41,7 +41,7 @@ const entries = Object.entries(FIGURES);
 /**
  * 這四張的 headPx 是手填的（figures.ts 註解寫明依據），不是 measureHeadHeight 的輸出：
  * 前傾／縮肩／手臂貼頭的架勢讓列寬輪廓裡沒有可用的頸谷，量到的值與使用者核可的視覺比例差 20–70%，
- * 所以 headPx 由核可過的 scaleOverride 反推，不與量測值比對。其餘八張必須與量測值相差 ≤ 12%。
+ * 所以 headPx 由核可過的 scaleOverride 反推，不與量測值比對。其餘六張（含 salute：量測值 141 直接用）必須與量測值相差 ≤ 12%。
  */
 const HAND_FILLED = ['lift', 'dingzhou', 'chengchui', 'kao'];
 
@@ -79,8 +79,12 @@ describe('FIGURES 設定', () => {
 
   it('試作的 FIGURE_SCALE 原值搬進 scaleOverride（D12）：lift 1.02、land 1、dingzhou 1.25、chengchui 1.18、kao 1.12', () => {
     for (const id of OLD_FIVE) expect(FIGURES[id]!.scaleOverride, id).toBe(OVERRIDES[id]);
+  });
+
+  it('scaleOverride 的集合恰為舊五張加 salute（salute 是控制者裁定的例外：8.5 頭身，頭部對齊會過高）', () => {
     const overridden = entries.filter(([, d]) => d.scaleOverride !== undefined).map(([k]) => k);
-    expect(overridden.sort()).toEqual([...OLD_FIVE].sort());
+    expect(overridden.sort()).toEqual([...OLD_FIVE, 'salute'].sort());
+    expect(FIGURES.salute!.scaleOverride).toBeGreaterThan(0);
   });
 
   it('WORLD_UNIT_PER_LAND_PX = 2/1161（落地那張主體高 1161 px ↔ 世界身高 2）', () => {
@@ -112,13 +116,18 @@ describe('FIGURES 對真實剪影', () => {
     expect(Math.abs(measured - d.headPx) / d.headPx).toBeGreaterThan(0.12);
   });
 
-  it('五個舊值與 land.headPx / def.headPx 相差 ≤ 15%（搬入的值與頭部對齊一致）', () => {
+  it('fig-salute：取樣身高與 land 相差 ≤ 5%（頭部對齊會讓它高到 2.67，所以用 scaleOverride 壓回）', async () => {
+    const salute = FIGURES.salute!;
     const land = FIGURES.land!;
-    for (const id of OLD_FIVE) {
-      const d = FIGURES[id]!;
-      const aligned = land.headPx / d.headPx;
-      expect(Math.abs(aligned - OVERRIDES[id]) / OVERRIDES[id], id).toBeLessThanOrEqual(0.15);
-    }
+    const [saluteMask, landMask] = await Promise.all([loadMask(salute.src), loadMask(land.src)]);
+    const a = sampleFigure(saluteMask, figureScale(salute, land), { count: SHAPE_COUNT, seed: 5 });
+    const b = sampleFigure(landMask, figureScale(land, land), { count: SHAPE_COUNT, seed: 5 });
+    expect(Math.abs(a.max[1] - b.max[1]) / b.max[1]).toBeLessThanOrEqual(0.05);
+    expect(a.min[1]).toBeGreaterThanOrEqual(0);
+    expect(a.min[1]).toBeLessThanOrEqual(0.03);
+    // 不用 override 的話頭部對齊會讓它超過 2.6：這是需要 override 的理由
+    const aligned = sampleFigure(saluteMask, land.headPx / salute.headPx, { count: SHAPE_COUNT, seed: 5 });
+    expect(aligned.max[1]).toBeGreaterThan(2.6);
   });
 
   it.each(entries.filter(([, d]) => d.scaleOverride === undefined))(

@@ -12,8 +12,8 @@
  * 量到的值不可靠，那幾張的 headPx 由 `config/figures.ts` 手填。
  */
 
-/** 不透明門檻：alpha ≥ 128（與 silhouette-qa 的「alpha > 127」一致）。 */
-const OPAQUE = 128;
+/** 不透明門檻：alpha ≥ 128（與 silhouette-qa 的「alpha > 127」一致）。人形取樣（`sample-figure.ts`）共用這一份。 */
+export const OPAQUE = 128;
 /** 平滑半徑：主體高度的 1%（至少 1 列）。 */
 const SMOOTH = 0.01;
 /** 頭峰之後下降超過 3% 才確認這是頭峰。 */

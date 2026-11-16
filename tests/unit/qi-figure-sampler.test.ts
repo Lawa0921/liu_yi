@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { figureScale, WORLD_UNIT_PER_LAND_PX, type FigureDef } from '../../src/qi/config/figures';
 import { SHAPE_COUNT } from '../../src/qi/shapes/format';
 import { measureHeadHeight } from '../../src/qi/shapes/head';
+import { rng } from '../../src/qi/shapes/rng';
 import { sampleFigure } from '../../src/qi/shapes/sample-figure';
 
 // 合成遮罩：圓頭＋細頸＋矩形軀幹（右側伸出一條手臂），可選軀幹中的圓孔（鏤空的負形）。
@@ -301,5 +302,25 @@ describe('sampleFigure（合成遮罩）', () => {
     const small = sampleFigure(adult, 1, { count: 500, seed: 9 });
     expect(small.count).toBe(500);
     expect(small.positions.length).toBe(1500);
+  });
+});
+
+describe('rng（src/qi/shapes/rng.ts）', () => {
+  it('同 seed 同序列、不同 seed 不同序列，值落在 [0, 1)', () => {
+    const a = rng(7);
+    const b = rng(7);
+    const c = rng(8);
+    const seqA = Array.from({ length: 1000 }, () => a());
+    const seqB = Array.from({ length: 1000 }, () => b());
+    const seqC = Array.from({ length: 1000 }, () => c());
+    expect(seqA).toEqual(seqB);
+    expect(seqA).not.toEqual(seqC);
+    for (const v of seqA) {
+      expect(v).toBeGreaterThanOrEqual(0);
+      expect(v).toBeLessThan(1);
+    }
+    const mean = seqA.reduce((x, y) => x + y, 0) / seqA.length;
+    expect(mean).toBeGreaterThan(0.45);
+    expect(mean).toBeLessThan(0.55);
   });
 });
