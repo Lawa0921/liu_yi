@@ -40,13 +40,16 @@ const QUANT = 65535;
 /** 一個點在檔裡占 3 × u16 + u8。 */
 const bodyBytes = (count: number): number => count * 7;
 
+/** 含 header 的整個檔案長度（B）：40 + 7 × count。建置的「跳過」判斷用它核對產物沒有被截斷。 */
+export const shapeFileBytes = (count: number): number => HEADER_BYTES + bodyBytes(count);
+
 export function encodeShape(s: Shape): Uint8Array {
   const { count } = s;
   if (!Number.isInteger(count) || count < 0) throw new RangeError(`形體 count 不合法：${count}`);
   if (s.positions.length !== count * 3) throw new RangeError(`positions 長度 ${s.positions.length} ≠ count × 3（${count * 3}）`);
   if (s.kinds.length !== count) throw new RangeError(`kinds 長度 ${s.kinds.length} ≠ count（${count}）`);
 
-  const bytes = new Uint8Array(HEADER_BYTES + bodyBytes(count));
+  const bytes = new Uint8Array(shapeFileBytes(count));
   const view = new DataView(bytes.buffer);
   bytes.set(MAGIC, 0);
   view.setUint16(4, VERSION, true);
@@ -83,7 +86,7 @@ export function decodeShape(b: Uint8Array): Shape {
   const version = view.getUint16(4, true);
   if (version !== VERSION) throw new Error(`不支援的形體檔版本 ${version}（只認 ${VERSION}）`);
   const count = view.getUint32(8, true);
-  const expected = HEADER_BYTES + bodyBytes(count);
+  const expected = shapeFileBytes(count);
   if (b.byteLength !== expected) throw new Error(`形體檔長度 ${b.byteLength} B ≠ 預期 ${expected} B（count = ${count}）`);
 
   const min: [number, number, number] = [view.getFloat32(12, true), view.getFloat32(16, true), view.getFloat32(20, true)];

@@ -5,17 +5,21 @@
  * 輸入雜湊 = 配方用到的剪影 PNG、朱印遮罩 PNG、兵器 `.geo` 快照，加上 `config/{figures,shapes}.ts`、`shapes/*.ts`、
  * 本腳本與 `hash.ts` 的原始碼，以及形體檔格式版本。雜湊沒變、檔案齊全就跳過（不重寫任何檔）。
  * 本腳本自己也進雜湊：朱印取樣、合成排列的邏輯寫在這裡，改了它產物就該重建。
+ * 「檔案齊全」包含大小：每個 `.bin` 必須恰為 `shapeFileBytes(SHAPE_COUNT)`，被截斷的檔會觸發重建。
+ *
+ * 失敗不留半套產物：重建開始就刪 `.inputs-hash`，全部形體先建到 `outDir/.staging/`，都成功才換入正式位置；
+ * 任何一個形體失敗，錯誤訊息帶形體 id（`形體 kao：…`，原始錯誤在 `cause`），正式位置維持上一次完整的產物。
  *
  * 只用 Node 與入庫的檔案（CI 沒有 Python、字型原檔，也不 import `weapons.ts`：兵器取樣吃 `.geo` 快照，見 D29）。
  * 固定種子（由形體 id 雜湊而來）＋純函式取樣：同輸入逐位元相同。
  */
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import sharp from 'sharp';
 import { FIGURES, figureScale } from '../../src/qi/config/figures';
 import { SEAL_CENTER_Y, SEAL_WORLD_SIZE, SHAPES, type ShapeRecipe } from '../../src/qi/config/shapes';
-import { encodeShape, KIND, SHAPE_COUNT, SHAPE_FORMAT_VERSION, type Shape } from '../../src/qi/shapes/format';
+import { encodeShape, KIND, SHAPE_COUNT, SHAPE_FORMAT_VERSION, shapeFileBytes, type Shape } from '../../src/qi/shapes/format';
 import { OPAQUE } from '../../src/qi/shapes/head';
 import { rng } from '../../src/qi/shapes/rng';
 import { sampleFigure, type FigureImage } from '../../src/qi/shapes/sample-figure';
@@ -28,30 +32,44 @@ const SEAL_MASK = 'src/assets/seal/seal-liuyi.png';
 const SEAL_HALF_DEPTH = 0.02;
 const HASH_FILE = '.inputs-hash';
 const MANIFEST = 'shapes.json';
+/** 建置時先寫到 `outDir/.staging/`，全部成功才換入；失敗就整個丟掉。 */
+const STAGING = '.staging';
+
+/** 配方引用的人形：剪影檔與比例。查 `FIGURES` 與算 `figureScale`（頭部對齊或 scaleOverride）只在這裡做一次。 */
+function resolveFigure(figure: string): { file: string; scale: number } {
+  const def = FIGURES[figure];
+  if (!def) throw new Error(`配方引用了不存在的人形 ${figure}（FIGURES 沒有這個鍵）`);
+  return { file: `src/assets/silhouettes/${def.src}.png`, scale: figureScale(def, FIGURES.land!) };
+}
+
+/** 失敗訊息一律帶形體 id（sharp、解碼器丟的錯本身不會說是哪個形體），原始錯誤放在 cause。 */
+function failedShape(id: string, cause: unknown): Error {
+  return new Error(`形體 ${id}：${cause instanceof Error ? cause.message : String(cause)}`, { cause });
+}
 
 /** 這個配方用到的剪影原圖、遮罩或快照（相對專案根目錄）。 */
-function recipeInputs(id: string, recipe: ShapeRecipe): string[] {
+function recipeInputs(recipe: ShapeRecipe): string[] {
   switch (recipe.kind) {
     case 'figure':
-      return [silhouetteFile(id, recipe.figure)];
+      return [resolveFigure(recipe.figure).file];
     case 'weapon':
       return [`src/qi/data/weapons/${recipe.name}.geo`];
     case 'seal':
       return [SEAL_MASK];
     case 'compose':
-      return recipe.parts.map((part) => silhouetteFile(id, part.figure));
+      return recipe.parts.map((part) => resolveFigure(part.figure).file);
   }
-}
-
-function silhouetteFile(id: string, figure: string): string {
-  const def = FIGURES[figure];
-  if (!def) throw new Error(`形體 ${id} 的配方引用了不存在的人形 ${figure}（FIGURES 沒有這個鍵）`);
-  return `src/assets/silhouettes/${def.src}.png`;
 }
 
 /** 全部輸入：配方用到的素材＋影響取樣結果的原始碼。 */
 function allInputs(root: string): string[] {
-  const assets = Object.entries(SHAPES).flatMap(([id, recipe]) => recipeInputs(id, recipe));
+  const assets = Object.entries(SHAPES).flatMap(([id, recipe]) => {
+    try {
+      return recipeInputs(recipe);
+    } catch (cause) {
+      throw failedShape(id, cause);
+    }
+  });
   return [
     ...assets,
     'src/qi/config/figures.ts',
@@ -102,21 +120,18 @@ function sampleSeal(img: FigureImage, opts: { count: number; seed: number }): Sh
 }
 
 /**
- * 合成：每個人形照自己的 `figureScale` 取樣，再三軸一起縮 `scale`、平移到 `x`。
+ * 合成：每個人形照自己的比例（`base`＝`figureScale`）取樣，再三軸一起縮 `scale`、平移到 `x`。
  * 第 i 個點取自第 i % n 個人形的第 ⌊i / n⌋ 個取樣——交錯排列，所以任何前綴（載入時依 tier 取前綴）都是四個人形各占 1/n。
  */
 function composeFigures(
   id: string,
   parts: Extract<ShapeRecipe, { kind: 'compose' }>['parts'],
-  masks: FigureImage[],
+  figures: { mask: FigureImage; base: number }[],
   count: number,
 ): Shape {
   const n = parts.length;
-  const land = FIGURES.land!;
   const per = Math.ceil(count / n);
-  const sampled = parts.map((part, k) =>
-    sampleFigure(masks[k]!, figureScale(FIGURES[part.figure]!, land), { count: per, seed: seedOf(`${id}#${k}`) }),
-  );
+  const sampled = figures.map(({ mask, base }, k) => sampleFigure(mask, base, { count: per, seed: seedOf(`${id}#${k}`) }));
   const positions = new Float32Array(count * 3);
   const kinds = new Uint8Array(count);
   for (let i = 0; i < count; i++) {
@@ -151,22 +166,34 @@ async function buildShape(root: string, id: string, recipe: ShapeRecipe): Promis
   const count = SHAPE_COUNT;
   switch (recipe.kind) {
     case 'figure': {
-      const def = FIGURES[recipe.figure];
-      if (!def) throw new Error(`形體 ${id} 的配方引用了不存在的人形 ${recipe.figure}`);
-      const mask = await loadMask(root, silhouetteFile(id, recipe.figure));
-      return sampleFigure(mask, figureScale(def, FIGURES.land!), { count, seed: seedOf(id) });
+      const { file, scale } = resolveFigure(recipe.figure);
+      return sampleFigure(await loadMask(root, file), scale, { count, seed: seedOf(id) });
     }
     case 'weapon': {
       const snapshot = decodeSnapshot(new Uint8Array(readFileSync(join(root, `src/qi/data/weapons/${recipe.name}.geo`))));
-      if (snapshot.name !== recipe.name) throw new Error(`形體 ${id}：快照內的兵器名稱是 ${snapshot.name}，不是 ${recipe.name}`);
+      if (snapshot.name !== recipe.name) throw new Error(`快照內的兵器名稱是 ${snapshot.name}，不是 ${recipe.name}`);
       return sampleWeapon(snapshot, { count, seed: seedOf(id) });
     }
     case 'seal':
       return sampleSeal(await loadMask(root, SEAL_MASK), { count, seed: seedOf(id) });
     case 'compose': {
-      const masks = await Promise.all(recipe.parts.map((part) => loadMask(root, silhouetteFile(id, part.figure))));
-      return composeFigures(id, recipe.parts, masks, count);
+      const figures = await Promise.all(
+        recipe.parts.map(async (part) => {
+          const { file, scale } = resolveFigure(part.figure);
+          return { mask: await loadMask(root, file), base: scale };
+        }),
+      );
+      return composeFigures(id, recipe.parts, figures, count);
     }
+  }
+}
+
+/** 檔案大小；不存在回 undefined。 */
+function sizeOf(path: string): number | undefined {
+  try {
+    return statSync(path).size;
+  } catch {
+    return undefined;
   }
 }
 
@@ -176,29 +203,49 @@ export async function buildAllShapes(opts: { root: string; outDir: string; force
   const inputsHash = hashInputs(root, allInputs(root), `qsh${SHAPE_FORMAT_VERSION}:${SHAPE_COUNT}`);
   const hashFile = join(outDir, HASH_FILE);
 
+  // 跳過＝雜湊相符、shapes.json 在、每個 .bin 都在且大小正確（被截斷的檔不算數）
+  const binBytes = shapeFileBytes(SHAPE_COUNT);
   const upToDate =
     !opts.force &&
     existsSync(hashFile) &&
     readFileSync(hashFile, 'utf8').trim() === inputsHash &&
     existsSync(join(outDir, MANIFEST)) &&
-    ids.every((id) => existsSync(join(outDir, `${id}.bin`)));
+    ids.every((id) => sizeOf(join(outDir, `${id}.bin`)) === binBytes);
   if (upToDate) return { built: [], skipped: true };
 
   mkdirSync(outDir, { recursive: true });
-  // 先拿掉舊雜湊：建到一半被中斷時，下一次一定重建，不會把半成品當成「輸入沒變」
+  // 先拿掉舊雜湊：之後不管在哪一步失敗或被中斷，下一次一定重建，不會把半成品當成「輸入沒變」
   rmSync(hashFile, { force: true });
 
-  const manifest: { id: string; bytes: number; sha256: string }[] = [];
-  for (const id of ids) {
-    const bytes = encodeShape(await buildShape(root, id, SHAPES[id]!));
-    writeFileSync(join(outDir, `${id}.bin`), bytes);
-    manifest.push({ id, bytes: bytes.byteLength, sha256: sha256(bytes) });
-  }
-  // 改名或移除的形體不留殘檔：執行時用 glob 收 `*.bin`，殘檔會被一起打進 dist
-  const known = new Set(ids.map((id) => `${id}.bin`));
-  for (const name of readdirSync(outDir)) if (name.endsWith('.bin') && !known.has(name)) rmSync(join(outDir, name));
+  const staging = join(outDir, STAGING);
+  rmSync(staging, { recursive: true, force: true });
+  mkdirSync(staging);
+  try {
+    // 先全部建到暫存目錄：任何一個形體失敗，正式位置維持上一次完整的產物，不會新舊混雜
+    const manifest: { id: string; bytes: number; sha256: string }[] = [];
+    for (const id of ids) {
+      let bytes: Uint8Array;
+      try {
+        bytes = encodeShape(await buildShape(root, id, SHAPES[id]!));
+      } catch (cause) {
+        throw failedShape(id, cause);
+      }
+      writeFileSync(join(staging, `${id}.bin`), bytes);
+      manifest.push({ id, bytes: bytes.byteLength, sha256: sha256(bytes) });
+    }
+    writeFileSync(join(staging, MANIFEST), `${JSON.stringify(manifest, null, 2)}
+`);
 
-  writeFileSync(join(outDir, MANIFEST), `${JSON.stringify(manifest, null, 2)}\n`);
-  writeFileSync(hashFile, `${inputsHash}\n`);
+    // 全部成功才換入（同一個檔案系統內的 rename）。換入途中若失敗，雜湊已不在，下一次會整批重建。
+    for (const id of ids) renameSync(join(staging, `${id}.bin`), join(outDir, `${id}.bin`));
+    renameSync(join(staging, MANIFEST), join(outDir, MANIFEST));
+    // 改名或移除的形體不留殘檔：執行時用 glob 收 `*.bin`，殘檔會被一起打進 dist
+    const known = new Set(ids.map((id) => `${id}.bin`));
+    for (const name of readdirSync(outDir)) if (name.endsWith('.bin') && !known.has(name)) rmSync(join(outDir, name));
+    writeFileSync(hashFile, `${inputsHash}
+`);
+  } finally {
+    rmSync(staging, { recursive: true, force: true });
+  }
   return { built: ids, skipped: false };
 }

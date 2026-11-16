@@ -40,6 +40,18 @@ function copyRoot(): string {
   return dir;
 }
 
+/**
+ * 改一張剪影的一個像素：把影像右下角那格塗成不透明。外框被拉到角落，整個形體的腳底與中線都跟著位移，
+ * 所以取樣結果一定會變（隨便改內部一個像素不一定會動到任何取樣點）。
+ */
+async function paintCorner(file: string): Promise<void> {
+  const { data, info } = await sharp(file).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const corner = (info.width * info.height - 1) * 4;
+  expect(data[corner + 3]).toBe(0);
+  data.set([255, 255, 255, 255], corner);
+  await sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } }).png().toFile(file);
+}
+
 const binOf = (outDir: string, id: string): Buffer => readFileSync(join(outDir, `${id}.bin`));
 const sha = (b: Uint8Array): string => createHash('sha256').update(b).digest('hex');
 const snapshot = (outDir: string): Record<string, string> => Object.fromEntries(IDS.map((id) => [id, sha(binOf(outDir, id))]));
@@ -308,13 +320,7 @@ describe('buildAllShapes：輸入雜湊與跳過', () => {
     const before = snapshot(outDir);
     const hashBefore = readFileSync(join(outDir, '.inputs-hash'), 'utf8');
 
-    // 一個像素就夠：把影像右下角那格塗成不透明，外框被拉到角落，整個形體的腳底與中線都跟著位移。
-    const file = join(root, 'src/assets/silhouettes', `${FIGURES.kao!.src}.png`);
-    const { data, info } = await sharp(file).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-    const corner = (info.width * info.height - 1) * 4;
-    expect(data[corner + 3]).toBe(0);
-    data.set([255, 255, 255, 255], corner);
-    await sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } }).png().toFile(file);
+    await paintCorner(join(root, 'src/assets/silhouettes', `${FIGURES.kao!.src}.png`));
 
     const second = await buildAllShapes({ root, outDir });
 
@@ -379,6 +385,72 @@ describe('buildAllShapes：輸入雜湊與跳過', () => {
     const forced = await buildAllShapes({ root: ROOT, outDir, force: true });
     expect(forced.skipped).toBe(false);
     expect([...forced.built].sort()).toEqual([...IDS].sort());
+  }, 180_000);
+
+  it('某個 .bin 被截斷（大小不是 40 + 7 × 16384）→ 即使 .inputs-hash 相符也重建', async () => {
+    const outDir = join(tmp(), 'shapes');
+    await buildAllShapes({ root: ROOT, outDir });
+    const before = snapshot(outDir);
+
+    writeFileSync(join(outDir, 'land.bin'), binOf(outDir, 'land').subarray(0, 1000));
+    const healed = await buildAllShapes({ root: ROOT, outDir });
+
+    expect(healed.skipped).toBe(false);
+    expect(statSync(join(outDir, 'land.bin')).size).toBe(BIN_BYTES);
+    expect(snapshot(outDir)).toEqual(before);
+  }, 120_000);
+
+  it('shapes.json 不見 → 即使 .inputs-hash 與全部 .bin 都在也重建', async () => {
+    const outDir = join(tmp(), 'shapes');
+    await buildAllShapes({ root: ROOT, outDir });
+    const manifest = readFileSync(join(outDir, 'shapes.json'), 'utf8');
+
+    rmSync(join(outDir, 'shapes.json'));
+    const healed = await buildAllShapes({ root: ROOT, outDir });
+
+    expect(healed.skipped).toBe(false);
+    expect(readFileSync(join(outDir, 'shapes.json'), 'utf8')).toBe(manifest);
+  }, 120_000);
+
+  it('建置中途失敗（kao 的剪影被截斷）：錯誤訊息帶形體 id 與原因、沒有 .inputs-hash、輸出目錄不新舊混雜；修好後重建，產物與乾淨建置一致', async () => {
+    const root = copyRoot();
+    const outDir = join(tmp(), 'shapes');
+    await buildAllShapes({ root, outDir });
+    const before = snapshot(outDir);
+    const manifestBefore = readFileSync(join(outDir, 'shapes.json'), 'utf8');
+    const filesBefore = readdirSync(outDir).filter((f) => f !== '.inputs-hash').sort();
+
+    // land 的輸入改了（它在 kao 之前建，會建出新內容），kao 的剪影被截斷（建到它就失敗）：
+    // 失敗之後不能只有 land.bin 是新的，也不能留下新的 shapes.json 或半套檔案。
+    await paintCorner(join(root, 'src/assets/silhouettes', `${FIGURES.land!.src}.png`));
+    const kaoFile = join(root, 'src/assets/silhouettes', `${FIGURES.kao!.src}.png`);
+    const kaoGood = readFileSync(kaoFile);
+    writeFileSync(kaoFile, kaoGood.subarray(0, 100));
+
+    const error = await buildAllShapes({ root, outDir }).then(
+      () => undefined,
+      (caught: unknown) => caught,
+    );
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain('形體 kao');
+    expect((error as Error).cause).toBeDefined();
+    expect(existsSync(join(outDir, '.inputs-hash'))).toBe(false);
+    expect(readdirSync(outDir).sort()).toEqual(filesBefore);
+    expect(snapshot(outDir)).toEqual(before);
+    expect(readFileSync(join(outDir, 'shapes.json'), 'utf8')).toBe(manifestBefore);
+
+    writeFileSync(kaoFile, kaoGood);
+    const fixed = await buildAllShapes({ root, outDir });
+    const clean = join(tmp(), 'shapes');
+    await buildAllShapes({ root, outDir: clean });
+
+    expect(fixed.skipped).toBe(false);
+    expect(snapshot(outDir)).toEqual(snapshot(clean));
+    expect(snapshot(outDir).land).not.toBe(before.land); // land 確實吃到了修改
+    expect(readFileSync(join(outDir, 'shapes.json'), 'utf8')).toBe(readFileSync(join(clean, 'shapes.json'), 'utf8'));
+    expect(readFileSync(join(outDir, '.inputs-hash'), 'utf8')).toBe(readFileSync(join(clean, '.inputs-hash'), 'utf8'));
+    expect(readdirSync(outDir).sort()).toEqual(readdirSync(clean).sort());
   }, 180_000);
 
   it('重建時清掉 outDir 裡已不在 SHAPES 的 .bin（改名的形體不留殘檔）', async () => {
