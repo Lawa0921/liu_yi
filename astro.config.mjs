@@ -3,6 +3,7 @@ import { defineConfig, fontProviders } from 'astro/config';
 import sitemap from '@astrojs/sitemap';
 import { resolveDeployTarget } from './deploy-target.mjs';
 import { twkaiGuard } from './integrations/twkai-guard.ts';
+import { qiAssets } from './integrations/qi-assets.ts';
 
 // site／base／outDir 的預設值與環境變數覆寫都在 deploy-target.mjs。
 const { site, base, outDir } = resolveDeployTarget(process.env);
@@ -17,6 +18,8 @@ export default defineConfig({
   // /lab/ 底下是給業主看方向的拋棄式試作，不進 sitemap。
   integrations: [
     sitemap({ filter: (page) => !page.includes('/lab/') }),
+    // 建置時產出「氣」首頁的形體檔（src/assets/generated/qi/shapes/，已忽略；輸入雜湊不變就跳過）。
+    qiAssets(),
     // 建置時檢查頁面用字都在 TW-Kai 子集內（TWKAI_GUARD=warn 時只警告）。
     twkaiGuard(),
   ],

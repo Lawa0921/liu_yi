@@ -31,7 +31,9 @@ export interface Shape {
 }
 
 const MAGIC = [0x51, 0x53, 0x48, 0x31] as const; // 'QSH1'
-const VERSION = 1;
+/** 檔案格式版本（寫進 header；建置的輸入雜湊也吃它，改格式就會重建所有形體）。 */
+export const SHAPE_FORMAT_VERSION = 1;
+const VERSION = SHAPE_FORMAT_VERSION;
 const HEADER_BYTES = 40;
 const QUANT = 65535;
 
