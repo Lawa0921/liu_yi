@@ -9,12 +9,14 @@ import { beforeAll, describe, expect, it } from 'vitest';
 // 朱文＝字與框是實心（不透明），其餘透明；右「六」左「藝」，框為方形，字與框之間要留白。
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const MASK = fileURLToPath(new URL('../../src/assets/seal/seal-liuyi.png', import.meta.url));
-const PROVENANCE = fileURLToPath(new URL('../../src/assets/silhouettes/provenance.json', import.meta.url));
+const SCRIPT = fileURLToPath(new URL('../../tools/seal/render-seal.py', import.meta.url));
+const PROVENANCE =fileURLToPath(new URL('../../src/assets/silhouettes/provenance.json', import.meta.url));
 
 const SIZE = 512;
 const INK = 128; // alpha ≥ 此值算「墨」
-const BIG_AREA = 1500; // 一個字（或字的主體）至少要有的面積
+const MIN_HALF_INK = 1500; // 左半／右半的字至少要有的墨量（px）
 const GAP = 8; // 字與框內緣至少留白
+const COL_GAP = 8; // 兩字之間的垂直空帶至少寬度
 
 interface Mask {
   alpha: Uint8Array;
@@ -28,6 +30,7 @@ interface Component {
   cx: number; // 質心，0–1
   cy: number;
   minD: number; // 此元件任一像素到畫布最近邊的最小距離
+  maxD: number; // 同上，最大距離（框只佔外圈，字會比較深入）
 }
 
 async function readMask(path: string): Promise<Mask> {
@@ -52,6 +55,7 @@ function label(mask: Mask): { labels: Int32Array; components: Component[] } {
     let sx = 0;
     let sy = 0;
     let minD = Infinity;
+    let maxD = 0;
     const push = (q: number): void => {
       if (alpha[q]! >= INK && labels[q] === 0) {
         labels[q] = id;
@@ -66,13 +70,15 @@ function label(mask: Mask): { labels: Int32Array; components: Component[] } {
       area++;
       sx += x;
       sy += y;
-      minD = Math.min(minD, x, y, w - 1 - x, h - 1 - y);
+      const d = Math.min(x, y, w - 1 - x, h - 1 - y);
+      minD = Math.min(minD, d);
+      maxD = Math.max(maxD, d);
       if (x > 0) push(p - 1);
       if (x < w - 1) push(p + 1);
       if (y > 0) push(p - w);
       if (y < h - 1) push(p + w);
     }
-    components.push({ id, area, cx: sx / area / w, cy: sy / area / h, minD });
+    components.push({ id, area, cx: sx / area / w, cy: sy / area / h, minD, maxD });
   }
   return { labels, components };
 }
@@ -179,21 +185,55 @@ describe('朱印遮罩 src/assets/seal/seal-liuyi.png', () => {
     expect(new Set(ids).size).toBe(1);
   });
 
-  it(`字與框之間有留白：框以外的墨離框內緣至少 ${GAP} px（字不與框相連）`, () => {
+  it(`字不碰框：框只佔外圈，其餘的墨離框內緣至少 ${GAP} px`, () => {
+    // 字若與框相連，會被併進框的連通元件，使框的元件深入內側；所以兩件事一起驗
+    const frame = components.find((c) => c.id === frameId)!;
+    expect(frame.maxD).toBeLessThan(frameInnerEdge);
     const others = components.filter((c) => c.id !== frameId);
-    expect(others.length).toBeGreaterThanOrEqual(2);
+    expect(others.length).toBeGreaterThanOrEqual(1);
     expect(Math.min(...others.map((c) => c.minD)) - frameInnerEdge).toBeGreaterThanOrEqual(GAP);
   });
 
-  it('框內至少 2 個大連通元件（各 ≥ 1 500 px）；最大兩個一左一右，質心 y 靠中', () => {
-    const big = components.filter((c) => c.id !== frameId && c.area >= BIG_AREA);
-    expect(big.length).toBeGreaterThanOrEqual(2);
-    const [a, b] = [...big].sort((p, q) => q.area - p.area).slice(0, 2) as [Component, Component];
-    const [left, right] = a.cx < b.cx ? [a, b] : [b, a];
-    expect(Math.abs(left.cx - 0.25)).toBeLessThanOrEqual(0.12); // 左＝藝
-    expect(Math.abs(right.cx - 0.75)).toBeLessThanOrEqual(0.12); // 右＝六
-    expect(Math.abs(left.cy - 0.5)).toBeLessThanOrEqual(0.15);
-    expect(Math.abs(right.cy - 0.5)).toBeLessThanOrEqual(0.15);
+  // 篆字天生由許多塊組成（「藝」有艸、埶、丮、云），所以不以連通元件定位，改看左右半邊的墨跡整體。
+  describe.each([
+    { name: '左半（藝）', side: 'left' as const, cx: 0.25 },
+    { name: '右半（六）', side: 'right' as const, cx: 0.75 },
+  ])('$name', ({ side, cx }) => {
+    it(`有字，墨跡質心 x 在 ${cx}±0.12、y 在 0.5±0.15（框不算）`, () => {
+      const { width: w, height: h } = mask;
+      let n = 0;
+      let sx = 0;
+      let sy = 0;
+      for (let y = 0; y < h; y++) {
+        for (let x = side === 'left' ? 0 : w / 2; x < (side === 'left' ? w / 2 : w); x++) {
+          const id = labels[y * w + x]!;
+          if (id === 0 || id === frameId) continue;
+          n++;
+          sx += x;
+          sy += y;
+        }
+      }
+      expect(n).toBeGreaterThanOrEqual(MIN_HALF_INK);
+      expect(Math.abs(sx / n / w - cx)).toBeLessThanOrEqual(0.12);
+      expect(Math.abs(sy / n / h - 0.5)).toBeLessThanOrEqual(0.15);
+    });
+  });
+
+  it(`兩字之間有一條含中線、寬 ≥ ${COL_GAP} px 的垂直空帶，框內全無墨跡`, () => {
+    const { width: w, height: h } = mask;
+    const lo = frameInnerEdge;
+    const hiX = w - 1 - frameInnerEdge;
+    const hiY = h - 1 - frameInnerEdge;
+    const columnHasInk = (x: number): boolean => {
+      for (let y = lo; y <= hiY; y++) if (mask.alpha[y * w + x]! >= INK) return true;
+      return false;
+    };
+    expect(columnHasInk(w / 2), '中線上有墨').toBe(false);
+    let left = w / 2;
+    while (left - 1 >= lo && !columnHasInk(left - 1)) left--;
+    let right = w / 2;
+    while (right + 1 <= hiX && !columnHasInk(right + 1)) right++;
+    expect(right - left + 1).toBeGreaterThanOrEqual(COL_GAP);
   });
 
   it('墨量占整張 0.25–0.55', () => {
@@ -216,6 +256,13 @@ describe('朱印來源紀錄（provenance.json 的 seal-liuyi）', () => {
     expect(entry!.maskSha256).toBe(createHash('sha256').update(readFileSync(MASK)).digest('hex'));
     expect(entry!.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(String(entry!.license)).toMatch(/CC BY-ND 3\.0 TW/);
+  });
+});
+
+describe('字形不被改作（字型為 CC BY-ND）', () => {
+  it('render-seal.py 只做等比縮放與定位：沒有加粗、濾鏡、旋轉或變形字形的呼叫', () => {
+    const src = readFileSync(SCRIPT, 'utf8');
+    expect(src).not.toMatch(/stroke_width|stroke_fill|MaxFilter|MinFilter|ImageFilter|\.transform\(|\.rotate\(|TransposedFont|font\.set_variation/);
   });
 });
 

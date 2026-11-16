@@ -329,7 +329,7 @@
     "font": "崇羲篆體 Chong Xi Small Seal, Version 1.00（字型檔不入庫，只在本機使用）",
     "fontSha256": "b5f52fe62e84b2b18ff4b586d9838d157e05925eca847ecd48c915ba4dcd735a",
     "license": "CC BY-ND 3.0 TW or later（姓名標示-禁止改作），標示內容見 tools/seal/README.md",
-    "maskSha256": "838508e8fcf20fb2dca2b97c6ea79b93bc3eb96890adbddf753e469b5ca98424",
+    "maskSha256": "1cb40507dc5f14d144bb27a58b795eac78417dc8ad427da8b4b28f86c22dc2c4",
     "status": "approved",
     "params": {
       "size": 512,
@@ -338,19 +338,17 @@
       "frame_thick": 18,
       "pad": 18,
       "col_gap": 14,
-      "embolden_px": 2.0
+      "glyph_modification": "none: uniform scale and placement only"
     },
     "qa": {
       "out_size": [512, 512],
-      "ink_ratio": 0.3205,
+      "ink_ratio": 0.2863,
       "frame_component_area": 34416,
-      "glyph_components": [
-        {"area": 24452, "cx": 0.296, "cy": 0.419, "note": "藝 主體（艸、埶、丮）"},
-        {"area": 18351, "cx": 0.71, "cy": 0.461, "note": "六"},
-        {"area": 5424, "cx": 0.286, "cy": 0.709, "note": "藝 下半（云）"},
-        {"area": 1375, "cx": 0.287, "cy": 0.618, "note": "藝 下半（云）"}
-      ],
-      "manual": "人工看圖：朱文（字與方框實心）、右「六」左「藝」，皆為篆書形體；筆畫完整、粗細一致（約 18 px，與外框同粗），字與框內緣各留 ≥ 18 px、兩字之間留 ≥ 14 px。字型的「藝」本身由數個部件組成（艸、埶、丮、云），不加粗時分成 7 塊，每側加粗 2 px 後主體相連成一塊、云留兩塊，部件之間的空隙仍清楚，所以採用加粗 2 px。"
+      "left_half": {"ink_px": 24963, "cx": 0.294, "cy": 0.477, "note": "藝"},
+      "right_half": {"ink_px": 15672, "cx": 0.71, "cy": 0.456, "note": "六"},
+      "center_gap_px": 30,
+      "min_glyph_to_frame_px": 18,
+      "manual": "人工看圖：朱文（字與方框實心）、右「六」左「藝」，皆為篆書形體；字型原本的粗細（約 14 px），沒有加粗、拉伸或修形，只做等比縮放與定位。筆畫完整清楚，沒有斷筆或糊在一起；外框完整（18 px），字與框內緣各留 ≥ 18 px，兩字之間有 30 px 的垂直空帶。字型的「藝」本身由艸、埶、丮、云等 7 塊部件組成，這是字形原樣，所以測試改以左右半邊的墨跡整體定位。"
     },
     "date": "2026-11-16"
   }

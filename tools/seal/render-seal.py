@@ -12,7 +12,9 @@ Run (from the repo root):
 
 Output: 512x512 grayscale+alpha PNG.  朱文 (zhuwen): the square frame and the two characters are opaque
 (L=255, A=255), everything else is fully transparent.  Right column 「六」, left column 「藝」 (read right to left).
-The alpha is binary: the characters are drawn at 4x supersampling, box-downsampled, then thresholded at 50%.
+The glyphs are NOT modified (the font is CC BY-ND): no stroke thickening, no stretching, no outline editing.  They are
+only scaled uniformly (one font size for both characters) and positioned.  The alpha is binary: the characters are
+drawn at 4x supersampling, box-downsampled, then thresholded at 50% (plain rasterisation).
 The mask is the only artifact that enters the repo; at runtime it is sampled into particles and tinted by the shader.
 
 Prints a JSON summary on stdout (font sha256, mask sha256, layout, ink ratio) for src/assets/silhouettes/provenance.json.
@@ -40,10 +42,6 @@ PAD = 18               # clear space between the frame's inner edge and a charac
 COL_GAP = 14           # clear space between the two columns
 # Optional vertical shift of the glyph block (px, + is down); the font's own ink box is centred on the frame centre.
 SHIFT_Y = 0
-# Extra stroke weight (px per side at 512).  The font's strokes are thin next to the frame and the 藝 glyph breaks into
-# separate parts; a little extra weight closes the hairline gaps and makes a chunkier, more seal-like (and easier to
-# sample) impression.
-EMBOLDEN = 2.0
 
 
 def sha256_file(path):
@@ -62,33 +60,31 @@ def check_cmap(font_path):
         sys.exit("font lacks glyphs for: " + " ".join(f"{ch} (U+{ord(ch):04X})" for ch in missing))
 
 
-def glyph_ink(font, ch, stroke=0):
-    """Render one character on a scratch canvas; return its ink as an 'L' image cropped to the ink bbox.
-    `stroke` (supersampled px) thickens every stroke by that much on each side (FreeType stroker, round joins)."""
+def glyph_ink(font, ch):
+    """Render one character exactly as the font draws it (no stroke, no transform) on a scratch canvas;
+    return its ink as an 'L' image cropped to the ink bbox."""
     em = font.size
     pad = em // 2
     canvas = Image.new("L", (em + 2 * pad, em + 2 * pad), 0)
-    ImageDraw.Draw(canvas).text((pad, pad), ch, font=font, fill=255, stroke_width=stroke, stroke_fill=255)
+    ImageDraw.Draw(canvas).text((pad, pad), ch, font=font, fill=255)
     bbox = canvas.getbbox()
     if bbox is None:
         sys.exit(f"font rendered nothing for {ch}")
     return canvas.crop(bbox)
 
 
-def render(font_path, size, embolden):
+def render(font_path, size):
     scale = size / 512.0
     inset, thick, pad, gap = (round(v * scale) for v in (FRAME_INSET, FRAME_THICK, PAD, COL_GAP))
     inner = inset + thick                      # frame inner edge, distance from the canvas edge
     col_w = (size - 2 * inner - 2 * pad - gap) // 2
-    stroke = round(embolden * scale * SS)      # extra stroke per side, supersampled px
 
     # Probe at a reference size to get the glyph ink boxes, then pick one font size for BOTH characters
-    # (same scale keeps the stroke weight consistent) so the widest glyph, including the extra stroke,
-    # exactly fills its column.
+    # (same scale keeps the stroke weight consistent) so the widest glyph exactly fills its column.
     ref = ImageFont.truetype(font_path, 400)
     ref_boxes = {ch: glyph_ink(ref, ch).size for ch in CHARS}
     widest = max(w for w, _ in ref_boxes.values())
-    em_px = round(400 * (col_w * SS - 2 * stroke) / widest)   # font size in supersampled px
+    em_px = round(400 * (col_w * SS) / widest)   # font size in supersampled px
     font = ImageFont.truetype(font_path, em_px)
 
     big = size * SS
@@ -104,7 +100,7 @@ def render(font_path, size, embolden):
     col_centres = {CHARS[0]: size - inner - pad - col_w / 2, CHARS[1]: inner + pad + col_w / 2}
     layout = {}
     for ch in CHARS:
-        g = glyph_ink(font, ch, stroke)
+        g = glyph_ink(font, ch)
         gw, gh = g.size
         x = round(col_centres[ch] * SS - gw / 2)
         y = round((size / 2 + SHIFT_Y) * SS - gh / 2)
@@ -114,7 +110,7 @@ def render(font_path, size, embolden):
     small = ink.resize((size, size), Image.BOX)
     a = (np.asarray(small) >= 128).astype(np.uint8) * 255
     mask = Image.merge("LA", (Image.new("L", (size, size), 255), Image.fromarray(a, "L")))
-    return mask, a, {"em_px_ss": em_px, "embolden_px": embolden, "col_w": col_w, "frame_inset": inset, "frame_thick": thick, "pad": pad, "col_gap": gap, "glyphs": layout}
+    return mask, a, {"em_px_ss": em_px, "col_w": col_w, "frame_inset": inset, "frame_thick": thick, "pad": pad, "col_gap": gap, "glyphs": layout}
 
 
 def main():
@@ -122,14 +118,13 @@ def main():
     ap.add_argument("--font", default=DEFAULT_FONT)
     ap.add_argument("--out", default=DEFAULT_OUT)
     ap.add_argument("--size", type=int, default=512)
-    ap.add_argument("--embolden", type=float, default=EMBOLDEN, help="extra stroke per side in px at 512 (default %(default)s)")
     args = ap.parse_args()
 
     if not os.path.isfile(args.font):
         sys.exit(f"font not found: {args.font}  (the 崇羲篆體 .otf lives outside the repo; pass --font)")
     check_cmap(args.font)
 
-    mask, a, layout = render(args.font, args.size, args.embolden)
+    mask, a, layout = render(args.font, args.size)
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
     mask.save(args.out, optimize=True)
 
