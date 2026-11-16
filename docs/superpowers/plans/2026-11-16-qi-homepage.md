@@ -632,7 +632,7 @@
   補強四點：①換招拖尾（點精靈在片段著色器內依 `vDir` 拉成橢圓，`uStreak` 隨速度）；②落地衝擊波（雙圈＋白閃＋鏡頭震幅 0.05→0.08，時序取自 `shockwave`）；③開場吸氣流線（速度著色器 `inhaleAcc`，強度隨 `introState().inhale`，並讓點沿流向拉長）；④大槍桿與紅纓（資料已在 Task 10；著色器端 `kind=RED` 用 `uSeal·1.4`、`kind=DARK` 用 `uGold·0.85`，點徑加大 15%）。
 
 - [ ] **Step 1: 寫失敗測試**：
-  - `qi-effects`：`shockwave(0)` 的 `amp===3.5`、`radius===0.25`；`shockwave(0.5).radius ≈ 2.0125`（0.25+1.8−0.0875）；`amp` 隨 t 單調遞減；`shockwave(-1).amp===0`；`streakLength(0)===1`、`streakLength(4)===3.6`、單調；`inhaleAcc([2,0,0],0.5)` 的 x 分量 < 0、`inhaleAcc([0,0,0],0.5)` 為有限且接近零。
+  - `qi-effects`：`shockwave(0)` 的 `amp===3.5`、`radius===0.25`；`shockwave(0.5).radius ≈ 1.9625`（0.25+1.8−0.0875）；`amp` 隨 t 單調遞減；`shockwave(-1).amp===0`；`streakLength(0)===1`、`streakLength(4)===3.6`、單調；`inhaleAcc([2,0,0],0.5)` 的 x 分量 < 0、`inhaleAcc([0,0,0],0.5)` 為有限且接近零。
   - `qi-effects.spec`（harness，`qi-tier=min&qi-debug=1`）：①吸氣：`playIntro()` 後 `clock.runFor` 到 1.2–1.8 s，`debug.radialVelocity()`（往中心為正）平均 > 0.5；②落地：`playLanding()` 後 `debug.snapshot({環帶區域})` 在 t=0.4 s 的 `bright` ≥ t=0 基線的 2.5 倍；鏡頭震幅在 0.8 s 內回到 0；③大槍：`setPose('spear')` 聚合後 `debug.snapshot().red ≥ 150`，且槍桿中段縱向亮寬 ≥ 5 px（1440×900）；④拖尾：`setPose` 的 burst 峰值時 `debug.uniforms().uStreak > 1.5`。
 - [ ] **Step 2: 紅**，**Step 3: 實作**，**Step 4: 綠**。
 - [ ] **Step 5: 截圖檢查**（1440×900 與 390×844；落地前、落地後 0.2／0.5 s、burst 峰值、吸氣中、大槍聚合）。合格標準：①落地環在 0.5 s 時半徑涵蓋人形腳寬的 2 倍以上且不蓋住整個畫面；②burst 峰值時可見朝出招方向的線狀拖尾（不是圓點雲）；③大槍的紅纓為紅色（不是金色）、桿身肉眼可見有粗細；④全程不出現「滿版外發光」或彩色特效（只有金／米白／朱紅）。
