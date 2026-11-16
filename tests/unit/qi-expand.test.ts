@@ -319,6 +319,95 @@ describe('weaponLayout（D13：寬／窄的長度與傾角；中點高度 1.05�
   });
 });
 
+describe('纓穗（RED）：套 layout 後仍朝下垂（試作：pendulum 反向旋轉，Task 16）', () => {
+  /**
+   * 單位形：鋒尖 (0.5, 0, 0)、尾端 (−0.5, 0, 0)；紅纓掛在長軸的 x = 0.4 那一點，往 −y 垂 0.08（兩束，z 前後 ±0.01）。
+   * 其餘取樣點是鋼，落在長軸上。
+   */
+  function tasselWeapon(withTassel = true): Shape {
+    const count = 64;
+    const positions = new Float32Array(count * 3);
+    const kinds = new Uint8Array(count).fill(KIND.STEEL);
+    for (let i = 0; i < count; i++) {
+      positions[i * 3] = -0.4 + (i / count) * 0.8; // 鋼：沿長軸
+    }
+    positions.set([0.5, 0, 0, -0.5, 0, 0], 0);
+    if (withTassel) {
+      for (let i = 2; i < 26; i++) {
+        const k = i - 2;
+        positions[i * 3] = 0.4 + ((k % 3) - 1) * 0.004; // 紮點 x = 0.4（三條線的中間）
+        positions[i * 3 + 1] = -0.003 * (k + 1); // 往下垂，最長 0.072
+        positions[i * 3 + 2] = k % 2 === 0 ? 0.01 : -0.01;
+        kinds[i] = KIND.RED;
+      }
+    }
+    return { count, positions, kinds, min: [-0.5, -0.1, -0.02], max: [0.5, 0, 0.02] };
+  }
+  const reds = (ambient: AmbientField, shape: Shape): number[] => {
+    const slots = solidSlots(ambient);
+    const found: number[] = [];
+    for (let k = 0; k < shape.count; k++) if (shape.kinds[k] === KIND.RED) found.push(slots[k]!);
+    return found;
+  };
+
+  it('窄版（傾角 0.45）：紅點相對紮點的位置與不傾斜時完全相同（只受 scale 影響），所以仍然垂直朝下', () => {
+    const shape = tasselWeapon();
+    const ambient = ambientField(112 * 112);
+    const tilted = expandTargets(shape, 112, ambient, weaponLayout('spear', false)); // rotZ 0.45
+    const level = expandTargets(shape, 112, ambient, { scale: 2.3, rotZ: 0, offset: [0, 1.05, 0] });
+    const slots = reds(ambient, shape);
+    expect(slots).toHaveLength(24);
+    // 紮點：紅點 x 的平均（0.4）在長軸上；傾斜後的世界位置
+    const pivotTilted = [0.4 * 2.3 * Math.cos(0.45), 1.05 + 0.4 * 2.3 * Math.sin(0.45)];
+    const pivotLevel = [0.4 * 2.3, 1.05];
+    for (const slot of slots) {
+      const relTilted = [tilted[slot * 4]! - pivotTilted[0]!, tilted[slot * 4 + 1]! - pivotTilted[1]!];
+      const relLevel = [level[slot * 4]! - pivotLevel[0]!, level[slot * 4 + 1]! - pivotLevel[1]!];
+      expect(relTilted[0]).toBeCloseTo(relLevel[0]!, 5);
+      expect(relTilted[1]).toBeCloseTo(relLevel[1]!, 5);
+      expect(relTilted[1]!).toBeLessThanOrEqual(1e-6); // 在紮點之下
+      expect(tilted[slot * 4 + 2]).toBeCloseTo(level[slot * 4 + 2]!, 5); // z 不受影響
+    }
+  });
+
+  it('纓穗的主軸是鉛直的：最低點與最高點的世界 x 差很小（只剩原本 ±0.004 的細微散開），不是跟著槍傾斜 26°', () => {
+    const shape = tasselWeapon();
+    const ambient = ambientField(112 * 112);
+    const out = expandTargets(shape, 112, ambient, weaponLayout('spear', false));
+    const slots = reds(ambient, shape);
+    const byY = [...slots].sort((a, b) => out[a * 4 + 1]! - out[b * 4 + 1]!);
+    const lowest = byY[0]!;
+    const highest = byY[byY.length - 1]!;
+    const dy = out[highest * 4 + 1]! - out[lowest * 4 + 1]!;
+    const dx = out[highest * 4]! - out[lowest * 4]!;
+    expect(dy).toBeGreaterThan(0.1); // 0.069 × 2.3 ≈ 0.16
+    expect(Math.abs(dx) / dy).toBeLessThan(0.2); // 傾斜 0.45 rad 時會是 tan(0.45) ≈ 0.48
+  });
+
+  it('其他點（鋼）照舊套 layout：鋒尖位置不變；寬版（傾角 0.05）紅纓的紮點也跟著兵器走', () => {
+    const shape = tasselWeapon();
+    const ambient = ambientField(112 * 112);
+    const wide = expandTargets(shape, 112, ambient, weaponLayout('spear', true));
+    const tip = solidSlots(ambient)[0]!;
+    expect(wide[tip * 4]).toBeCloseTo((3.8 / 2) * Math.cos(0.05), 5);
+    expect(wide[tip * 4 + 1]).toBeCloseTo(1.05 + (3.8 / 2) * Math.sin(0.05), 5);
+    // 紮點 (0.4, 0) 在世界的位置：(0.4·3.8·cos, 1.05 + 0.4·3.8·sin)；紅點平均 x 就在它附近
+    const slots = reds(ambient, shape);
+    const meanX = slots.reduce((s, i) => s + wide[i * 4]!, 0) / slots.length;
+    expect(meanX).toBeCloseTo(0.4 * 3.8 * Math.cos(0.05), 2);
+  });
+
+  it('沒有紅纓的兵器（苗刀）不受影響，也不丟錯；沒給 layout 時紅點座標原樣', () => {
+    const none = tasselWeapon(false);
+    const ambient = ambientField(112 * 112);
+    expect(() => expandTargets(none, 112, ambient, weaponLayout('miaodao', false))).not.toThrow();
+    const shape = tasselWeapon();
+    const plain = expandTargets(shape, 112, ambient);
+    const slot = reds(ambient, shape)[0]!;
+    expect([plain[slot * 4], plain[slot * 4 + 1], plain[slot * 4 + 2]]).toEqual([shape.positions[6], shape.positions[7], shape.positions[8]]);
+  });
+});
+
 describe('flowTargets（收費段的氣流：全部點緩流，範圍比環境煙大）', () => {
   it('輸出長度 size × size × 4，每一格 w === -1，座標全為有限值', () => {
     const ambient = ambientField(112 * 112);

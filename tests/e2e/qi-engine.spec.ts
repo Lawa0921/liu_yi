@@ -359,12 +359,12 @@ test.describe('光點引擎核心（桌機，tier=min）', () => {
 test.describe('光暈（桌機級 tier=high）', () => {
   test.use({ viewport: { width: 960, height: 600 } });
 
-  test('開光暈時走 RT 與合成：畫面有東西、點的像素比例是半解析度，光暈讓涵蓋面積比 min 大', async ({ page }) => {
+  test('開光暈時走 RT 與合成：畫面有東西、場景 RT 是全解析度（點大小不縮），光暈讓涵蓋面積比 min 大', async ({ page }) => {
     await open(page, './lab/qi-harness/?qi-tier=high&qi-debug=1');
     expect(await page.evaluate(() => stageOf().debug.tier())).toBe('high');
     await setPose(page, 'land');
     await run(page, 1500);
-    expect((await uniforms(page)).uPixelRatio).toBe(0.5); // DPR 1 × 場景 RT 的 1/2
+    expect((await uniforms(page)).uPixelRatio).toBe(1); // DPR 1 × 場景 RT 的比例 1（Task 16：半解析度會把顆粒糊成塊）
     expect((await uniforms(page)).glow).toBe(1);
     const shot = await snapshot(page);
     expect(shot.covered).toBeGreaterThan(0.06);
@@ -409,7 +409,7 @@ test.describe('減少動態（reducedMotion）', () => {
     await setPose(page, 'land');
     const u = await uniforms(page);
     expect(u.glow).toBe(0);
-    expect(u.uPixelRatio).toBe(1); // 直接畫到螢幕，沒有半解析度的場景 RT
+    expect(u.uPixelRatio).toBe(1); // 直接畫到螢幕，沒有場景 RT
     const shot = await snapshot(page);
     expect(shot.covered).toBeGreaterThanOrEqual(0.01);
     expect(shot.bright).toBeGreaterThanOrEqual(0.0005);
@@ -420,7 +420,7 @@ test.describe('減少動態（reducedMotion）', () => {
     await setPose(page, 'land');
     const u = await uniforms(page);
     expect(u.glow).toBe(1);
-    expect(u.uPixelRatio).toBe(0.5);
+    expect(u.uPixelRatio).toBe(1); // 場景 RT 是全解析度
     expect((await snapshot(page)).covered).toBeGreaterThan(0.06);
   });
 });

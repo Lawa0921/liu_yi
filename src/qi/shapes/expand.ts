@@ -9,12 +9,13 @@
  *     不夠就循環重複，重複的點（第 N 個起）在世界座標加每軸 ±0.006 的抖動（D10），好讓重疊的光點散成一層而不是疊成一個。
  *     抖動只取決於「第幾個點」，不取決於姿勢，所以同一批光點換姿勢時的微動一致。
  *   - 兵器（D13）：形體檔存的是「長軸 +x、鋒尖朝 +x、置中、全長 1」的單位形；`Layout` 依視窗比例把它縮放、繞 z 轉、平移到位。
- *     抖動在 layout 之後加（世界單位），不會被兵器的 scale 放大。
+ *     抖動在 layout 之後加（世界單位），不會被兵器的 scale 放大。紅纓（RED）掛著、順著重力垂下：兵器傾斜時
+ *     纓穗以紮點為軸反向轉回，仍朝下（試作的 pendulum 反向旋轉）。
  *
  * 純函式、固定種子：同輸入逐位元相同。不碰 three／DOM，Node 與瀏覽器通用。
  */
 
-import { kindToW, type Shape } from './format';
+import { KIND, kindToW, type Shape } from './format';
 import { rng } from './rng';
 
 export interface AmbientField {
@@ -108,6 +109,21 @@ export function weaponLayout(name: 'jian' | 'miaodao' | 'spear', wide: boolean):
 }
 
 /**
+ * 紅纓（`KIND.RED`）的紮點在單位形長軸上的位置（x）；沒有紅點就是 `null`。
+ * 單位形的長軸就是 x 軸（y = 0），纓穗從紮點往 −y 垂（`sample-weapon.ts`），所以紅點 x 的平均就是紮點。
+ */
+function tasselPivot(shape: Shape): number | null {
+  let sum = 0;
+  let n = 0;
+  for (let k = 0; k < shape.count; k++) {
+    if (shape.kinds[k] !== KIND.RED) continue;
+    sum += shape.positions[k * 3]!;
+    n++;
+  }
+  return n > 0 ? sum / n : null;
+}
+
+/**
  * 把 `shape` 展開成 `size × size × 4` 的目標貼圖（xyz＋w）。
  * w：人形 0–1（靠近輪廓的程度）、兵器 2–6、朱印 7（`kindToW`）、環境煙 −1。
  */
@@ -124,12 +140,22 @@ export function expandTargets(shape: Shape, size: number, ambient: AmbientField,
     const [ox, oy, oz] = layout.offset;
     const cos = Math.cos(layout.rotZ) * layout.scale;
     const sin = Math.sin(layout.rotZ) * layout.scale;
+    // 紅纓是掛著的，順著重力垂下：兵器傾斜時纓穗不跟著傾斜。試作把纓穗（pendulum）反向旋轉；這裡等價於
+    // 「紅點相對紮點只受 scale 影響（不轉）」：紮點隨兵器轉到位，纓穗從紮點起仍朝下。
+    const pivot = tasselPivot(shape);
+    const pivotX = pivot ? pivot * cos + ox : 0;
+    const pivotY = pivot ? pivot * sin + oy : 0;
     const laid = new Float64Array(count * 3);
     for (let k = 0; k < count; k++) {
       const x = shape.positions[k * 3]!;
       const y = shape.positions[k * 3 + 1]!;
-      laid[k * 3] = x * cos - y * sin + ox;
-      laid[k * 3 + 1] = x * sin + y * cos + oy;
+      if (pivot !== null && shape.kinds[k] === KIND.RED) {
+        laid[k * 3] = pivotX + (x - pivot) * layout.scale;
+        laid[k * 3 + 1] = pivotY + y * layout.scale;
+      } else {
+        laid[k * 3] = x * cos - y * sin + ox;
+        laid[k * 3 + 1] = x * sin + y * cos + oy;
+      }
       laid[k * 3 + 2] = shape.positions[k * 3 + 2]! * layout.scale + oz;
     }
     base = laid;

@@ -29,6 +29,8 @@ export interface SimFrame {
   handA: Vector3;
   handVel: Vector3;
   impulse: { dir: Vector3; power: number; mode: number };
+  /** 開場吸氣的進度 0–1（`introState().inhale`）；0 ＝ 沒有吸氣。 */
+  inhale: number;
 }
 
 export interface Sim {
@@ -103,6 +105,7 @@ export function createSim(renderer: WebGLRenderer, side: number): Sim {
     uImpulse: { value: impulse },
     uImpulseMode: { value: 0 },
     uImpulseCenter: { value: new Vector3(...IMPULSE_CENTER) },
+    uInhale: { value: 0 },
   });
   Object.assign(pu, { tTarget: vu.tTarget, uDt: vu.uDt });
 
@@ -152,6 +155,7 @@ export function createSim(renderer: WebGLRenderer, side: number): Sim {
       (vu.uHandVel!.value as Vector3).copy(frame.handVel);
       impulse.set(frame.impulse.dir.x, frame.impulse.dir.y, frame.impulse.dir.z, frame.impulse.power);
       vu.uImpulseMode!.value = frame.impulse.mode;
+      vu.uInhale!.value = frame.inhale;
       gpu.compute();
     },
     readPositions: () => read(posVar),

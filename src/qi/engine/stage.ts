@@ -24,8 +24,10 @@ import {
   type Texture,
   type WebGLRenderer,
 } from 'three';
+import { SHAPE_COUNT } from '../shapes/format';
 import { rng } from '../shapes/rng';
 import { halfFloatTargets } from './caps';
+import { cameraShake, shockwave, shockwaveSecond } from './effects';
 import { createGlow, type Glow } from './glow';
 import { GROUND, groundVertex } from './shaders/ground';
 import { POINT_PX, pointsFragment, pointsVertex } from './shaders/points';
@@ -54,6 +56,14 @@ export interface StageBuild {
   glow: boolean;
 }
 
+/** 一格的特效狀態（Task 16）；由 `qi-stage` 每格算好餵進來。 */
+export interface StageEffects {
+  /** 落地後的秒數；< 0 ＝ 沒有衝擊波。衝擊波的兩圈與白閃、鏡頭震幅都由它算出（`effects.ts`）。 */
+  shockT: number;
+  /** 拖尾倍數的上限（`uStreak`）；1 ＝ 不拉長。 */
+  streak: number;
+}
+
 /** 鏡頭視差用的指標狀態（NDC）。 */
 export interface StageInput {
   idle: boolean;
@@ -73,6 +83,8 @@ export interface Stage {
   setSize(width: number, height: number): void;
   /** `time` 秒、`dt` 秒；`animate` 為 false 時鏡頭不動（減少動態）。 */
   update(time: number, dt: number, input: StageInput, animate?: boolean): void;
+  /** 衝擊波、白閃、鏡頭震與拖尾上限（見 `StageEffects`）；每格在 `update` 之前呼叫。 */
+  setEffects(effects: StageEffects): void;
   render(): void;
   /** 人物本地座標的一點 → 螢幕座標（CSS 像素，與滑鼠座標同一個空間）。 */
   project(x: number, y: number, z: number, out?: { x: number; y: number }): { x: number; y: number };
@@ -94,6 +106,7 @@ export function createStage(renderer: WebGLRenderer, canvas: HTMLCanvasElement):
   const glow: Glow = createGlow(renderer, BACKDROP);
 
   const look = new Vector3();
+  const aim = new Vector3(); // 注視點（`look` 加上鏡頭震的位移）
   const baseCamera = new Vector3();
   const drawingSize = new Vector2();
   let cssWidth = 1;
@@ -105,10 +118,19 @@ export function createStage(renderer: WebGLRenderer, canvas: HTMLCanvasElement):
     uPx: { value: POINT_PX.rich as number },
     uFocus: { value: 6 },
     uPixelRatio: { value: 1 },
+    uStreak: { value: 1 },
+    uDensity: { value: 1 }, // 點數 / 形體檔的點數：重複展開的倍數（高階約 4）
     uGold: { value: GOLD },
     uPaper: { value: PAPER },
     uSeal: { value: SEAL },
   };
+
+  // 落地的特效：地面著色器的兩圈（半徑、寬度、亮度）與白閃；鏡頭震幅由 update 套用
+  const ring1 = new Vector3();
+  const ring2 = new Vector3();
+  const flash = { value: 0 };
+  let shake = 0;
+  let shockT = -1;
 
   // 目前這個 tier 的點與地面（build 時換掉）
   let disposables: { dispose(): void }[] = [];
@@ -170,6 +192,7 @@ export function createStage(renderer: WebGLRenderer, canvas: HTMLCanvasElement):
       renderer.setClearColor(glowOn ? 0x000000 : BACKDROP_HEX, 1);
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, lite ? MAX_PIXEL_RATIO.lite : MAX_PIXEL_RATIO.rich));
       shared.uPx.value = lite ? POINT_PX.lite : POINT_PX.rich;
+      shared.uDensity.value = count / SHAPE_COUNT;
 
       const refs = new Float32Array(count * 2);
       const seeds = new Float32Array(count);
@@ -211,7 +234,7 @@ export function createStage(renderer: WebGLRenderer, canvas: HTMLCanvasElement):
         points.push(reflection);
       }
 
-      // 地面：一片很淡的光點（落地的衝擊波由 uShockT 驅動，-1 ＝ 沒有）
+      // 地面：一片很淡的光點（落地的衝擊波由 setEffects 驅動）
       const groundCount = lite ? GROUND.count.lite : GROUND.count.rich;
       const ground = new BufferGeometry();
       const groundRandom = rng(5);
@@ -230,7 +253,9 @@ export function createStage(renderer: WebGLRenderer, canvas: HTMLCanvasElement):
       disposables.push(ground);
       const groundMaterial = new ShaderMaterial({
         uniforms: {
-          uShockT: { value: -1 },
+          uRing1: { value: ring1 },
+          uRing2: { value: ring2 },
+          uFlash: flash,
           uLevel: { value: 1 },
           uPx: shared.uPx,
           uFocus: shared.uFocus,
@@ -278,12 +303,33 @@ export function createStage(renderer: WebGLRenderer, canvas: HTMLCanvasElement):
         camera.position.copy(baseCamera);
         camera.position.z += breathe * 0.07;
         camera.position.y += breathe * 0.02;
-        camera.lookAt(look);
+        aim.copy(look);
+        if (shake > 0) {
+          // 落地的鏡頭震：鏡頭與注視點一起平移（只動位置、注視點不動的話，人形在畫面中心附近幾乎不會抖）。
+          // 確定性的偽亂數（不用 Math.random，截圖與測試才可重現）
+          const dx = Math.sin(time * 173.3) * shake * 0.5;
+          const dy = Math.sin(time * 131.7 + 1.7) * shake * 0.5;
+          camera.position.x += dx;
+          camera.position.y += dy;
+          aim.x += dx;
+          aim.y += dy;
+        }
+        camera.lookAt(aim);
         camera.updateMatrixWorld();
         body.updateMatrixWorld();
       } else {
         placeCamera();
       }
+    },
+    setEffects(effects) {
+      shockT = Number.isFinite(effects.shockT) ? effects.shockT : -1;
+      const first = shockwave(shockT);
+      const second = shockwaveSecond(shockT);
+      ring1.set(first.radius, first.width, first.amp);
+      ring2.set(second.radius, second.width, second.amp);
+      flash.value = first.flash;
+      shake = cameraShake(shockT);
+      shared.uStreak.value = Math.max(1, effects.streak);
     },
     render() {
       glow.render(scene, camera);
@@ -306,7 +352,13 @@ export function createStage(renderer: WebGLRenderer, canvas: HTMLCanvasElement):
       for (const [name, uniform] of Object.entries(shared) as [string, IUniform][]) {
         if (typeof uniform.value === 'number') out[name] = uniform.value;
       }
-      out.glow = glow.sceneScale < 1 ? 1 : 0;
+      out.glow = glow.enabled ? 1 : 0;
+      out.uShockT = shockT;
+      out.uFlash = flash.value;
+      out.uShake = shake;
+      out.uRingRadius = ring1.x;
+      out.uRingAmp = ring1.z;
+      out.uRing2Amp = ring2.z;
       return out;
     },
     dispose() {
