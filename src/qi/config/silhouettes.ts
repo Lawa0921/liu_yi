@@ -5,7 +5,17 @@
  */
 
 /** 已核可：可直接在首頁使用。 */
-export const SILHOUETTES_READY: string[] = ['fig-zhenjiao', 'fig-zhenjiao-land', 'fig-dingzhou', 'fig-chengchui', 'fig-kao'];
+export const SILHOUETTES_READY: string[] = [
+  'fig-zhenjiao',
+  'fig-zhenjiao-land',
+  'fig-dingzhou',
+  'fig-chengchui',
+  'fig-kao',
+  'fig-kid-wushu',
+  'fig-kid-defense-a',
+  'fig-kid-defense-b',
+  'fig-kid-weapon',
+];
 
-/** 待生成（Task 6–7）：過閘門、補上 provenance 後才移進 READY。 */
-export const SILHOUETTES_PLANNED: string[] = ['fig-salute', 'fig-kid-wushu', 'fig-kid-defense-a', 'fig-kid-defense-b', 'fig-kid-weapon'];
+/** 待生成（Task 7）：過閘門、補上 provenance 後才移進 READY。 */
+export const SILHOUETTES_PLANNED: string[] = ['fig-salute'];

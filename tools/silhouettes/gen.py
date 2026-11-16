@@ -83,7 +83,7 @@ def build_prompt(prompts_file, name):
     with open(prompts_file, encoding="utf-8") as f:
         P = json.load(f)
     a = P["assets"][name]
-    p = a["prompt"].replace("{FIG}", P["_common_fig"]).replace("{SCENE}", P["_common_scene"])
+    p = a["prompt"].replace("{FIG}", P["_common_fig"]).replace("{KID}", P.get("_common_kid", "")).replace("{SCENE}", P["_common_scene"])
     if a.get("retry_note"):
         p += " IMPORTANT CORRECTION: " + a["retry_note"]
     return p, a["size"], a.get("ref")

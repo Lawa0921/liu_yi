@@ -6,7 +6,7 @@ Run: uv run --no-project --python 3.11 --with pillow --with numpy --with scipy p
                 default: $SILHOUETTES_WORK, else <repo>/.cache/silhouettes-raw  (git-ignored)
   --raw DIR     raw PNG source dir (default: <work>/raw)
   --out DIR     published output dir (default: <repo>/src/assets/silhouettes)
-  --batch N     selection table: 1 (default) or 2
+  --batch N     selection table: 1 (default), 2 or 3 (children's figures)
   --preview     also write gold-on-dark previews to <work>/qa-preview/
 
 The pass/fail gate is scripts/qi/silhouette-qa.ts (run by tests/unit/silhouette-assets.test.ts on the published
@@ -55,7 +55,14 @@ SEL2 = {
     "fg-rack-close":     ("b2v1", "scene", dict(close=0, fill=0,   crop="rows")),
     "fg-steps":          ("b2v1", "scene", dict(close=0, fill=0,   crop="rows")),
 }
-SELECTIONS = {"1": SEL, "2": SEL2}
+# Batch 3 (run with --batch 3): the four children's figures (Task 6).
+SEL3 = {
+    "fig-kid-wushu":     ("v2", "fig", dict(close=3, fill=400, crop="bbox")),
+    "fig-kid-defense-a": ("v2", "fig", dict(close=3, fill=400, crop="bbox")),
+    "fig-kid-defense-b": ("v2", "fig", dict(close=3, fill=400, crop="bbox")),
+    "fig-kid-weapon":    ("v2", "fig", dict(close=3, fill=400, crop="bbox")),
+}
+SELECTIONS = {"1": SEL, "2": SEL2, "3": SEL3}
 
 
 def disk(r):
