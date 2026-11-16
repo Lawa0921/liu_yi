@@ -140,6 +140,35 @@ describe('ensureSourceFont', () => {
     expect(readdirSync(cacheDir)).toEqual([]);
   });
 
+  it('fetch 本身失敗（斷網、DNS）時，錯誤訊息帶上 zipUrl，並保留原始錯誤為 cause', async () => {
+    const network = new TypeError('fetch failed');
+    const fetchFake = vi.fn<typeof fetch>(async () => {
+      throw network;
+    });
+
+    const error = await ensureSourceFont({ cacheDir, fetch: fetchFake, source: source() }).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain('https://example.invalid/fake.zip');
+    expect((error as Error).message).toContain('fetch failed');
+    expect((error as Error).cause).toBe(network);
+    expect(readdirSync(cacheDir)).toEqual([]);
+  });
+
+  it('同一個行程內兩個並行呼叫互不踩暫存檔：都成功，快取目錄只剩目標檔', async () => {
+    // 每次呼叫都要拿到新的 Response（body 只能讀一次）
+    const fetchEach = vi.fn<typeof fetch>(async () => new Response(buildZip({ [ENTRY]: fakeTtf }) as BlobPart));
+
+    const [a, b] = await Promise.all([
+      ensureSourceFont({ cacheDir, fetch: fetchEach, source: source() }),
+      ensureSourceFont({ cacheDir, fetch: fetchEach, source: source() }),
+    ]);
+
+    expect(a).toBe(b);
+    expect(readdirSync(cacheDir)).toEqual([ENTRY]);
+    expect(Buffer.from(readFileSync(a)).equals(Buffer.from(fakeTtf))).toBe(true);
+  });
+
   it('zip 內缺目標檔時丟出含 entry 名稱的錯誤', async () => {
     const fetchFake = fakeFetchOf(buildZip({ 'TW-Kai-Plus.ttf': enc.encode('x') }));
 

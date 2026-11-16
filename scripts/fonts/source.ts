@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { unzipSync } from 'fflate';
@@ -65,7 +65,14 @@ export async function ensureSourceFont(opts: {
     await rm(target, { force: true });
   }
 
-  const response = await doFetch(source.zipUrl);
+  let response: Response;
+  try {
+    response = await doFetch(source.zipUrl);
+  } catch (error) {
+    // 斷網、DNS 失敗時 undici 只會說 "fetch failed"，補上網址才知道是哪個來源
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`下載 ${source.zipUrl} 失敗：${reason}`, { cause: error });
+  }
   if (!response.ok) {
     throw new Error(`下載 ${source.zipUrl} 失敗：HTTP ${response.status} ${response.statusText}`.trimEnd());
   }
@@ -76,7 +83,8 @@ export async function ensureSourceFont(opts: {
     throw new Error(`${source.entry} 的 sha256 不符：預期 ${source.sha256}，實際下載為 ${actual}`);
   }
 
-  const temp = `${target}.${process.pid}.download`;
+  // pid 之外再加隨機尾碼：同一行程內並行呼叫、或 pid 被重用時，暫存檔也不會互踩。
+  const temp = `${target}.${process.pid}.${randomBytes(4).toString('hex')}.download`;
   try {
     await writeFile(temp, font);
     await rename(temp, target);
