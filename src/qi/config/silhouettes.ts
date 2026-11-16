@@ -15,7 +15,8 @@ export const SILHOUETTES_READY: string[] = [
   'fig-kid-defense-a',
   'fig-kid-defense-b',
   'fig-kid-weapon',
+  'fig-salute',
 ];
 
-/** 待生成（Task 7）：過閘門、補上 provenance 後才移進 READY。 */
-export const SILHOUETTES_PLANNED: string[] = ['fig-salute'];
+/** 待生成：過閘門、補上 provenance 後才移進 READY。目前沒有待生成的剪影。 */
+export const SILHOUETTES_PLANNED: string[] = [];
