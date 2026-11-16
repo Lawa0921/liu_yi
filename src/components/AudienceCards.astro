@@ -57,12 +57,7 @@ const { courses } = Astro.props;
 </div>
 
 <style is:global>
-  /* 依 <html data-audience> 隱藏另一組。寫成 global 是因為選擇器從 <html> 開始。 */
-  html[data-audience='adult'] [data-audience-panel='kid'],
-  html[data-audience='kid'] [data-audience-panel='adult'] {
-    display: none;
-  }
-
+  /* 依 <html data-audience> 隱藏另一組的規則在 src/styles/global.css（首頁與課程總覽共用）。 */
   /* 沒有 JS 時兩組都顯示，中間才需要間距；有切換時只有一組，不能留間距（否則切換會上下跳）。 */
   html:not([data-audience]) .audience-cards__panel + .audience-cards__panel {
     margin-top: var(--space-7);

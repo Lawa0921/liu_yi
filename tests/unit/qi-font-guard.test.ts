@@ -30,6 +30,12 @@ const NODE_ONLY = [
   'src/qi/shapes/weapon-snapshot.ts',
 ];
 
+/**
+ * 只在 Astro 伺服端（元件的 frontmatter）讀的文案模組：首頁文案是中文，由頁面渲染成 HTML，不進任何瀏覽器 chunk。
+ * 條件同上、雙向守住：不得被 `.ts`／`.js`／`.mjs` 或 `.astro` 的 <script> 區塊 import；不再含 CJK 了也要移出清單。
+ */
+const SERVER_ONLY = ['src/qi/config/copy.ts'];
+
 const posix = (path: string): string => path.split(sep).join('/');
 
 function filesUnder(dir: string, accept: (name: string) => boolean): string[] {
@@ -58,7 +64,7 @@ describe('src/qi：程式碼字串不含 CJK（D3 字型守門）', () => {
     }
   });
 
-  it.each(FILES.filter((f) => !NODE_ONLY.includes(f)))('%s', (file) => {
+  it.each(FILES.filter((f) => !NODE_ONLY.includes(f) && !SERVER_ONLY.includes(f)))('%s', (file) => {
     expect(cjkInCode(file), file).toEqual([]);
   });
 });
@@ -75,6 +81,32 @@ describe('src/qi：Node 專用取樣模組不進瀏覽器的 chunk', () => {
     const offenders: string[] = [];
     for (const file of importers) {
       const source = readFileSync(join(root, file), 'utf8');
+      for (const match of source.matchAll(/(?:from|import)\s*\(?\s*['"](\.{1,2}\/[^'"]+)['"]/g)) {
+        const resolved = resolve(dirname(join(root, file)), match[1]!.replace(/\.(ts|js)$/, ''));
+        if (targets.has(resolved)) offenders.push(`${file} → ${match[1]}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+});
+
+describe('src/qi：伺服端專用文案模組不進瀏覽器的 chunk', () => {
+  it.each(SERVER_ONLY)('%s 存在、仍含中文字串（否則請移出 SERVER_ONLY 讓上面的掃描涵蓋它）', (file) => {
+    expect(FILES).toContain(file);
+    expect(cjkInCode(file).length).toBeGreaterThan(0);
+  });
+
+  it('只有 .astro 的 frontmatter 與測試 import 它們；.ts／.js／.mjs 與 <script> 區塊都不行', () => {
+    const targets = new Set(SERVER_ONLY.map((file) => resolve(root, file.replace(/\.ts$/, ''))));
+    const importers = filesUnder('src', (name) => /\.(ts|js|mjs|astro)$/.test(name)).filter((f) => !SERVER_ONLY.includes(f));
+    const offenders: string[] = [];
+    for (const file of importers) {
+      let source = readFileSync(join(root, file), 'utf8');
+      if (file.endsWith('.astro')) {
+        // frontmatter（第一組 --- 之間）在伺服端執行；其餘（模板與 <script>）可能進瀏覽器。
+        const fence = /^---\r?\n[\s\S]*?\r?\n---/.exec(source);
+        source = fence ? source.slice(fence[0].length) : source;
+      }
       for (const match of source.matchAll(/(?:from|import)\s*\(?\s*['"](\.{1,2}\/[^'"]+)['"]/g)) {
         const resolved = resolve(dirname(join(root, file)), match[1]!.replace(/\.(ts|js)$/, ''));
         if (targets.has(resolved)) offenders.push(`${file} → ${match[1]}`);

@@ -1,0 +1,716 @@
+/*
+ * 首頁「氣聚成人」的版面（標記在 src/components/home/，由 src/pages/index.astro 引入）。
+ *
+ * 版面方向（設計 §7、決定 D17）：
+ *   桌機：文字在左、光點在右（引擎取景 look.x = −visibleH·aspect·0.13，所以人形落在 63% 處）。
+ *   手機：文字在下、光點在上（look.y 下移 13% 的可視高度，人形落在約 37% 處）。
+ * 每個 [data-beat] 高 var(--stage-height)（svh），不用強制 scroll-snap；canvas 是之後掛上去的 position: fixed 背景層，
+ * 所以這裡的版面只負責「文字放哪裡、光點的位置留空」。靜態圖（.beat__still）只在退回時露出（見下方規則）。
+ *
+ * 顏色：黑底、米白（--color-text）當主字、古金（--color-accent）當線與註解、朱紅只給方印。
+ * 字：TW-Kai 只有 400；不用漸層字、不用外發光。
+ */
+
+[data-home] {
+  /* 內容左右的留白：桌機比頁首的 4.5rem 內縮再多一點，手機用全站的 gutter。 */
+  --home-pad: max(var(--gutter), 5.5vw);
+  --text-col: 35rem;
+  --beat-title: clamp(2.5rem, 1.6rem + 3.2vw, 4.25rem);
+  overflow-x: clip;
+}
+
+/* ── 靜態圖：引擎在跑時整張隱藏；減少動態、沒有 WebGL（html.qi-static）、沒有 JS 時才露出 ── */
+
+html.js:not(.qi-static) .beat__still {
+  display: none;
+}
+
+.beat__still {
+  width: 100%;
+  height: auto;
+  max-height: calc(var(--stage-height) - 6rem);
+  object-fit: contain;
+}
+
+/* ── 開場 ─────────────────────────────────────────── */
+
+.opening {
+  --poster-h: 64%;
+  --poster-x: 63%;
+  --poster-y: 50%;
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  align-items: center;
+  min-height: var(--stage-height);
+  padding: var(--space-6) var(--home-pad);
+}
+
+/* 海報（hero 靜態圖）：蓋滿整個視窗（含頁首與頁尾底下），人形的位置與大小對應引擎的取景。 */
+.opening__poster {
+  position: absolute;
+  z-index: -1;
+  inset: calc(-1 * var(--frame-top)) calc(-1 * var(--frame-inset)) calc(-1 * var(--frame-bottom));
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.opening__poster img {
+  position: absolute;
+  left: var(--poster-x);
+  top: var(--poster-y);
+  width: auto;
+  height: var(--poster-h);
+  max-width: none;
+  transform: translate(-50%, -50%);
+}
+
+.opening__lockup {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: flex-end;
+  justify-self: start;
+  gap: clamp(var(--space-3), 1.4vw, var(--space-5));
+}
+
+.opening__title {
+  margin: 0;
+  writing-mode: vertical-rl;
+  font-size: min(8.5rem, 15.5vh);
+  line-height: 1.1;
+  letter-spacing: 0.06em;
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.opening__sub {
+  margin: 0;
+  padding-inline-end: clamp(var(--space-3), 1.2vw, var(--space-4));
+  border-right: var(--line) solid var(--color-line);
+  writing-mode: vertical-rl;
+  font-size: clamp(1rem, 2.4vh, 1.375rem);
+  letter-spacing: 0.5em;
+  color: var(--color-accent-strong);
+  white-space: nowrap;
+}
+
+/* 往下捲提示：桌機的外框下緣已有「向下捲動」，所以只在手機顯示。 */
+.opening__hint {
+  position: absolute;
+  inset: auto 0 var(--space-4);
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  letter-spacing: 0.5em;
+  text-indent: 0.5em;
+  pointer-events: none;
+}
+
+.opening__hint-line {
+  width: 1px;
+  height: 2.25rem;
+  background: linear-gradient(var(--color-accent), transparent);
+  transform-origin: top;
+}
+
+/* 略過開場（演出時才由腳本取消 hidden）。 */
+.opening__skip {
+  position: absolute;
+  right: var(--home-pad);
+  bottom: var(--space-5);
+  min-height: 2.5rem;
+  padding: var(--space-1) var(--space-5);
+  border: var(--line) solid var(--color-line);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  letter-spacing: 0.3em;
+  text-indent: 0.3em;
+  cursor: pointer;
+}
+
+.opening__skip[hidden] {
+  display: none;
+}
+
+.opening__skip:hover,
+.opening__skip:focus-visible {
+  color: var(--color-text);
+  border-color: var(--color-accent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html.js .opening__lockup > * {
+    animation: opening-in 0.9s var(--ease-out) both;
+  }
+
+  html.js .opening__sub {
+    animation-delay: 0.15s;
+  }
+
+  .opening__hint-line {
+    animation: hint-drop 2.2s var(--ease-in-out) infinite;
+  }
+}
+
+@keyframes opening-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 1rem, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes hint-drop {
+  0% {
+    transform: scaleY(0);
+  }
+  55% {
+    transform: scaleY(1);
+  }
+  100% {
+    transform: scaleY(1);
+    opacity: 0;
+  }
+}
+
+/* ── beat 共用 ────────────────────────────────────── */
+
+.beat {
+  position: relative;
+  display: grid;
+  align-items: center;
+  min-height: var(--stage-height);
+  padding: var(--space-7) var(--home-pad);
+}
+
+.beat__panel {
+  position: relative;
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(0, var(--text-col)) minmax(0, 1fr);
+  align-items: center;
+  column-gap: var(--space-7);
+}
+
+.beat__text {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+}
+
+.beat__still {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+/* 沒有 JS 時兩個對象的面板都顯示：疊在一起，各有一個小標；有切換鈕後只剩一組，小標隱藏。 */
+.beat__audience {
+  display: none;
+}
+
+html:not([data-audience]) .beat__audience {
+  display: block;
+  margin: 0 0 var(--space-3);
+  color: var(--color-accent-strong);
+  font-size: var(--text-sm);
+  letter-spacing: 0.5em;
+}
+
+html:not([data-audience]) .beat--course {
+  align-content: center;
+  gap: var(--space-8);
+}
+
+/* 對象切換時，新那一組的文字輕輕升起（只動 transform 與 opacity）。 */
+@media (prefers-reduced-motion: no-preference) {
+  html.js .beat--course .beat__text {
+    animation: beat-text-in 0.7s var(--ease-out) both;
+  }
+}
+
+@keyframes beat-text-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 0.9rem, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.beat__title {
+  margin: 0 0 var(--space-3);
+  font-size: var(--beat-title);
+  line-height: 1.1;
+  letter-spacing: 0.1em;
+  color: var(--color-text);
+}
+
+.beat__summary {
+  margin: 0 0 var(--space-5);
+  color: var(--color-text-muted);
+  font-size: var(--text-lg);
+  letter-spacing: 0.04em;
+}
+
+.beat__heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin: 0 0 var(--space-4);
+  font-size: var(--beat-title);
+  line-height: 1.1;
+  letter-spacing: 0.3em;
+  color: var(--color-text);
+}
+
+/* 標題後面拉出一小段金線。 */
+.beat__heading::after {
+  content: '';
+  flex: none;
+  width: clamp(2rem, 6vw, 4.5rem);
+  height: var(--line);
+  background: var(--color-accent);
+}
+
+.beat__lead {
+  margin: 0 0 var(--space-5);
+  max-width: var(--measure);
+  color: var(--color-text-muted);
+  font-size: var(--text-lg);
+  letter-spacing: 0.04em;
+}
+
+.beat__more {
+  margin: var(--space-5) 0 0;
+}
+
+.beat__link {
+  margin-top: var(--space-2);
+}
+
+/* 一式的註解：朱印序號＋名稱，下面一到兩行。 */
+.beat__move {
+  margin: 0 0 var(--space-5);
+  padding-inline-start: var(--space-4);
+  border-left: 2px solid var(--color-accent);
+}
+
+.beat__move-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-2);
+}
+
+.beat__no {
+  font-size: 1rem;
+}
+
+.beat__move-name {
+  color: var(--color-accent-strong);
+  font-size: var(--text-xl);
+  letter-spacing: 0.3em;
+}
+
+.beat__move-line {
+  margin: 0;
+  color: var(--color-text);
+  letter-spacing: 0.04em;
+}
+
+/* 單獨成為這個 beat 主角的招式（格鬥第二式、兵器第二、三件）：名稱放大當標題。 */
+.beat__move--solo {
+  padding-inline-start: 0;
+  border-left: 0;
+}
+
+.beat__move--solo .beat__move-head {
+  gap: var(--space-4);
+  margin-bottom: var(--space-3);
+}
+
+.beat__move--solo .beat__no {
+  font-size: 1.5rem;
+}
+
+.beat__move--solo .beat__move-name {
+  color: var(--color-text);
+  font-size: var(--beat-title);
+  line-height: 1.1;
+  letter-spacing: 0.12em;
+}
+
+.beat__move--solo .beat__move-line {
+  color: var(--color-text-muted);
+  font-size: var(--text-xl);
+}
+
+/* ── 其他課程 ─────────────────────────────────────── */
+
+.others__list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.others__item {
+  padding-block: var(--space-4);
+  border-top: var(--line) solid var(--color-line-faint);
+}
+
+.others__list > li:last-child .others__item {
+  border-bottom: var(--line) solid var(--color-line-faint);
+}
+
+.others__title {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-2xl);
+  letter-spacing: 0.16em;
+}
+
+.others__title a {
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.others__title a:hover,
+.others__title a:focus-visible {
+  color: var(--color-accent-strong);
+}
+
+.others__summary {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+/* ── 師資 ─────────────────────────────────────────── */
+
+.coach-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.coach-entry {
+  position: relative;
+  height: 100%;
+  padding: var(--space-4) var(--space-4) var(--space-3);
+  border: var(--line) solid var(--color-line-faint);
+  background: color-mix(in srgb, var(--color-bg) 70%, transparent);
+}
+
+.coach-entry::before {
+  content: '';
+  position: absolute;
+  inset: -1px auto auto -1px;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-top: 2px solid var(--color-accent);
+  border-left: 2px solid var(--color-accent);
+  pointer-events: none;
+}
+
+.coach-entry__name {
+  margin: 0;
+  font-size: var(--text-2xl);
+  letter-spacing: 0.14em;
+  line-height: 1.2;
+  color: var(--color-text);
+}
+
+.coach-entry__role {
+  margin: var(--space-1) 0 var(--space-2);
+  color: var(--color-accent-strong);
+  font-size: var(--text-sm);
+  letter-spacing: 0.12em;
+}
+
+.coach-entry__teaches {
+  margin: 0 0 var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+
+/* 課名不在中間斷行（只在「、」處換行）。 */
+.coach-entry__course {
+  white-space: nowrap;
+}
+
+.coach-entry__link {
+  margin-top: 0;
+  font-size: var(--text-sm);
+}
+
+/* ── 收費與課表 ───────────────────────────────────── */
+
+.pricing__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pricing__facility {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-4);
+  margin: var(--space-6) 0 0;
+  padding-top: var(--space-4);
+  border-top: var(--line) solid var(--color-line-faint);
+  color: var(--color-text-muted);
+}
+
+.pricing__facility .beat__link {
+  margin-top: 0;
+}
+
+/* ── 預約 ─────────────────────────────────────────── */
+
+/* 蓋在朱印（光點或靜態圖）上的透明點擊區。 */
+.seal-hit {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: center;
+  align-self: center;
+  width: min(24rem, 90%);
+  aspect-ratio: 1;
+  cursor: pointer;
+}
+
+/* ── 大人｜小孩切換鈕 ─────────────────────────────── */
+
+/* 切換鈕的內層是絕對定位、會垂到容器底下：容器邊界之外裁掉，離開課程段時它才會跟著收起來。 */
+.courses-run {
+  overflow: clip;
+}
+
+.audience-switch {
+  position: sticky;
+  top: calc(var(--frame-top) + 0.75rem);
+  z-index: 30;
+  height: 0;
+  pointer-events: none;
+}
+
+.audience-switch__inner {
+  position: absolute;
+  top: 0;
+  left: var(--home-pad);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 4px;
+  border: var(--line) solid var(--color-line);
+  background: color-mix(in srgb, var(--color-bg) 86%, transparent);
+  pointer-events: auto;
+}
+
+.audience-switch__inner::before {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border: var(--line) solid var(--color-line-faint);
+  pointer-events: none;
+}
+
+.audience-switch__thumb {
+  position: absolute;
+  inset: 4px auto 4px 4px;
+  width: calc(50% - 4px);
+  background: var(--color-accent);
+  transition: transform 0.55s var(--ease-out);
+}
+
+html[data-audience='kid'] .audience-switch__thumb {
+  transform: translate3d(100%, 0, 0);
+}
+
+.audience-switch__option {
+  position: relative;
+  min-width: 6.5rem;
+  min-height: 2.5rem;
+  padding: var(--space-1) var(--space-4);
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 400;
+  letter-spacing: 0.5em;
+  text-indent: 0.5em;
+  cursor: pointer;
+  transition: color 0.4s;
+}
+
+.audience-switch__option:hover {
+  color: var(--color-text);
+}
+
+html[data-audience='adult'] [data-audience-option='adult'],
+html[data-audience='kid'] [data-audience-option='kid'] {
+  color: var(--color-on-accent);
+}
+
+/* ── 段落跳轉（桌機右緣） ─────────────────────────── */
+
+.home-rail {
+  display: none;
+}
+
+/* ── 手機（< 60rem）：文字在下、光點在上 ──────────── */
+
+@media (max-width: 59.999rem) {
+  .opening {
+    --poster-h: 40%;
+    --poster-x: 50%;
+    --poster-y: 36%;
+    align-items: end;
+    padding-block: var(--space-5) 6rem;
+  }
+
+  /* 手機人形在正中央，站名與副標成一組置中放在它的下方。 */
+  .opening__lockup {
+    justify-self: center;
+  }
+
+  .opening__title {
+    font-size: clamp(3.25rem, 17vw, 4.5rem);
+  }
+
+  .opening__sub {
+    font-size: 1rem;
+    letter-spacing: 0.4em;
+  }
+
+  .opening__skip {
+    bottom: 4.25rem;
+  }
+
+  .beat {
+    align-items: end;
+    padding-block: var(--space-6) var(--space-7);
+  }
+
+  .beat__panel {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: var(--space-5);
+  }
+
+  .beat__text {
+    grid-row: 2;
+  }
+
+  .beat__still {
+    grid-column: 1;
+    grid-row: 1;
+    max-height: 38svh;
+  }
+
+  .seal-hit {
+    grid-column: 1;
+    width: min(60vw, 16rem);
+  }
+
+  .audience-switch__inner {
+    left: auto;
+    right: var(--gutter);
+  }
+
+  .audience-switch__option {
+    min-width: 5rem;
+    min-height: 2.25rem;
+    font-size: var(--text-base);
+  }
+
+  .coach-list {
+    gap: var(--space-3);
+  }
+
+  .coach-entry {
+    padding: var(--space-3);
+  }
+
+  .coach-entry__name {
+    font-size: var(--text-xl);
+  }
+}
+
+/* ── 桌機（≥ 60rem）：段落導覽 ───────────────────── */
+
+@media (min-width: 60rem) {
+  .opening__hint {
+    display: none;
+  }
+
+  .home-rail {
+    display: block;
+    position: fixed;
+    z-index: 45;
+    top: 50%;
+    right: calc(var(--frame-inset) + 1.5rem);
+    transform: translateY(-50%);
+  }
+
+  .home-rail__list {
+    display: grid;
+    gap: var(--space-5);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .home-rail__link {
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+    letter-spacing: 0.3em;
+    text-decoration: none;
+    transition: color 0.3s;
+  }
+
+  .home-rail__label {
+    writing-mode: vertical-rl;
+  }
+
+  .home-rail__tick {
+    width: var(--line);
+    height: 1.25rem;
+    margin-top: 0.15rem;
+    background: var(--color-line-faint);
+    transition:
+      height 0.5s var(--ease-out),
+      background-color 0.3s;
+  }
+
+  .home-rail__link:hover,
+  .home-rail__link[aria-current='true'] {
+    color: var(--color-accent-strong);
+  }
+
+  .home-rail__link:hover .home-rail__tick,
+  .home-rail__link[aria-current='true'] .home-rail__tick {
+    height: 2.5rem;
+    background: var(--color-accent);
+  }
+}

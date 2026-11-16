@@ -9,7 +9,8 @@ const overflow = (page: Page) =>
 test.describe('手機寬度：大人｜小孩', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  for (const path of ['./', './courses/']) {
+  // 首頁版本（先捲到課程段再點切換）在 home.spec.ts。
+  for (const path of ['./courses/']) {
     test(`切到小孩、切回大人都沒有水平外溢 @ ${path}`, async ({ page }) => {
       await page.goto(path);
       expect(await overflow(page), '大人').toBeLessThanOrEqual(0);
@@ -170,11 +171,12 @@ test('標題層級不跳級：課程總覽與師資總覽的卡片 h3 上面有 
 });
 
 test('首頁首屏的進場在 1.2 秒內完成（手機）', async ({ page }) => {
+  // 開場（.opening）的字樣進場動畫；無限循環的提示線不算。
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('./');
   const longest = await page.evaluate(() =>
     Math.max(
-      ...Array.from(document.querySelectorAll('.hero *'))
+      ...Array.from(document.querySelectorAll('.opening *'))
         .flatMap((el) => el.getAnimations())
         .filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity)
         .map((animation) => Number(animation.effect?.getComputedTiming().endTime ?? 0)),

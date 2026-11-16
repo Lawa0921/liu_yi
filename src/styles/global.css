@@ -333,6 +333,13 @@ hr {
   transform: none;
 }
 
+/* 依 <html data-audience> 隱藏另一組面板（課程總覽的卡片組、首頁各 beat 的面板共用）。
+   沒有 JS 時 <html> 沒有 data-audience，兩組都顯示。 */
+html[data-audience='adult'] [data-audience-panel='kid'],
+html[data-audience='kid'] [data-audience-panel='adult'] {
+  display: none;
+}
+
 /* 沒有 JavaScript 時，只有 JS 才有用的控制項不顯示（<html> 的 js class 由 BaseLayout 的行內腳本加上）。 */
 html:not(.js) [data-requires-js] {
   display: none !important;

@@ -14,11 +14,12 @@ const CLOCK_PAUSED = new Date('2026-01-01T01:00:00');
  */
 async function openWithPausedClock(page: Page) {
   await page.clock.install({ time: CLOCK_START });
-  await page.goto('./');
+  // 輪播屬於 CourseCard；首頁改版後不再有卡片，課程總覽頁有同一批。
+  await page.goto('./courses/');
   await page.clock.pauseAt(CLOCK_PAUSED);
 }
 
-async function openHomeAsKid(page: Page) {
+async function openCoursesAsKid(page: Page) {
   await page.addInitScript((key) => window.localStorage.setItem(key, 'kid'), AUDIENCE_STORAGE_KEY);
   await openWithPausedClock(page);
 }
@@ -29,7 +30,7 @@ function activeSlide(page: Page) {
 
 test.describe('桌機 hover 輪播', () => {
   test('滑鼠移上去每 3 秒換一張，移開停止並回到第一張', async ({ page }) => {
-    await openHomeAsKid(page);
+    await openCoursesAsKid(page);
     const card = page.locator(CARD);
     const slides = card.locator('[data-slide]');
     await expect(slides).toHaveCount(3);
@@ -81,7 +82,7 @@ test.describe('減少動態', () => {
   test.use({ reducedMotion: 'reduce' });
 
   test('hover 也不自動輪播', async ({ page }) => {
-    await openHomeAsKid(page);
+    await openCoursesAsKid(page);
     const card = page.locator(CARD);
     await expect(activeSlide(page)).toHaveAttribute('data-carousel-mode', 'none');
     await card.scrollIntoViewIfNeeded();
@@ -97,7 +98,7 @@ test.describe('觸控裝置', () => {
   test.use({ ...pixel });
 
   test('卡片進入畫面中央才輪播，離開就停', async ({ page }) => {
-    await openHomeAsKid(page);
+    await openCoursesAsKid(page);
     const card = page.locator(CARD);
     await expect(activeSlide(page)).toHaveAttribute('data-carousel-mode', 'viewport');
 

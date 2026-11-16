@@ -1,0 +1,15 @@
+---
+// 靜態圖：每個姿勢的聚合態（建置時渲好的 WebP）。引擎在跑時整張隱藏（home.css），
+// 減少動態、沒有 WebGL（html.qi-static）或沒有 JS 時才露出，這時它就是那一段的「光點」。
+import { stillInfo } from '../../lib/stills';
+
+interface Props {
+  /** 姿勢名稱，對應 stills.json 的鍵（也是 config/poses.ts 的 PoseId）。 */
+  name: string;
+}
+
+const { name } = Astro.props;
+const { src, width, height } = stillInfo(name);
+---
+
+<img class="beat__still" src={src} width={width} height={height} alt="" loading="lazy" decoding="async" />

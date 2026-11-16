@@ -1,111 +1,10 @@
-import { expect, test, type Page } from '@playwright/test';
-import { ADULT_COURSES, KID_COURSES } from './helpers';
+import { expect, test } from '@playwright/test';
 
-// 第二階段的行為：首頁三幕的釘選（只在桌機、且沒有「減少動態」時）、進場效果不得藏住內容、
-// 海報站內放大、課程頁照片切換按鈕。
+// 第二階段的行為：手機選單展開時鎖住捲動、沒有 JavaScript 時海報仍可看、海報站內放大、課程頁照片切換。
+// 首頁三幕（釘選、data-acts）已隨首頁改版移除，首頁的行為見 home.spec.ts 與 home-fallback.spec.ts。
 
-const ACT_COURSES = [...ADULT_COURSES, ...KID_COURSES];
-
-/** 三幕腳本跑完後會在 <html data-acts> 標上 pinned 或 static。 */
-async function actsMode(page: Page) {
-  await expect(page.locator('html')).toHaveAttribute('data-acts', /pinned|static/);
-  return page.locator('html').getAttribute('data-acts');
-}
-
-/** 區塊內被樣式藏起來（透明或 visibility:hidden）的元素。 */
-function hiddenByStyle(page: Page, scope: string) {
-  return page.evaluate((selector) => {
-    const hidden: string[] = [];
-    for (const root of document.querySelectorAll(selector)) {
-      for (const el of root.querySelectorAll<HTMLElement>('h1, h2, h3, p, a, li, img')) {
-        if (el.closest('[aria-hidden="true"]')) continue;
-        // 輪播裡不是目前那一張的照片本來就該是透明的。
-        if (el.matches('[data-slide]:not(.is-active)')) continue;
-        let node: HTMLElement | null = el;
-        while (node && node !== document.body) {
-          const style = getComputedStyle(node);
-          if (Number(style.opacity) < 0.99 || style.visibility === 'hidden') {
-            hidden.push(`${el.tagName}.${el.className}: ${(el.textContent ?? '').trim().slice(0, 12)}`);
-            break;
-          }
-          node = node.parentElement;
-        }
-      }
-    }
-    return hidden;
-  }, scope);
-}
-
-test.describe('首頁三幕：桌機', () => {
-  test.use({ viewport: { width: 1440, height: 900 } });
-
-  test('三幕各自釘選，捲到幕中段時那一幕停在畫面上', async ({ page }) => {
-    await page.goto('./');
-    expect(await actsMode(page)).toBe('pinned');
-    await expect(page.locator('.pin-spacer')).toHaveCount(3);
-
-    const act = page.locator('[data-act="fist"]');
-    const spacerTop = await act.evaluate(
-      (el) => el.closest('.pin-spacer')!.getBoundingClientRect().top + window.scrollY,
-    );
-    await page.evaluate((y) => window.scrollTo(0, y), spacerTop + 500);
-    await expect
-      .poll(async () => Math.round((await act.boundingBox())!.y))
-      .toBeLessThan(120);
-    expect((await act.boundingBox())!.y).toBeGreaterThanOrEqual(0);
-    await expect(act.getByRole('heading', { level: 2 })).toBeInViewport();
-  });
-
-  test('六門課的連結都在三幕裡，而且點得到', async ({ page }) => {
-    await page.goto('./');
-    await actsMode(page);
-    for (const course of ACT_COURSES) {
-      await expect(page.locator(`.acts a[href$="courses/${course.slug}/"]`)).toHaveCount(1);
-    }
-    await page.locator('.acts a[href$="courses/bajiquan/"]').click();
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText('八極專修');
-  });
-});
-
-test.describe('首頁三幕：減少動態', () => {
-  test.use({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
-
-  test('不釘選，首屏與三幕的內容直接可見', async ({ page }) => {
-    await page.goto('./');
-    expect(await actsMode(page)).toBe('static');
-    await expect(page.locator('.pin-spacer')).toHaveCount(0);
-
-    for (const course of ACT_COURSES) {
-      await expect(page.locator(`.acts a[href$="courses/${course.slug}/"]`)).toBeVisible();
-    }
-    expect(await hiddenByStyle(page, '.hero, .acts')).toEqual([]);
-    // 顆粒不動。
-    const grain = await page.locator('.grain').evaluate((el) => getComputedStyle(el).animationName);
-    expect(grain).toBe('none');
-  });
-
-  test('捲到底，其餘區塊也沒有被進場效果藏住', async ({ page }) => {
-    await page.goto('./');
-    await actsMode(page);
-    expect(await hiddenByStyle(page, 'main')).toEqual([]);
-  });
-});
-
-test.describe('首頁三幕：手機寬度', () => {
+test.describe('手機寬度', () => {
   test.use({ viewport: { width: 390, height: 844 } });
-
-  test('不釘選，一般捲動', async ({ page }) => {
-    await page.goto('./');
-    expect(await actsMode(page)).toBe('static');
-    await expect(page.locator('.pin-spacer')).toHaveCount(0);
-
-    const act = page.locator('[data-act="fist"]');
-    await act.scrollIntoViewIfNeeded();
-    const before = (await act.boundingBox())!.y;
-    await page.mouse.wheel(0, 200);
-    await expect.poll(async () => (await act.boundingBox())!.y).toBeLessThan(before - 100);
-    expect(await act.evaluate((el) => getComputedStyle(el).position)).not.toBe('fixed');
-  });
 
   test('選單展開成全螢幕並鎖住底下的捲動，關閉後解除', async ({ page }) => {
     await page.goto('./');
@@ -120,29 +19,10 @@ test.describe('首頁三幕：手機寬度', () => {
     await toggle.click();
     await expect(page.locator('html')).not.toHaveClass(/nav-open/);
   });
-
-  test('捲到的區塊會進場顯示出來', async ({ page }) => {
-    await page.goto('./');
-    await actsMode(page);
-    const link = page.locator('.acts a[href$="courses/sanshou/"]');
-    await link.scrollIntoViewIfNeeded();
-    await expect(link).toBeVisible();
-    await expect.poll(() => hiddenByStyle(page, '[data-act="combat"]')).toEqual([]);
-  });
 });
 
 test.describe('沒有 JavaScript：桌機', () => {
   test.use({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
-
-  test('首屏、三幕、各區塊的內容都看得到', async ({ page }) => {
-    await page.goto('./');
-    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-    for (const course of ACT_COURSES) {
-      await expect(page.locator(`.acts a[href$="courses/${course.slug}/"]`)).toBeVisible();
-    }
-    expect(await hiddenByStyle(page, 'main')).toEqual([]);
-    await expect(page.locator('.pin-spacer')).toHaveCount(0);
-  });
 
   test('海報仍是連到圖檔的連結，照片切換按鈕不顯示', async ({ page, request }) => {
     await page.goto('./pricing/');

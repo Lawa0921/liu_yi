@@ -22,9 +22,11 @@ interface Props {
   ogImage?: ImageMetadata;
   ogType?: 'website' | 'article';
   noindex?: boolean;
+  /** 只有首頁傳：<main> 標上 data-home，首頁專用的樣式與腳本以它為界。 */
+  home?: boolean;
 }
 
-const { title, description = SITE.description, ogImage = logoLarge, ogType = 'website', noindex = false } = Astro.props;
+const { title, description = SITE.description, ogImage = logoLarge, ogType = 'website', noindex = false, home = false } = Astro.props;
 
 const fullTitle = title ? `${title}｜${SITE.name}` : `${SITE.name}｜${SITE.tagline}`;
 const canonical = new URL(Astro.url.pathname, Astro.site).href;
@@ -78,7 +80,7 @@ const favicon = await getImage({ src: logoEmblem, width: 96, height: 96, fit: 'c
   <body>
     <a class="skip-link" href="#main">跳到主要內容</a>
     <Header />
-    <main id="main">
+    <main id="main" data-home={home ? '' : undefined}>
       <slot />
     </main>
     <Footer />

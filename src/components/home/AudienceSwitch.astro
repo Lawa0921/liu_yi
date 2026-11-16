@@ -1,0 +1,27 @@
+---
+// 「大人｜小孩」切換鈕（首頁課程段專用）。沿用 data-audience-option／data-audience-panel 與
+// src/scripts/audience-toggle.ts；顯示哪一組由 <html data-audience> 決定（規則在 global.css）。
+//
+// 外層高度 0、position: sticky：切換鈕黏在課程段上方，離開 .courses-run 自然收起；
+// 內層絕對定位，所以它不佔版面，頁面長度與大人／小孩無關（樣式在 src/styles/home.css）。
+import { AUDIENCES, AUDIENCE_LABEL } from '../../lib/courses';
+import { DEFAULT_AUDIENCE } from '../../lib/audience';
+---
+
+<div class="audience-switch" data-requires-js>
+  <div class="audience-switch__inner" role="group" aria-label="選擇課程對象">
+    <span class="audience-switch__thumb" aria-hidden="true"></span>
+    {
+      AUDIENCES.map((audience) => (
+        <button
+          type="button"
+          class="audience-switch__option"
+          data-audience-option={audience}
+          aria-pressed={audience === DEFAULT_AUDIENCE ? 'true' : 'false'}
+        >
+          {AUDIENCE_LABEL[audience]}
+        </button>
+      ))
+    }
+  </div>
+</div>

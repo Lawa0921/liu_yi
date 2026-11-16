@@ -1,0 +1,23 @@
+---
+// 收費與課表（beat: pricing）：光點退成背景低亮度的氣，資訊清楚浮在上面。
+// 不放任何金額或時段：收費與課表目前只有業主的海報圖，沿用「不轉成文字，避免抄錯」的規定（設計 §7）。
+import { url } from '../../lib/url';
+import { COPY } from '../../qi/config/copy';
+---
+
+<section id="pricing" class="beat beat--plain beat--pricing" data-beat="pricing" aria-labelledby="pricing-heading">
+  <div class="beat__panel beat__panel--plain">
+    <div class="beat__text">
+      <h2 id="pricing-heading" class="beat__heading">收費與課表</h2>
+      <p class="beat__lead">{COPY.pricing.lead}</p>
+      <ul class="pricing__links">
+        <li><a class="button" href={url('/pricing/')}>看收費</a></li>
+        <li><a class="button" href={url('/schedule/')}>看課表</a></li>
+      </ul>
+      <p class="pricing__facility">
+        <span>{COPY.pricing.facility}</span>
+        <a class="text-link beat__link" href={url('/facility/')}>看場地</a>
+      </p>
+    </div>
+  </div>
+</section>

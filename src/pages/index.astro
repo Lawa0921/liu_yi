@@ -1,178 +1,37 @@
 ---
-// 首頁：首屏 → 三幕（兵器／拳術／格鬥）→ 課程卡片 → 師資 → 場地 → 聯絡。
-// 第二版的互動（設計文件 §15.2）：兵器台與震腳在 Acts.astro，掃光在 Hero.astro，刀光層在這裡。
-import { Image } from 'astro:assets';
+// 首頁「氣聚成人」：金色光點組成的八極拳師當主角，內容跟著招式長出來（設計文件 2026-11-16-qi-homepage-design.md）。
+// 段落：開場 → 課程（拳、格鬥、兵器，大人／小孩切換）→ 其他課程 → 師資 → 收費與課表 → 預約。
+// 這一頁全是 DOM 文字與靜態圖；光點引擎之後再掛上去（引擎失效或減少動態時，靜態圖就是畫面）。
+import '../styles/home.css';
 import BaseLayout from '../layouts/BaseLayout.astro';
-import Hero from '../components/Hero.astro';
-import Acts from '../components/Acts.astro';
-import AudienceCards from '../components/AudienceCards.astro';
-import CoachCard from '../components/CoachCard.astro';
-import Plaque from '../components/Plaque.astro';
-import facilityPhoto from '../assets/images/facility-interior-1.jpg';
+import Opening from '../components/home/Opening.astro';
+import CoursesRun from '../components/home/CoursesRun.astro';
+import OtherCourses from '../components/home/OtherCourses.astro';
+import CoachesBeat from '../components/home/CoachesBeat.astro';
+import PricingBeat from '../components/home/PricingBeat.astro';
+import BookingBeat from '../components/home/BookingBeat.astro';
+import SectionRail from '../components/home/SectionRail.astro';
 import { getPublishedCoaches, getPublishedCourses } from '../lib/content';
-import { BOOKING_ANCHOR, BOOKING_LABEL, SITE } from '../lib/site';
-import { url } from '../lib/url';
+import { buildHomeModel } from '../lib/home';
 
-const courses = await getPublishedCourses();
-const coaches = await getPublishedCoaches();
+const { steps, others, coaches } = buildHomeModel(await getPublishedCourses(), await getPublishedCoaches());
+
+// 沒有的段落就不輸出，也不進段落導覽（RF4）。
+const rail = [
+  { id: 'opening', label: '開場' },
+  ...(steps.length > 0 ? [{ id: 'courses', label: '課程' }] : []),
+  ...(coaches.length > 0 ? [{ id: 'coaches', label: '師資' }] : []),
+  { id: 'pricing', label: '收費課表' },
+  { id: 'booking', label: '預約' },
+];
 ---
 
-<BaseLayout>
-  {/* 刀光層（設計文件 §15.2-2）：蓋滿視窗、純視覺、不接收任何指標事件。 */}
-  <canvas class="slash-layer" data-slash aria-hidden="true"></canvas>
-
-  <Hero />
-
-  <Acts courses={courses} />
-
-  <div class="home-divider" aria-hidden="true">
-    <span class="wave-band wave-band--back"></span>
-    <span class="wave-band"></span>
-  </div>
-
-  <section class="section" id="courses" aria-labelledby="courses-heading">
-    <div class="container">
-      <Plaque id="courses-heading">課程</Plaque>
-      <AudienceCards courses={courses} />
-      <p class="section__more"><a class="text-link" href={url('/courses/')}>所有課程</a></p>
-    </div>
-  </section>
-
-  <section class="section" id="coaches" aria-labelledby="coaches-heading">
-    <div class="container">
-      <Plaque id="coaches-heading">師資</Plaque>
-      <ul class="coach-grid">
-        {
-          coaches.map((coach, index) => (
-            <li data-reveal style={`--reveal-i:${index}`}>
-              <CoachCard coach={coach} />
-            </li>
-          ))
-        }
-      </ul>
-      <p class="section__more"><a class="text-link" href={url('/coaches/')}>師資介紹</a></p>
-    </div>
-  </section>
-
-  <section class="section" id="facility" aria-labelledby="facility-heading">
-    <div class="container">
-      <Plaque id="facility-heading">場地</Plaque>
-      <div class="facility-teaser">
-        <div class="facility-teaser__photo cornered">
-          <i class="cornered__tick"></i>
-          <i class="cornered__tick"></i>
-          <i class="cornered__tick"></i>
-          <i class="cornered__tick"></i>
-          <div data-reveal="wipe">
-            <Image
-              src={facilityPhoto}
-              alt="訓練場地：鋪滿地墊的教室，一側是整面鏡牆"
-              width={1200}
-              height={750}
-              fit="cover"
-              sizes="(min-width: 60rem) 44rem, 95vw"
-              loading="lazy"
-            />
-          </div>
-        </div>
-        <div class="facility-teaser__text" data-reveal>
-          <p class="lead">寬敞明亮的訓練場地，鏡面牆與地墊。</p>
-          <p><a class="text-link" href={url('/facility/')}>看場地</a></p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section class="section contact" id="contact" aria-labelledby="contact-heading">
-    <div class="container contact__inner">
-      <Plaque id="contact-heading">聯絡</Plaque>
-      <p class="lead" data-reveal>想先來上一堂看看？用 LINE 跟我們說一聲。</p>
-      <ul class="contact__actions" data-reveal>
-        <li><a class="button button--solid" href={BOOKING_ANCHOR} data-line-open>{BOOKING_LABEL}</a></li>
-        <li>
-          <a class="button" href={SITE.facebookUrl} target="_blank" rel="noopener noreferrer">Facebook 粉絲專頁</a>
-        </li>
-      </ul>
-    </div>
-  </section>
+<BaseLayout home>
+  <Opening />
+  {steps.length > 0 && <CoursesRun steps={steps} />}
+  {others.length > 0 && <OtherCourses courses={others} />}
+  {coaches.length > 0 && <CoachesBeat coaches={coaches} />}
+  <PricingBeat />
+  <BookingBeat />
+  <SectionRail items={rail} />
 </BaseLayout>
-
-<script>
-  import { initSlash } from '../scripts/slash';
-
-  initSlash();
-</script>
-
-<style>
-  .home-divider {
-    display: grid;
-    border-bottom: var(--line) solid var(--color-line-faint);
-  }
-
-  .home-divider > * {
-    grid-area: 1 / 1;
-    align-self: end;
-  }
-
-  .section__more {
-    margin: var(--space-7) 0 0;
-    text-align: center;
-  }
-
-  .coach-grid {
-    display: grid;
-    gap: var(--space-5);
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  .facility-teaser {
-    display: grid;
-    gap: var(--space-6);
-    align-items: end;
-  }
-
-  .facility-teaser__photo {
-    border: var(--line) solid var(--color-line-faint);
-  }
-
-  .facility-teaser__photo :global(img) {
-    width: 100%;
-  }
-
-  .contact__inner {
-    display: grid;
-    justify-items: center;
-    text-align: center;
-  }
-
-  .contact__inner :global(.plaque-row) {
-    width: 100%;
-  }
-
-  .contact__actions {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: var(--space-4);
-    margin: var(--space-5) 0 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  @media (min-width: 48rem) {
-    .coach-grid {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: var(--space-6);
-    }
-  }
-
-  @media (min-width: 60rem) {
-    .facility-teaser {
-      grid-template-columns: minmax(0, 2.2fr) minmax(0, 1fr);
-      gap: var(--space-7);
-    }
-  }
-</style>
