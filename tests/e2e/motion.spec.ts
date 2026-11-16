@@ -49,10 +49,14 @@ test.describe('首頁三幕：桌機', () => {
       (el) => el.closest('.pin-spacer')!.getBoundingClientRect().top + window.scrollY,
     );
     await page.evaluate((y) => window.scrollTo(0, y), spacerTop + 500);
+    // 捲動後要等瀏覽器送出 scroll 事件、ScrollTrigger 才會把幕釘住；在那之前量到的是還沒釘的位置（負值）。
+    // 所以「在畫面上緣附近」的上下界要一起輪詢，不能先過了上界就馬上量下界。
     await expect
-      .poll(async () => Math.round((await act.boundingBox())!.y))
-      .toBeLessThan(120);
-    expect((await act.boundingBox())!.y).toBeGreaterThanOrEqual(0);
+      .poll(async () => {
+        const y = (await act.boundingBox())!.y;
+        return y >= 0 && y < 120;
+      })
+      .toBe(true);
     await expect(act.getByRole('heading', { level: 2 })).toBeInViewport();
   });
 

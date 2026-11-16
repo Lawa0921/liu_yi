@@ -35,6 +35,13 @@ const { courses } = Astro.props;
     }
   </div>
 
+  {/* 門扇（第四輪）：切換時兩扇窗櫺門合攏蓋住課程卡、換組、再向內打開。src/scripts/audience-doors.ts。 */}
+  <div class="audience-doors" aria-hidden="true">
+    <span class="audience-doors__leaf audience-doors__leaf--left"><i class="lattice"></i></span>
+    <span class="audience-doors__leaf audience-doors__leaf--right"><i class="lattice"></i></span>
+    <canvas class="audience-doors__dust"></canvas>
+  </div>
+
   {
     AUDIENCES.map((audience) => (
       <div class="audience-cards__panel" data-audience-panel={audience}>
@@ -73,14 +80,19 @@ const { courses } = Astro.props;
     display: none;
   }
 
-  /* 滑塊與選中的字色跟著 <html data-audience> 走（首次繪製前就設好，不會閃）。 */
-  html[data-audience='kid'] .audience-cards__thumb {
+  /* 滑塊與選中的字色跟著按鈕的 aria-pressed 走：點下就換，不等門扇合上才換卡片組。
+     首次繪製前（腳本還沒把 aria-pressed 設好）先依 <html data-audience> 放，不會閃。 */
+  html[data-audience='kid'] .audience-cards__controls:not(:has([aria-pressed='true'])) .audience-cards__thumb,
+  .audience-cards__controls:has([data-audience-option='kid'][aria-pressed='true']) .audience-cards__thumb {
     transform: translate3d(100%, 0, 0);
   }
 
-  html[data-audience='adult'] [data-audience-option='adult'],
-  html[data-audience='kid'] [data-audience-option='kid'] {
+  /* 選中的字色（滑鼠停在上面也一樣）。 */
+  .audience-cards .audience-cards__controls [data-audience-option][aria-pressed='true'],
+  .audience-cards .audience-cards__controls [data-audience-option][aria-pressed='true']:hover {
     color: var(--color-on-accent);
+    /* 不帶過場：點下的那一刻就換（滑塊在字底下滑過去）。 */
+    transition: none;
   }
 
   @media (prefers-reduced-motion: no-preference) {
@@ -91,6 +103,91 @@ const { courses } = Astro.props;
 
     html.js [data-audience-panel='kid'] .audience-cards__list > li {
       animation-name: audience-card-in-kid;
+    }
+  }
+
+  /* ── 門扇開合 ─────────────────────────────────────── */
+  .audience-cards {
+    position: relative;
+  }
+
+  .audience-doors {
+    position: absolute;
+    inset: var(--doors-top, 0) 0 0;
+    z-index: 3;
+    display: none;
+    overflow: hidden;
+    perspective: 1400px;
+    pointer-events: none;
+  }
+
+  .audience-cards[data-door] .audience-doors {
+    display: block;
+  }
+
+  .audience-doors__leaf {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 50.5%;
+    overflow: hidden;
+    border: var(--line) solid var(--color-line);
+    background:
+      linear-gradient(90deg, color-mix(in srgb, var(--color-bg) 70%, transparent), transparent 18%, transparent 82%, color-mix(in srgb, var(--color-bg) 70%, transparent)),
+      var(--color-surface-raised);
+    backface-visibility: hidden;
+    /* 由 --door（0 全合、1 全開）推：開的時候向內轉、越轉越暗。 */
+    transition: none;
+  }
+
+  .audience-doors__leaf .lattice {
+    --color-pattern: color-mix(in srgb, var(--color-accent) 55%, transparent);
+  }
+
+  .audience-doors__leaf--left {
+    left: 0;
+    transform-origin: 0 50%;
+    transform: rotateY(calc(var(--door, 1) * 96deg));
+  }
+
+  .audience-doors__leaf--right {
+    right: 0;
+    transform-origin: 100% 50%;
+    transform: rotateY(calc(var(--door, 1) * -96deg));
+  }
+
+  .audience-doors__dust {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* 門開的時候：新的一組由深處沿 Z 軸依序飛出就定位，景深模糊漸清。 */
+  html.js .audience-cards[data-door='opening'] [data-audience-panel] .audience-cards__list {
+    perspective: 900px;
+  }
+
+  html.js .audience-cards[data-door='opening'] [data-audience-panel] .audience-cards__list > li {
+    animation: audience-fly 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-delay: calc(var(--i) * 0.07s);
+  }
+
+  /* 門開合過一次之後，卡片不再播載入時的滑入（只在門開時飛出）。 */
+  html.js .audience-cards.has-doored:not([data-door]) [data-audience-panel] .audience-cards__list > li {
+    animation: none;
+  }
+
+  @keyframes audience-fly {
+    from {
+      opacity: 0;
+      transform: translate3d(0, 1.5rem, -420px);
+      filter: blur(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+      filter: none;
     }
   }
 
@@ -145,7 +242,7 @@ const { courses } = Astro.props;
     inset: 4px auto 4px 4px;
     width: calc(50% - 4px);
     background: var(--color-accent);
-    transition: transform 0.55s var(--ease-out);
+    transition: transform 0.35s var(--ease-out);
   }
 
   .audience-cards__option {
@@ -162,11 +259,13 @@ const { courses } = Astro.props;
     letter-spacing: 0.5em;
     text-indent: 0.5em;
     cursor: pointer;
-    transition: color 0.4s;
+    /* 選中與否的字色立刻換（不等門扇、不帶過場）；只有滑鼠移上去時才慢慢亮。 */
+    transition: none;
   }
 
   .audience-cards__option:hover {
     color: var(--color-text);
+    transition: color 0.4s;
   }
 
   .audience-cards__panel {

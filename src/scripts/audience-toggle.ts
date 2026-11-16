@@ -7,6 +7,7 @@
 // 首次繪製前，BaseLayout 的行內腳本會先依 localStorage 設好 <html data-audience>，避免閃一下。
 
 import { createAudienceState } from '../lib/audience';
+import { createDoors, type DoorController } from './audience-doors';
 import type { Audience } from '../lib/courses';
 
 function safeLocalStorage(): Storage | null {
@@ -17,19 +18,32 @@ function safeLocalStorage(): Storage | null {
   }
 }
 
-function render(audience: Audience): void {
-  document.documentElement.dataset.audience = audience;
+/** 按鈕的狀態馬上換；卡片組（<html data-audience>）由門扇在合上的那一刻換（src/scripts/audience-doors.ts）。 */
+function pressed(audience: Audience): void {
   for (const button of document.querySelectorAll<HTMLElement>('[data-audience-option]')) {
     button.setAttribute('aria-pressed', String(button.dataset.audienceOption === audience));
   }
+}
+
+function show(audience: Audience): void {
+  document.documentElement.dataset.audience = audience;
 }
 
 export function initAudienceToggle(): void {
   const buttons = document.querySelectorAll<HTMLElement>('[data-audience-option]');
   if (buttons.length === 0) return;
 
-  const state = createAudienceState({ storage: safeLocalStorage(), onChange: render });
-  render(state.get());
+  let doors: DoorController | null = null;
+  const state = createAudienceState({
+    storage: safeLocalStorage(),
+    onChange: (audience) => {
+      pressed(audience);
+      doors?.request(audience);
+    },
+  });
+  show(state.get());
+  pressed(state.get());
+  doors = createDoors(state.get(), show);
 
   for (const button of buttons) {
     button.addEventListener('click', () => {

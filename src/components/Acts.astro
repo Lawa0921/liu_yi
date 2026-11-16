@@ -16,6 +16,7 @@
 //   線稿（.weapon3d-fallback）留作沒有 WebGL／沒有 JS 時的退路；切換列只在 3D 就緒後出現。
 //   拳術那一幕有「震腳」按鈕（src/scripts/stomp.ts；減少動態時不出現）。
 import { Image } from 'astro:assets';
+import Scene from './Scene.astro';
 import Weapon from './ornament/Weapon.astro';
 import Bafang from './ornament/Bafang.astro';
 import Leitai from './ornament/Leitai.astro';
@@ -45,6 +46,9 @@ const ARMORY = [
         data-weapon3d-scope={category === 'weapon' ? '' : undefined}
         aria-labelledby={`act-${category}`}
       >
+        {category === 'weapon' && <Scene scene="weapon" />}
+        {category === 'fist' && <Scene scene="fist" />}
+        {category === 'combat' && <Scene scene="combat" />}
         <div class="act__stage">
           <div class="act__motif" aria-hidden="true">
             {category === 'weapon' && (
@@ -57,6 +61,8 @@ const ARMORY = [
           </div>
 
           {category === 'weapon' && <div class="armory" data-weapon3d="stage" data-weapon-kind="jian" />}
+          {/* 兵器前面的一層塵（疊在 3D 畫布上面；背後那層在場景裡）。 */}
+          {category === 'weapon' && <span class="act__impact act__dust-front" data-scene-dust aria-hidden="true" />}
 
           <p class="act__glyph" aria-hidden="true">
             {category === 'fist' && <Bafang class="act__emblem" />}
@@ -74,6 +80,8 @@ const ARMORY = [
           {category === 'weapon' && (
             <div class="armory-bar" data-weapon3d-controls>
               <div class="armory-switch" role="group" aria-label="選擇兵器">
+                {/* 刀鋒指示條：滑到選中的那一件，身後留一道殘光（src/scripts/armory-blade.ts）。 */}
+                <span class="armory-switch__blade" aria-hidden="true" />
                 {ARMORY.map(({ kind, label }, index) => (
                   <button
                     type="button"
@@ -89,13 +97,22 @@ const ARMORY = [
             </div>
           )}
 
+          {category === 'fist' && <canvas class="act__impact" data-impact aria-hidden="true" />}
+
           {category === 'fist' && (
-            <button type="button" class="act__stomp" data-stomp hidden>
-              <span class="seal seal--pair">
-                <span>震腳</span>
-              </span>
-              <span class="act__stomp-hint">點一下</span>
-            </button>
+            <div class="act__moves">
+              <button type="button" class="act__stomp" data-stomp hidden>
+                <span class="seal seal--pair">
+                  <span>震腳</span>
+                </span>
+                <span class="act__stomp-hint">點一下</span>
+              </button>
+              <button type="button" class="act__stomp" data-kao hidden>
+                <span class="seal seal--pair seal--trio">
+                  <span>貼山靠</span>
+                </span>
+              </button>
+            </div>
           )}
 
           <ul class="act__courses">
@@ -147,10 +164,12 @@ const ARMORY = [
 
 <script>
   import { initActs } from '../scripts/acts';
+  import { initArmoryBlade } from '../scripts/armory-blade';
   import { initStomp } from '../scripts/stomp';
 
   initActs();
   initStomp();
+  initArmoryBlade();
 </script>
 
 <style>
@@ -158,10 +177,36 @@ const ARMORY = [
     position: relative;
   }
 
+  /* 章節色（第三版）：各幕一個主色，兵器幕再跟著台上的兵器換。只用在幾處細節（直線、選中的底線），克制。 */
+  .act {
+    --chapter: var(--color-accent);
+    transition: --chapter 0.7s var(--ease-out);
+  }
+
+  .act[data-act='fist'] {
+    --chapter: var(--color-seal-strong);
+  }
+
+  .act[data-chapter='jian'] {
+    --chapter: var(--color-patina);
+  }
+
+  .act[data-chapter='miaodao'] {
+    --chapter: var(--color-iron);
+  }
+
   .act {
     position: relative;
     overflow: hidden;
     border-top: var(--line) solid var(--color-line-faint);
+  }
+
+  /* 後兩幕（拳術、格鬥）還沒捲到附近時不排版內容：它們的字型分包與照片等捲近了才下載（首屏傳輸量）。
+     幕本身的框大小不變（桌機是固定高度），釘選的量測不受影響。 */
+  .act[data-act='fist'],
+  .act[data-act='combat'] {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 100svh;
   }
 
   .act__stage {
@@ -235,12 +280,19 @@ const ARMORY = [
     margin: calc(var(--space-8) * -1) calc(var(--gutter) * -1) 0;
   }
 
-  .armory[data-weapon3d-state='ready'] {
+  /* 3D 兵器的位置先留好（有 JS 就會嘗試載入 3D）：不然 3D 就緒的那一刻整幕突然長高，下面的內容往下跳。
+     退回線稿（fallback）時才把位置收回來。 */
+  :global(html.js) .armory:not([data-weapon3d-state='fallback']) {
     min-height: min(27rem, 112vw);
   }
 
+  /* 3D 就緒：3D 兵器是主角。背景大字與持械人形只留其一——有人形就把大字收掉。 */
   .act[data-weapon3d-state='ready'] .act__glyph {
-    opacity: 0.3;
+    opacity: 0.1;
+  }
+
+  .act[data-weapon3d-state='ready']:has([data-scene-figure]) .act__glyph {
+    opacity: 0;
   }
 
   .armory-bar {
@@ -253,14 +305,21 @@ const ARMORY = [
     gap: var(--space-4);
   }
 
-  .act[data-weapon3d-state='ready'] .act__stage {
+  :global(html.js) .act[data-weapon3d-scope]:not([data-weapon3d-state='fallback']) .act__stage {
     grid-template-areas:
       'glyph head'
       'bar bar'
       'courses courses';
   }
 
+  /* 3D 還在載入：切換列先佔好位置（看不見），就緒時才不會把下面的內容往下推。 */
+  :global(html.js) .act[data-weapon3d-scope]:not([data-weapon3d-state]) .armory-bar {
+    display: flex;
+    visibility: hidden;
+  }
+
   .armory-switch {
+    position: relative;
     display: flex;
     align-items: stretch;
     border: var(--line) solid var(--color-line-faint);
@@ -298,9 +357,9 @@ const ARMORY = [
     background: linear-gradient(
       90deg,
       transparent,
-      var(--color-highlight) 30%,
+      var(--chapter) 30%,
       var(--color-text) 50%,
-      var(--color-highlight) 70%,
+      var(--chapter) 70%,
       transparent
     );
     transform: scaleX(0);
@@ -315,6 +374,35 @@ const ARMORY = [
     transform: scaleX(1);
   }
 
+  /* 有刀鋒指示條（有 JS）時，由它取代各鈕自己的底線。 */
+  .armory-switch:has(.armory-switch__blade[style]) .armory-switch__option::after {
+    display: none;
+  }
+
+  .armory-switch__blade,
+  :global(.armory-switch__trail) {
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    height: 2px;
+    pointer-events: none;
+  }
+
+  /* 刀鋒：中間近白、兩端收進章節色，像刃口的一道光。 */
+  .armory-switch__blade {
+    z-index: 2;
+    background: linear-gradient(90deg, transparent, var(--chapter) 22%, var(--color-text) 50%, var(--chapter) 78%, transparent);
+    transition:
+      translate 0.42s cubic-bezier(0.7, 0, 0.2, 1),
+      width 0.42s cubic-bezier(0.7, 0, 0.2, 1);
+  }
+
+  /* 殘光：從舊的位置拉到新的位置、很快淡掉。 */
+  :global(.armory-switch__trail) {
+    z-index: 1;
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--color-accent-strong) 70%, transparent), transparent);
+  }
+
   .armory-switch__option:hover {
     color: var(--color-accent-strong);
   }
@@ -327,12 +415,38 @@ const ARMORY = [
   }
 
   /* ── 震腳（第二版） ───────────────────────────────── */
-  .act__stomp {
+  .act__moves {
     grid-area: glyph;
     align-self: end;
     justify-self: center;
     position: relative;
     z-index: 3;
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+  }
+
+  /* 衝擊層（裂紋、塵浪、漆片）：鋪滿整幕，不接收指標事件。 */
+  .act__impact {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+
+  .seal--trio {
+    height: 4.1em;
+  }
+
+  /* 課程牌被撞時繞上緣晃（像掛著的木牌）。 */
+  .act__course {
+    transform-origin: 50% 0;
+  }
+
+  .act__stomp {
+    position: relative;
     display: flex;
     align-items: center;
     gap: var(--space-3);
@@ -377,13 +491,11 @@ const ARMORY = [
     line-height: 1;
   }
 
+  /* 大字是平面的單色（不用漸層、不疊陰影：不做成金色立體字）。 */
   .act__glyph > span {
     position: relative;
     display: inline-block;
-    background: linear-gradient(170deg, var(--color-text) 8%, var(--color-accent-strong) 42%, var(--color-accent) 78%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+    color: var(--color-accent-strong);
   }
 
   /* ── 直書分類名 ───────────────────────────────────── */
@@ -412,7 +524,7 @@ const ARMORY = [
     flex: 1;
     width: 1px;
     min-height: 2.5rem;
-    background: linear-gradient(var(--color-accent), transparent);
+    background: linear-gradient(var(--chapter), transparent);
     transform-origin: center top;
   }
 
@@ -619,11 +731,11 @@ const ARMORY = [
       margin: 0;
     }
 
-    .armory[data-weapon3d-state='ready'] {
+    :global(html.js) .armory:not([data-weapon3d-state='fallback']) {
       min-height: 0;
     }
 
-    .act[data-weapon3d-state='ready'] .act__stage {
+    :global(html.js) .act[data-weapon3d-scope]:not([data-weapon3d-state='fallback']) .act__stage {
       grid-template-areas: 'glyph head courses';
     }
 
@@ -635,7 +747,7 @@ const ARMORY = [
       gap: var(--space-5);
     }
 
-    .act__stomp {
+    .act__moves {
       margin-bottom: var(--space-2);
     }
 
@@ -675,6 +787,45 @@ const ARMORY = [
       left: -3%;
       width: 70%;
       transform: rotate(-1.5deg);
+    }
+  }
+
+  /* 拳術幕有人形時：大字是主角——收小靠右，人站在它旁邊；八方線框和大字二選一，線框不出現。 */
+  .act[data-act='fist']:has([data-scene-figure]) :global(.act__emblem) {
+    opacity: 0 !important;
+    visibility: hidden;
+  }
+
+  @media (max-width: 59.99rem) {
+    .act[data-act='fist']:has([data-scene-figure]) .act__glyph {
+      font-size: clamp(7rem, 40vw, 12rem);
+      justify-self: start;
+    }
+
+    /* 兩顆朱印自己一列（大字下面），不壓在大字上。 */
+    .act[data-act='fist'] .act__stage {
+      grid-template-areas:
+        'glyph head'
+        'moves moves'
+        'courses courses';
+    }
+
+    .act[data-act='fist'] .act__moves {
+      grid-area: moves;
+      justify-self: start;
+      align-self: center;
+    }
+  }
+
+  @media (min-width: 60rem) {
+    .act[data-act='fist']:has([data-scene-figure]) .act__glyph {
+      font-size: calc(var(--glyph) * 0.7);
+      justify-self: end;
+    }
+
+    .act[data-act='fist']:has([data-scene-figure]) .act__moves {
+      justify-self: end;
+      margin-right: calc(var(--glyph) * 0.18);
     }
   }
 

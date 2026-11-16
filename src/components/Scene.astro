@@ -1,0 +1,743 @@
+---
+// 立體空間的場景（第三版追加）：一疊由遠到近的剪影層放在同一個 CSS 3D 空間裡（perspective + translateZ），
+// 夾著霧、逆光的光束與塵粒。層的設定在 src/lib/scene/layers.ts；視差與推進在 src/scripts/scene.ts。
+//
+// 素材：src/assets/silhouettes/<名稱>.webp 或 .png（黑色加透明的剪影，別人生成、可抽換）。
+// 哪一張沒到，那一層就略過——一張都沒有時只剩霧、光束與塵粒，版面照常。
+// 剪影用 CSS mask 上色（顏色走設計變數），所以可以跟著章節色換。
+// 首屏只先載最近的前景（eager），其餘的層等頁面載完才載（data-mask，由 scene.ts 套上）；沒有 JS 時由 <noscript> 套上。
+//
+// 開發時（或建置時設 PUBLIC_SILHOUETTE_PLACEHOLDERS=1）素材還沒到的層會用
+// src/assets/_placeholder-silhouettes/ 裡的臨時佔位檔（不進版控、不進正式輸出）。
+import { getImage } from 'astro:assets';
+import {
+  FIGURES,
+  PERSPECTIVE,
+  SCENES,
+  figureBox,
+  layerPlacement,
+  resolveScene,
+  revealDelay,
+  pointerParallax,
+  scrollParallax,
+  splitFrame,
+  type FigureKey,
+  type FigureSpec,
+  type SceneLayer,
+  type SceneName,
+} from '../lib/scene/layers';
+
+interface Props {
+  scene: SceneName;
+}
+
+const { scene } = Astro.props;
+
+type Loader = () => Promise<{ default: ImageMetadata }>;
+const real = import.meta.glob<{ default: ImageMetadata }>('../assets/silhouettes/*.{png,webp}');
+const placeholders = import.meta.glob<{ default: ImageMetadata }>('../assets/_placeholder-silhouettes/*.{png,webp}');
+const usePlaceholders = import.meta.env.DEV || import.meta.env.PUBLIC_SILHOUETTE_PLACEHOLDERS === '1';
+
+/** 名稱 → 載入函式（先 webp 再 png；正式素材優先，沒有才用佔位檔）。 */
+function loaderOf(name: string): Loader | undefined {
+  for (const [folder, modules] of [
+    ['silhouettes', real],
+    ['_placeholder-silhouettes', usePlaceholders ? placeholders : {}],
+  ] as const) {
+    for (const extension of ['webp', 'png']) {
+      const loader = (modules as Record<string, Loader>)[`../assets/${folder}/${name}.${extension}`];
+      if (loader) return loader;
+    }
+  }
+  return undefined;
+}
+
+const wanted = [
+  ...new Set((SCENES[scene] as readonly SceneLayer[]).flatMap((layer) => [layer.asset, layer.fallback]).filter((asset): asset is string => typeof asset === 'string')),
+];
+const available = new Set(wanted.filter((name) => loaderOf(name)));
+// 兵器幕「兵器前面那層塵」要疊在 3D 畫布上面，由 Acts.astro 另外放一張畫布，不在這一疊裡。
+const layers = resolveScene(SCENES[scene], available, { mobile: false }).filter((layer) => layer.id !== 'dust-front');
+
+const prepared = await Promise.all(
+  layers.map(async (layer) => {
+    let url: string | undefined;
+    let ratio = 1;
+    let box = { height: 1, foot: 0, centre: 0.5 };
+    if (layer.asset) {
+      const source = (await loaderOf(layer.asset)!()).default;
+      ratio = source.width / source.height;
+      if (layer.figure) box = figureBox(FIGURES[layer.figure], source);
+      // 人形不必很大；鋪滿畫面的景要夠寬。
+      const width = Math.min(source.width, layer.role === 'figure' ? 600 : 1100);
+      // 剪影只當遮罩用（還會被霧與失焦蓋過），不必很大、畫質也不必高。
+      url = (await getImage({ src: source, width, format: 'webp', quality: 55 })).src;
+    }
+    const { z, scale } = layerPlacement(layer.depth);
+    const style = [
+      `--z:${z.toFixed(0)}px`,
+      `--s:${scale.toFixed(4)}`,
+      `--o:${layer.opacity}`,
+      `--blur:${layer.blur ?? 0}px`,
+      `--reveal:${revealDelay(layer.depth)}ms`,
+      // 捲動視差：這一層每單位捲動多走多少（手機減半）。
+      `--par:${scrollParallax(layer.depth).toFixed(1)}px`,
+      `--par-m:${scrollParallax(layer.depth, { mobile: true }).toFixed(1)}px`,
+      // 指標視差：指標移到邊上時這一層橫向多走多少。
+      `--pm:${pointerParallax(layer.depth).toFixed(1)}px`,
+      // 素材的長寬比：人形的框依它決定寬度（每個人形的圖一樣高）。
+      `--ar:${ratio.toFixed(4)}`,
+      // 人形：圖高（以站直的人為 1）、腳底的透明邊、身體中心。
+      layer.figure ? `--fh:${box.height.toFixed(4)};--foot:${(box.foot * 100).toFixed(3)}%;--cx:${(box.centre * 100).toFixed(1)}%` : '',
+      url && layer.eager ? `--mask:url("${url}")` : '',
+    ]
+      .filter(Boolean)
+      .join(';');
+    return { layer, url, style };
+  }),
+);
+
+/** 沒有 JS 時延後載入的層也要看得到。 */
+const noscript = prepared
+  .filter(({ url, layer }) => url && !layer.eager)
+  .map(({ url, layer }) => `[data-scene="${scene}"] [data-scene-layer="${layer.id}"]{--mask:url("${url}")}`)
+  .join('');
+
+const hasFigure = prepared.some(({ layer }) => layer.role === 'figure');
+/** 這個人形有沒有指定落下的那隻腳（0–1，在圖寬的哪裡）。 */
+const landingOf = (key: FigureKey | undefined): number | undefined => (key ? (FIGURES[key] as FigureSpec).landing : undefined);
+const hasLanding = prepared.some(({ layer }) => landingOf(layer.figure) !== undefined);
+---
+
+<div
+  class:list={['scene', `scene--${scene}`]}
+  data-scene={scene}
+  data-scene-figure={hasFigure ? '' : undefined}
+  aria-hidden="true"
+  style={`--perspective:${PERSPECTIVE}px`}
+>
+  <div class="scene__sky"></div>
+  <div class="scene__camera">
+    {
+      prepared.map(({ layer, url, style }) => (
+        <div
+          class:list={[
+            'scene__layer',
+            `scene__layer--${layer.role}`,
+            { 'scene__layer--desktop': !layer.mobile, [`scene__layer--at-${layer.place}`]: Boolean(layer.place) },
+          ]}
+          data-scene-layer={layer.id}
+          data-scene-asset={layer.asset ?? undefined}
+          data-figure={layer.figure}
+          data-mask={url && !layer.eager ? url : undefined}
+          style={style}
+        >
+          {layer.role === 'figure' && (
+            <span class="scene__figure">
+              <i class="scene__rim" />
+              <i class="scene__body" />
+              {/* 震腳的人：落下的那隻腳的腳底就是落點（裂紋的中心）。 */}
+              {landingOf(layer.figure) !== undefined && (
+                <i class="scene__land" data-impact-origin style={`left:${(landingOf(layer.figure)! * 100).toFixed(1)}%`} />
+              )}
+            </span>
+          )}
+          {/* 塵粒的畫布由 scene.ts 建（兵器幕要等 3D 就緒才建）。 */}
+          {layer.role === 'dust' && <span class="scene__dust" data-scene-dust />}
+          {layer.role === 'ground' && (
+            <span class="scene__floor">
+              <i />
+            </span>
+          )}
+          {/* 體積光：WebGL2 的畫布由 src/scripts/atmos.ts 放進來。 */}
+          {layer.role === 'atmos' && <span class="scene__atmos" data-atmos-slot />}
+          {/* 立柱拆成左右兩根：每根的框只包住柱子本身。 */}
+          {layer.place === 'split' &&
+            splitFrame().map(({ from, to, source }) => (
+              <span
+                class="scene__shape scene__shape--split"
+                style={`left:${(from * 100).toFixed(2)}%;width:${((to - from) * 100).toFixed(2)}%;--mask-w:${(100 / (source[1] - source[0])).toFixed(1)}%;--mask-x:${((source[0] / (1 - (source[1] - source[0]))) * 100).toFixed(2)}%`}
+              />
+            ))}
+          {layer.role !== 'figure' && layer.role !== 'dust' && layer.role !== 'ground' && layer.role !== 'atmos' && layer.place !== 'split' && (
+            <span class="scene__shape" />
+          )}
+        </div>
+      ))
+    }
+  </div>
+  {/* 落點（震腳的圓心）：沒有指定落腳的人形時，就是人形的腳下。 */}
+  {hasFigure && !hasLanding && <span class="scene__ground" data-impact-origin />}
+</div>
+{noscript && <noscript><style set:html={noscript} /></noscript>}
+
+<style is:global>
+  .scene {
+    --ox: 50%;
+    --oy: 50%;
+    --push: 0px;
+    /* 地平線的高度（由上往下）：人站在這條線上。 */
+    --horizon: 74%;
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    perspective: var(--perspective);
+    /* 透視原點固定在正中央：指標視差改由各層依景深自己橫移（--px／--py × --pm），近的走得遠多於遠的。
+       --ox／--oy 仍由 scene.ts 寫入（指標位置的百分比），給體積光的光源跟著偏。 */
+    perspective-origin: 50% 50%;
+  }
+
+  /* 逆光：地平線後面一片低低的暖光，剪影就是靠它襯出來的。 */
+  .scene__sky {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(
+        ellipse 30% 30% at 50% var(--horizon),
+        color-mix(in srgb, var(--color-accent-strong) 62%, transparent),
+        transparent 100%
+      ),
+      radial-gradient(
+        ellipse 70% 56% at 50% var(--horizon),
+        color-mix(in srgb, var(--color-accent) 46%, transparent),
+        color-mix(in srgb, var(--color-accent) 14%, transparent) 50%,
+        transparent 78%
+      ),
+      linear-gradient(to top, var(--color-surface-raised), transparent 60%);
+    transition: opacity 0.9s var(--ease-out);
+  }
+
+  .scene__camera {
+    position: absolute;
+    inset: 0;
+    transform-style: preserve-3d;
+    /* 捲動時鏡頭沿 Z 軸往前推進（--push）；首屏另有一直在走的極慢推近與呼吸（--breath）。都由 scene.ts 寫入。 */
+    transform: translateZ(calc(var(--push) + var(--breath, 0px)));
+  }
+
+  .scene__layer {
+    position: absolute;
+    inset: 0;
+    opacity: var(--o);
+    filter: blur(var(--blur));
+    /* 放到它的景深上，再放大抵銷透視——靜止時大小不變，鏡頭或透視原點一動才分得出遠近。
+       捲動視差：--sy 是這一塊在畫面裡的位置（-1 剛從下緣進來、0 置中、1 要從上緣出去），近的層走得多。 */
+    transform: translateZ(var(--z)) scale(var(--s))
+      translate3d(calc(var(--px, 0) * var(--pm, 0px) * -1), calc(var(--sy, 0) * var(--par, 0px) * -1 + var(--py, 0) * var(--pm, 0px) * -0.4), 0);
+    transition: opacity 0.7s var(--ease-out);
+  }
+
+  @media (max-width: 59.99rem) {
+    .scene__layer {
+      transform: translateZ(var(--z)) scale(var(--s))
+        translate3d(calc(var(--px, 0) * var(--pm, 0px) * -0.5), calc(var(--sy, 0) * var(--par-m, 0px) * -1), 0);
+    }
+  }
+
+  .scene__shape,
+  .scene__figure,
+  .scene__rim,
+  .scene__body {
+    position: absolute;
+    display: block;
+  }
+
+  /* 剪影：素材當遮罩，顏色用設計變數。 */
+  .scene__layer--far .scene__shape,
+  .scene__layer--mid .scene__shape,
+  .scene__layer--fore .scene__shape,
+  .scene__rim,
+  .scene__body {
+    background-color: var(--layer-color, var(--color-deep));
+    -webkit-mask: var(--mask, none) center bottom / contain no-repeat;
+    mask: var(--mask, none) center bottom / contain no-repeat;
+  }
+
+  /* 素材還沒套上（延後載入中、或沒有 JS 也沒有 noscript）時不要畫成一整塊色塊。 */
+  .scene__layer[data-mask] .scene__shape,
+  .scene__layer[data-mask] .scene__rim,
+  .scene__layer[data-mask] .scene__body {
+    visibility: hidden;
+  }
+
+  /* 遠景屋脊：最遠、最淡，貼著地平線橫過整個畫面。 */
+  .scene__layer--far .scene__shape {
+    --layer-color: color-mix(in srgb, var(--color-accent) 22%, var(--color-surface-raised));
+    left: -4%;
+    right: -4%;
+    bottom: calc(100% - var(--horizon));
+    aspect-ratio: var(--ar, 5);
+    -webkit-mask-size: 100% 100%;
+    mask-size: 100% 100%;
+  }
+
+  /* 中景（院門、兵器架）：站在地平線上。 */
+  .scene__layer--mid .scene__shape {
+    --layer-color: var(--color-surface);
+    left: 50%;
+    bottom: calc(100% - var(--horizon) - 1%);
+    height: var(--mid-height, 50%);
+    aspect-ratio: var(--ar, 2);
+    transform: translateX(-50%);
+  }
+
+  /* 前景：最近、最暗。 */
+  /* 立柱加橫樑的畫框：素材的柱子沒貼到圖邊，左右放大到柱子貼著視窗邊、略出框；底邊貼齊。 */
+  .scene__layer--fore .scene__shape {
+    --layer-color: var(--color-deep);
+    inset: -3% -7% 0 -7%;
+    -webkit-mask-size: 100% 100%;
+    mask-size: 100% 100%;
+  }
+
+  /* 地面：地平線以下一片往遠處收的石板（真的用 3D 壓平），最上緣是一條金色地平線。 */
+  .scene__floor {
+    position: absolute;
+    inset: var(--horizon) -30% 0 -30%;
+    border-top: 1px solid color-mix(in srgb, var(--color-accent-strong) 70%, transparent);
+    perspective: 420px;
+    perspective-origin: 50% 0;
+    overflow: hidden;
+  }
+
+  .scene__floor > i {
+    position: absolute;
+    inset: 0 -40% -260% -40%;
+    transform-origin: 50% 0;
+    transform: rotateX(74deg);
+    background:
+      linear-gradient(to bottom, color-mix(in srgb, var(--color-accent) 30%, transparent) 1px, transparent 1px) 0 0 / 100% 84px,
+      linear-gradient(to right, color-mix(in srgb, var(--color-accent) 24%, transparent) 1px, transparent 1px) 50% 0 / 150px 100%,
+      linear-gradient(to bottom, color-mix(in srgb, var(--color-accent) 16%, var(--color-bg)), var(--color-bg) 70%);
+    -webkit-mask: linear-gradient(to bottom, #000 30%, transparent 96%);
+    mask: linear-gradient(to bottom, #000 30%, transparent 96%);
+  }
+
+  /* 霧：一層由下往上淡掉的底色，把前後兩層隔開。 */
+  .scene__layer--fog .scene__shape {
+    inset: 30% -10% 0 -10%;
+    background: linear-gradient(
+      to top,
+      color-mix(in srgb, var(--color-bg) 92%, transparent),
+      color-mix(in srgb, var(--color-surface-raised) 46%, transparent) 38%,
+      transparent
+    );
+  }
+
+  /* 光束：從門洞後面往上散開的幾道逆光。 */
+  .scene__layer--light .scene__shape {
+    inset: 0;
+    background: conic-gradient(
+      from -34deg at 50% var(--horizon),
+      transparent 0deg,
+      color-mix(in srgb, var(--color-accent-strong) 26%, transparent) 5deg,
+      transparent 11deg,
+      transparent 22deg,
+      color-mix(in srgb, var(--color-accent-strong) 18%, transparent) 30deg,
+      transparent 39deg,
+      transparent 48deg,
+      color-mix(in srgb, var(--color-accent-strong) 24%, transparent) 55deg,
+      transparent 68deg
+    );
+    -webkit-mask: radial-gradient(ellipse 70% 78% at 50% var(--horizon), #000 8%, transparent 70%);
+    mask: radial-gradient(ellipse 70% 78% at 50% var(--horizon), #000 8%, transparent 70%);
+    mix-blend-mode: screen;
+  }
+
+  /* 人形：逆光的剪影，背後錯開一點點的古金是輪廓光。不描臉、不發光。 */
+  /* --figure-height 是「一個站直的人」在畫面上的高度；每張圖依自己的比例（--fh）縮放，
+     身體中心（--cx）對準定位點，腳底（扣掉透明邊 --foot）踩在地平線上。 */
+  .scene__figure {
+    left: var(--figure-x, 50%);
+    /* 人站在地平線前面一點的地面上（--stand）。 */
+    bottom: calc(100% - var(--horizon) - var(--stand, 0%));
+    height: calc(var(--figure-height, 38%) * var(--fh, 1));
+    aspect-ratio: var(--ar, 1);
+    transform: translate(calc(var(--cx, 50%) * -1), var(--foot, 0%));
+  }
+
+  .scene__rim,
+  .scene__body {
+    inset: 0;
+  }
+
+  /* 輪廓光：光源跟著滑鼠走，亮邊就偏到滑鼠那一側（--rim-x／--rim-y 由 scene.ts 寫入）。 */
+  .scene__rim {
+    --layer-color: var(--color-accent);
+    transform: translate(var(--rim-x, -2px), var(--rim-y, -1.5px));
+    opacity: 0.85;
+  }
+
+  .scene__body {
+    --layer-color: var(--color-deep);
+  }
+
+  [data-scene-dust] {
+    position: absolute;
+    inset: 0;
+    display: block;
+  }
+
+  [data-scene-dust] > canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* ── 擺位 ──────────────────────────────────────── */
+  .scene__layer .scene__shape--split {
+    top: -3%;
+    bottom: 0;
+    background-color: var(--layer-color, var(--color-deep));
+    -webkit-mask: var(--mask, none) var(--mask-x) 0 / var(--mask-w) 100% no-repeat;
+    mask: var(--mask, none) var(--mask-x) 0 / var(--mask-w) 100% no-repeat;
+  }
+
+  .scene__layer[data-mask] .scene__shape--split {
+    visibility: hidden;
+  }
+
+  .scene__layer--fore .scene__shape--split {
+    --layer-color: var(--color-deep);
+  }
+
+  /* 簷角：右上角，略出框。 */
+  .scene__layer--at-top-right .scene__shape {
+    inset: auto;
+    top: -9%;
+    right: -6%;
+    width: min(44vw, 40rem);
+    aspect-ratio: var(--ar, 2);
+    -webkit-mask-size: 100% 100%;
+    mask-size: 100% 100%;
+  }
+
+  /* 近處的兵器架：左下（或右下）角出框。 */
+  .scene__layer--at-bottom-left .scene__shape,
+  .scene__layer--at-bottom-right .scene__shape {
+    --layer-color: var(--color-deep);
+    inset: auto;
+    bottom: -14%;
+    width: min(34vw, 30rem);
+    aspect-ratio: var(--ar, 2);
+    -webkit-mask-size: 100% 100%;
+    mask-size: 100% 100%;
+  }
+
+  .scene__layer--at-bottom-left .scene__shape {
+    left: -9%;
+  }
+
+  .scene__layer--at-bottom-right .scene__shape {
+    right: -9%;
+    transform: scaleX(-1);
+  }
+
+  /* 石階：沿著下緣，在人與大字那一側。 */
+  .scene__layer--at-bottom .scene__shape {
+    --layer-color: var(--color-deep);
+    inset: auto -4% -5% 44%;
+    aspect-ratio: var(--ar, 5);
+    -webkit-mask-size: 100% 100%;
+    mask-size: 100% 100%;
+  }
+
+  /* 中景道具：站在地平線上，靠左或靠右，小而暗（後面有霧）。 */
+  .scene__layer--at-left-mid .scene__shape,
+  .scene__layer--at-right-mid .scene__shape {
+    --layer-color: color-mix(in srgb, var(--color-accent) 18%, var(--color-surface));
+    inset: auto;
+    bottom: calc(100% - var(--horizon) - 1%);
+    height: 26%;
+    aspect-ratio: var(--ar, 2);
+    transform: none;
+    -webkit-mask-size: contain;
+    mask-size: contain;
+  }
+
+  .scene__layer--at-left-mid .scene__shape {
+    left: 40%;
+  }
+
+  .scene__layer--at-right-mid .scene__shape {
+    right: 0;
+  }
+
+  /* 旗幡：直幡從上方垂下，輕輕擺（減少動態時不擺）。 */
+  .scene__layer--at-banner .scene__shape {
+    --layer-color: color-mix(in srgb, var(--color-accent) 16%, var(--color-surface-raised));
+    inset: auto;
+    top: 4%;
+    left: 70%;
+    height: 56%;
+    aspect-ratio: var(--ar, 2);
+    translate: -50% 0;
+    transform: none;
+    transform-origin: 50% 6%;
+    -webkit-mask-size: contain;
+    mask-size: contain;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .scene__layer--at-banner .scene__shape {
+      animation: scene-sway 7s ease-in-out infinite alternate;
+    }
+  }
+
+  @keyframes scene-sway {
+    from {
+      transform: rotate(-1.2deg) skewX(0.6deg);
+    }
+    to {
+      transform: rotate(1.4deg) skewX(-0.8deg);
+    }
+  }
+
+  /* 體積光的畫布：濾色疊在院門與人之間。 */
+  .scene__atmos {
+    position: absolute;
+    inset: 0;
+    display: block;
+  }
+
+  .scene__atmos > canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    mix-blend-mode: screen;
+  }
+
+  /* 下方各區塊的場景：上下緣淡出，區塊與區塊之間不留一道明顯的接縫。 */
+  .scene--courses,
+  .scene--coaches,
+  .scene--facility,
+  .scene--contact {
+    -webkit-mask: linear-gradient(transparent, #000 14%, #000 86%, transparent);
+    mask: linear-gradient(transparent, #000 14%, #000 86%, transparent);
+  }
+
+  /* 有 WebGL2 的體積光時，CSS 的光束讓位。 */
+  .scene[data-atmos='webgl2'] [data-scene-layer='beam'] {
+    display: none;
+  }
+
+  .scene__land {
+    position: absolute;
+    bottom: var(--foot, 0%);
+    width: 1px;
+    height: 1px;
+  }
+
+  .scene__ground {
+    position: absolute;
+    left: var(--figure-x, 50%);
+    top: calc(var(--horizon) + var(--stand, 0%));
+    width: 1px;
+    height: 1px;
+  }
+
+  /* 手機：人站在第一屏下段的地面上（按鈕下方），不壓到字與按鈕，也不被擠出第一屏。 */
+  @media (max-width: 59.99rem) {
+    .scene.scene--hero {
+      --horizon: 89%;
+      --figure-height: 27%;
+      --stand: 2%;
+    }
+  }
+
+  /* 手機：層數減少。 */
+  @media (max-width: 59.99rem) {
+    .scene__layer--desktop {
+      display: none;
+    }
+  }
+
+  /* ── 首屏：和「一震開門」接起來 ───────────────────── */
+
+  /* 平常只顯示定格的人形；震腳的人形只在開場用。 */
+  .scene--hero {
+    --stand: 4%;
+  }
+
+  .scene--hero [data-figure='stomp'] {
+    opacity: 0;
+  }
+
+  /* 蓄：全黑，只有地平線和落腳前的人。 */
+  html[data-opening='pending'] .scene--hero .scene__layer,
+  html[data-opening='playing'] .scene--hero .scene__layer,
+  html[data-opening='pending'] .scene--hero .scene__sky,
+  html[data-opening='playing'] .scene--hero .scene__sky {
+    opacity: 0;
+    transition: none;
+  }
+
+  html[data-opening='pending'] .scene--hero [data-figure='stomp'],
+  html[data-opening='playing'] .scene--hero [data-figure='stomp'] {
+    opacity: 1;
+  }
+
+  /* 擊之後：各層由遠到近次第亮起；震腳的人換成定格的人。 */
+  html[data-opening='struck'] .scene--hero .scene__layer {
+    transition-delay: var(--reveal);
+  }
+
+  html[data-opening='struck'] .scene--hero [data-figure='stomp'] {
+    opacity: 1;
+    transition: opacity 0.3s linear 0.42s;
+  }
+
+  html[data-opening='struck'] .scene--hero [data-figure='stomp'].is-spent {
+    opacity: 0;
+  }
+
+  /* 落地的那一格（有素材時）：擊中那一拍換上，餘韻時再換成定格的人。 */
+  .scene--hero [data-figure='land'] {
+    opacity: 0;
+  }
+
+  html[data-opening='struck'] .scene--hero [data-figure='land'].is-landed {
+    opacity: 1;
+    transition: none;
+  }
+
+  /* 硬切：落地那格換成定格的人，中間不淡入淡出（不會有兩個人疊在一起的那幾格）。 */
+  html[data-opening='struck'] .scene--hero [data-figure='land'].is-landed.is-spent {
+    opacity: 0;
+    transition: none;
+  }
+
+  html[data-opening='struck'] .scene--hero:has([data-figure='land'].is-landed) [data-figure='stomp'] {
+    opacity: 0;
+    transition: none;
+  }
+
+  html[data-opening='struck'] .scene--hero [data-figure='hero'] {
+    opacity: 0;
+  }
+
+  html[data-opening='struck'] .scene--hero [data-figure='hero'].is-set {
+    opacity: var(--o);
+    transition: none;
+  }
+
+  /* 有落地那格時，餘韻裡抬腳的那格也不再淡回來。 */
+  html[data-opening='struck'] .scene--hero:has([data-figure='land']) [data-figure='stomp'].is-spent {
+    opacity: 0;
+    transition: none;
+  }
+
+  /* ── 兵器幕：人形跟著台上的兵器換（低對比，在兵器後面） ── */
+  .scene--weapon {
+    --horizon: 90%;
+    --figure-height: 32%;
+    --figure-x: 17%;
+  }
+
+  .scene--weapon .scene__sky {
+    opacity: 0.55;
+  }
+
+  .scene--weapon .scene__layer--mid .scene__shape {
+    --mid-height: 40%;
+    left: 20%;
+  }
+
+  /* 換兵器時人形「溶解」：舊的糊開淡掉，新的由糊變清浮現。 */
+  .scene--weapon [data-figure] {
+    opacity: 0;
+    filter: blur(12px);
+    transition:
+      opacity 0.6s var(--ease-out),
+      filter 0.7s var(--ease-out);
+  }
+
+  .scene--weapon [data-figure='jian'],
+  [data-chapter='miaodao'] .scene--weapon [data-figure='miaodao'],
+  [data-chapter='spear'] .scene--weapon [data-figure='spear'] {
+    opacity: var(--o);
+    filter: blur(var(--blur));
+    transition-delay: 0.25s;
+  }
+
+  [data-chapter='miaodao'] .scene--weapon [data-figure='jian'],
+  [data-chapter='spear'] .scene--weapon [data-figure='jian'] {
+    opacity: 0;
+    filter: blur(12px);
+    transition-delay: 0s;
+  }
+
+  /* ── 拳術幕：窗櫺後面的八極人形 ── */
+  /* 人站在直書標題與大字之間的空檔裡：不壓到大字、標題、課程牌。 */
+  .scene--fist {
+    --horizon: 92%;
+    --figure-height: 26%;
+    --figure-x: 60.5%;
+  }
+
+  /* 窗櫺牆：鋪滿整幕，光從後面透進來。 */
+  .scene--fist [data-scene-layer='mid-lattice'] .scene__shape {
+    --layer-color: color-mix(in srgb, var(--color-accent) 30%, var(--color-surface));
+    inset: 0;
+    height: auto;
+    aspect-ratio: auto;
+    transform: none;
+    -webkit-mask-size: cover;
+    mask-size: cover;
+  }
+
+  .scene--fist .scene__sky {
+    opacity: 0.5;
+  }
+
+  /* 貼山靠：撞的那一下換成貼山靠的人形快速掠過，撞完退場（這張的手臂與軀幹黏成一團，不停在畫面上）。 */
+  .scene--fist [data-figure='kao'] {
+    opacity: 0;
+  }
+
+  .scene--fist [data-figure='kao'].is-charging {
+    opacity: var(--o);
+  }
+
+  .scene--fist:has([data-figure='kao'].is-charging) [data-figure='fist'] {
+    opacity: 0;
+  }
+
+  /* 拳術幕的霧蓋滿整面（窗櫺整片退到霧後面）。 */
+  .scene--fist .scene__layer--fog .scene__shape {
+    inset: 0 -10%;
+    background: linear-gradient(
+      to top,
+      color-mix(in srgb, var(--color-bg) 88%, transparent),
+      color-mix(in srgb, var(--color-bg) 55%, transparent) 60%,
+      color-mix(in srgb, var(--color-bg) 40%, transparent)
+    );
+  }
+
+  @media (max-width: 59.99rem) {
+    .scene--weapon,
+    .scene--fist {
+      --horizon: 44%;
+      --figure-height: 30%;
+      --figure-x: 50%;
+    }
+
+    /* 手機的兵器幕：持械人形又小又暗、偏在左下，不和 3D 兵器搶。 */
+    .scene.scene--weapon {
+      --figure-height: 17%;
+      --figure-x: 14%;
+    }
+
+    /* 手機的拳術幕：大字收小靠左，人站在大字與直書標題之間。 */
+    .scene.scene--fist {
+      --horizon: 36%;
+      --figure-height: 17%;
+      --figure-x: 67%;
+    }
+  }
+
+  /* 「減少動態」與沒有 JS：就是靜態的分層構圖（--ox／--oy／--push 維持預設）。 */
+</style>

@@ -8,6 +8,7 @@ import Acts from '../components/Acts.astro';
 import AudienceCards from '../components/AudienceCards.astro';
 import CoachCard from '../components/CoachCard.astro';
 import Plaque from '../components/Plaque.astro';
+import Scene from '../components/Scene.astro';
 import facilityPhoto from '../assets/images/facility-interior-1.jpg';
 import { getPublishedCoaches, getPublishedCourses } from '../lib/content';
 import { BOOKING_ANCHOR, BOOKING_LABEL, SITE } from '../lib/site';
@@ -17,9 +18,22 @@ const courses = await getPublishedCourses();
 const coaches = await getPublishedCoaches();
 ---
 
-<BaseLayout>
+<BaseLayout opening>
   {/* 刀光層（設計文件 §15.2-2）：蓋滿視窗、純視覺、不接收任何指標事件。 */}
   <canvas class="slash-layer" data-slash aria-hidden="true"></canvas>
+  {/* 苗刀破幅（第三版）：幕間轉場的幅，沿刀路分成兩半。腳本在 src/scripts/cleave.ts。 */}
+  <div class="cleave" data-cleave aria-hidden="true" hidden>
+    <div class="cleave__half cleave__half--upper">
+      <span class="cleave__glyph"></span>
+      <svg class="cleave__edge" fill="none" focusable="false"><path class="cleave__edge-glow"></path><path class="cleave__edge-core"></path></svg>
+    </div>
+    <div class="cleave__half cleave__half--lower">
+      <span class="cleave__glyph"></span>
+      <svg class="cleave__edge" fill="none" focusable="false"><path class="cleave__edge-glow"></path><path class="cleave__edge-core"></path></svg>
+    </div>
+    <svg class="cleave__edge cleave__edge--stroke" fill="none" focusable="false"><path class="cleave__edge-glow"></path><path class="cleave__edge-core"></path></svg>
+    <canvas class="cleave__sparks"></canvas>
+  </div>
 
   <Hero />
 
@@ -31,6 +45,7 @@ const coaches = await getPublishedCoaches();
   </div>
 
   <section class="section" id="courses" aria-labelledby="courses-heading">
+    <Scene scene="courses" />
     <div class="container">
       <Plaque id="courses-heading">課程</Plaque>
       <AudienceCards courses={courses} />
@@ -39,6 +54,7 @@ const coaches = await getPublishedCoaches();
   </section>
 
   <section class="section" id="coaches" aria-labelledby="coaches-heading">
+    <Scene scene="coaches" />
     <div class="container">
       <Plaque id="coaches-heading">師資</Plaque>
       <ul class="coach-grid">
@@ -55,6 +71,7 @@ const coaches = await getPublishedCoaches();
   </section>
 
   <section class="section" id="facility" aria-labelledby="facility-heading">
+    <Scene scene="facility" />
     <div class="container">
       <Plaque id="facility-heading">場地</Plaque>
       <div class="facility-teaser">
@@ -84,6 +101,7 @@ const coaches = await getPublishedCoaches();
   </section>
 
   <section class="section contact" id="contact" aria-labelledby="contact-heading">
+    <Scene scene="contact" />
     <div class="container contact__inner">
       <Plaque id="contact-heading">聯絡</Plaque>
       <p class="lead" data-reveal>想先來上一堂看看？用 LINE 跟我們說一聲。</p>
@@ -104,6 +122,20 @@ const coaches = await getPublishedCoaches();
 </script>
 
 <style>
+  /* 首屏以下的區塊：還沒捲到附近時不排版、不繪製（content-visibility），
+     它們用到的字型分包也就等捲到附近才下載——首屏的傳輸量只算首屏用得到的字。 */
+  .section {
+    position: relative;
+    content-visibility: auto;
+    contain-intrinsic-size: auto 56rem;
+  }
+
+  /* 每個區塊後面都有一疊遠景、霧與從邊緣掃過的前景（Scene.astro）；內容疊在它上面。 */
+  .section > .container {
+    position: relative;
+    z-index: 1;
+  }
+
   .home-divider {
     display: grid;
     border-bottom: var(--line) solid var(--color-line-faint);

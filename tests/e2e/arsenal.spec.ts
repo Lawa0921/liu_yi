@@ -7,6 +7,13 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 test.describe.configure({ mode: 'default', timeout: 90_000 });
 
 const READY = { timeout: 30_000 };
+
+// 檢視器的除錯介面（weaponDebug）正式站不掛；測試用這個旗標要求它掛上。
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    (window as Window & { __LIUYI_TEST__?: boolean }).__LIUYI_TEST__ = true;
+  });
+});
 const T0 = new Date('2026-01-01T08:00:00');
 const T1 = new Date('2026-01-01T09:00:00');
 
@@ -95,7 +102,10 @@ test.describe('兵器台：桌機', () => {
     await page.clock.install({ time: T0 });
     await page.goto('./');
     await reachStage(page);
+    // 第三版：第一次進場時兵器是「淬火成形」燒出來的，先等它成形完再停住時鐘。
+    await expect(stage(page)).toHaveAttribute('data-forge', '1.00', READY);
     await page.clock.pauseAt(T1);
+    await page.clock.runFor(100);
 
     const host = stage(page);
     const jian = page.getByRole('button', { name: '劍', exact: true });

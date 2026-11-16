@@ -44,7 +44,14 @@ npm run test:e2e   # 先建置 /liu_yi 與 / 兩份，再跑 Playwright（tests/
   拖曳慣性與回正（`inertia.ts`）、能力偵測與降級（`capability.ts`）、刀光軌跡（`slash.ts`）。
 - 其他互動：刀光 `src/scripts/slash.ts`、震腳 `src/scripts/stomp.ts`、首屏獅子的掃光 `src/scripts/hero-sheen.ts`；共用樣式在 `src/styles/arsenal.css`。
 - 「減少動態」：兵器靜態呈現（仍可拖曳）、不出刀光、沒有震腳。手機：像素比上限 1.5、關陰影；離開畫面或分頁在背景時停止繪製。
-- 端對端測試在 `tests/e2e/arsenal.spec.ts`。無頭瀏覽器的 WebGL 是軟體繪製，這個檔案的測試依序執行。
+- 第三版「衝擊感」（每個效果都是：蓄 → 擊 → 定格 → 餘韻；顆粒一律是塵土、火星、金屑、漆片）：
+  - 首屏「一震開門」：`src/scripts/opening.ts`（每個工作階段只完整演一次，可跳過；2D 畫布，不載 three）。
+  - 裂紋與顆粒的畫布：`src/scripts/impact-layer.ts`；幾何、顆粒步進、位移、時間軸在 `src/lib/impact/`。
+  - 兵器「淬火成形」：`src/scripts/three/forge.ts`（著色器溶解加火星），進度由 `src/lib/arsenal/forge.ts` 算。
+  - 幕間「苗刀破幅」：`src/scripts/cleave.ts`（DOM 分層加 clip-path）。
+  - 震腳與貼山靠：`src/scripts/stomp.ts`。
+  - 檢視器的除錯介面（`weaponDebug`）只在開發模式或測試設了 `window.__LIUYI_TEST__` 時才掛上。
+- 端對端測試在 `tests/e2e/arsenal.spec.ts`、`tests/e2e/impact.spec.ts`。無頭瀏覽器的 WebGL 是軟體繪製，這個檔案的測試依序執行。
 
 ## 建置
 

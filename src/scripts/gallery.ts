@@ -35,6 +35,15 @@ export function initGalleries(): void {
       prev.disabled = current === 0;
       next.disabled = current === items.length - 1;
       if (status) status.textContent = `${current + 1} / ${items.length}`;
+      // 目前那一張：淡入位移就位（樣式在課程頁）。
+      gallery.classList.add('has-current');
+      items.forEach((item, index) => item.classList.toggle('is-current', index === current));
+    };
+
+    /** 按下的回饋：像朱印蓋下去（樣式在課程頁；減少動態時不動）。 */
+    const stamp = (button: HTMLElement) => {
+      button.dataset.stamped = 'true';
+      window.setTimeout(() => delete button.dataset.stamped, 420);
     };
 
     // 按鈕觸發的捲動（平滑捲動要一點時間）還沒到位前，不讓捲動事件把「目前第幾張」改回半路上的值；
@@ -53,8 +62,14 @@ export function initGalleries(): void {
       render();
     };
 
-    prev.addEventListener('click', () => go(current - 1));
-    next.addEventListener('click', () => go(current + 1));
+    prev.addEventListener('click', () => {
+      stamp(prev);
+      go(current - 1);
+    });
+    next.addEventListener('click', () => {
+      stamp(next);
+      go(current + 1);
+    });
 
     // 使用者自己滑動或用鍵盤捲動時，狀態跟著更新（捲動停下來才算）。
     let settle: ReturnType<typeof setTimeout> | undefined;

@@ -10,6 +10,9 @@ export default defineConfig({
   testDir: 'tests/e2e',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
+  // 首頁現在有軟體繪製的 WebGL、多層景深與粒子，很吃 CPU：工作行程太多時，和時間賽跑的既有測試
+  //（釘選、照片切換的平滑捲動）會偶發逾時。上限設 4（實測預設值會偶發 1 項失敗，4 個穩定全過）。
+  workers: 4,
   reporter: [['list']],
   use: {
     trace: 'retain-on-failure',

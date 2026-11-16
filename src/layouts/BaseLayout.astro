@@ -9,6 +9,7 @@ import LineDialog from '../components/LineDialog.astro';
 import PosterDialog from '../components/PosterDialog.astro';
 import Frame from '../components/Frame.astro';
 import { AUDIENCE_STORAGE_KEY } from '../lib/audience';
+import { OPENING_KEY } from '../lib/impact/opening';
 import { SITE } from '../lib/site';
 import { url } from '../lib/url';
 import logoLarge from '../assets/images/logo_large.jpg';
@@ -22,9 +23,11 @@ interface Props {
   ogImage?: ImageMetadata;
   ogType?: 'website' | 'article';
   noindex?: boolean;
+  /** 這一頁有首屏的「一震開門」（只有首頁）。 */
+  opening?: boolean;
 }
 
-const { title, description = SITE.description, ogImage = logoLarge, ogType = 'website', noindex = false } = Astro.props;
+const { title, description = SITE.description, ogImage = logoLarge, ogType = 'website', noindex = false, opening = false } = Astro.props;
 
 const fullTitle = title ? `${title}｜${SITE.name}` : `${SITE.name}｜${SITE.tagline}`;
 const canonical = new URL(Astro.url.pathname, Astro.site).href;
@@ -37,7 +40,7 @@ const favicon = await getImage({ src: logoEmblem, width: 96, height: 96, fit: 'c
 ---
 
 <!doctype html>
-<html lang={SITE.lang} data-audience-key={AUDIENCE_STORAGE_KEY}>
+<html lang={SITE.lang} data-audience-key={AUDIENCE_STORAGE_KEY} data-opening-key={opening ? OPENING_KEY : undefined}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -72,6 +75,26 @@ const favicon = await getImage({ src: logoEmblem, width: 96, height: 96, fit: 'c
           stored = window.localStorage.getItem(root.dataset.audienceKey || "");
         } catch (e) {}
         root.dataset.audience = stored === 'kid' ? 'kid' : 'adult';
+        // 首屏的「一震開門」：這個工作階段還沒演過、也沒有要求減少動態，才先把首屏藏起來等它演
+        //（判斷和 src/lib/impact/opening.ts 的 openingMode 一致；真正的流程在 src/scripts/opening.ts）。
+        var openingKey = root.dataset.openingKey;
+        if (openingKey) {
+          var seen = null;
+          try {
+            seen = window.sessionStorage.getItem(openingKey);
+          } catch (e) {}
+          var calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+          root.dataset.opening = seen === '1' || calm ? 'done' : 'pending';
+          // 保底：開場的腳本 3 秒內沒接手（模組載不到、或出錯），就直接顯示終態，首屏不會一直藏著。
+          if (root.dataset.opening === 'pending') {
+            window.setTimeout(function () {
+              if (root.dataset.opening === 'pending') {
+                root.dataset.opening = 'done';
+                root.dataset.openingPlayed = 'fallback';
+              }
+            }, 3000);
+          }
+        }
       })();
     </script>
   </head>
@@ -95,6 +118,7 @@ const favicon = await getImage({ src: logoEmblem, width: 96, height: 96, fit: 'c
       import { initGalleries } from '../scripts/gallery';
       import { initPosterLightbox } from '../scripts/poster-lightbox';
       import { initWeapons3d } from '../scripts/weapons3d';
+      import { initScenes } from '../scripts/scene';
 
       initNavMenu();
       initLineDialog();
@@ -106,6 +130,8 @@ const favicon = await getImage({ src: logoEmblem, width: 96, height: 96, fit: 'c
       initPosterLightbox();
       // 頁面上有 3D 兵器的區塊才會有動作；three 本身等接近那個區塊才下載。
       initWeapons3d();
+      // 立體空間的場景（首頁）：視差、推進、塵粒。
+      initScenes();
     </script>
   </body>
 </html>

@@ -6,23 +6,21 @@
 // 「減少動態」時整個不啟用。
 //
 //   data-slash-points  目前還看得到的軌跡點數（0 就是沒有刀光）
-//   data-slash-cuts    幕間斜劈累計播了幾次
+//   data-slash-cuts    幕間轉場（苗刀破幅）累計播了幾次
 
 import {
   addSample,
   createTrail,
-  diagonalCut,
   pruneTrail,
   trailRibbon,
   type Trail,
   type TrailPoint,
 } from '../lib/arsenal/slash';
+import { createCleave } from './cleave';
 
 const MAX_PIXEL_RATIO = 1.5;
 /** 刀光最寬處（CSS px）。 */
-const DRAG_WIDTH = 15;
-const CUT_WIDTH = 26;
-const CUT_MS = 190;
+const DRAG_WIDTH = 6;
 
 export function initSlash(): void {
   const layer = document.querySelector<HTMLCanvasElement>('canvas[data-slash]');
@@ -75,7 +73,7 @@ export function initSlash(): void {
       ctx.closePath();
       ctx.globalAlpha = 0.85 * strength;
       ctx.shadowColor = glow;
-      ctx.shadowBlur = 22;
+      ctx.shadowBlur = 6;
       ctx.fillStyle = body;
       ctx.fill();
       // 中心一道細亮線：刃。
@@ -87,8 +85,8 @@ export function initSlash(): void {
         else ctx.lineTo(x, y);
       });
       ctx.globalAlpha = strength;
-      ctx.shadowBlur = 8;
-      ctx.lineWidth = 1.6;
+      ctx.shadowBlur = 2;
+      ctx.lineWidth = 1.2;
       ctx.lineJoin = 'round';
       ctx.strokeStyle = core;
       ctx.stroke();
@@ -212,22 +210,13 @@ export function initSlash(): void {
   const acts = Array.from(document.querySelectorAll<HTMLElement>('[data-act]'));
   if (acts.length === 0 || !('IntersectionObserver' in window)) return;
 
-  const cut = (direction: 1 | -1) => {
-    widest = CUT_WIDTH;
-    queued = [
-      ...queued,
-      ...diagonalCut({
-        width: window.innerWidth,
-        height: window.innerHeight,
-        direction,
-        t: performance.now(),
-        durationMs: CUT_MS,
-      }),
-    ];
+  // 幕間：苗刀破幅（src/scripts/cleave.ts）。只在往下捲、下一幕由下方進場時劈。
+  const cleave = createCleave();
+  const cut = (act: HTMLElement) => {
+    const glyph = act.querySelector('.act__glyph > span')?.textContent?.trim() ?? '';
+    if (cleave && !cleave.trigger(glyph)) return;
     cuts += 1;
     layer.dataset.slashCuts = String(cuts);
-    report();
-    wake();
   };
 
   let primed = false;
@@ -240,7 +229,8 @@ export function initSlash(): void {
       }
       for (const entry of entries) {
         if (!entry.isIntersecting) continue;
-        cut(acts.indexOf(entry.target as HTMLElement) % 2 === 0 ? 1 : -1);
+        // 幕的上緣在視窗裡（由下方進場）才算；往回捲、幕由上方回來的不劈。
+        if (entry.boundingClientRect.top > 0) cut(entry.target as HTMLElement);
       }
     },
     // 視窗中線偏下一點的一條線：幕的上緣越過它就算進場。

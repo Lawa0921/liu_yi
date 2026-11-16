@@ -9,6 +9,7 @@
 // 第二版（設計文件 §15.2-5）：獅子上有一道跟著指標移動的金屬掃光（.hero__sheen，位置由 src/scripts/hero-sheen.ts 寫入）。
 // 進場動畫全是 CSS、只動 transform／opacity，只在有 JS 且沒有要求減少動態時才播；其餘情況內容直接就在。
 import { Image } from 'astro:assets';
+import Scene from './Scene.astro';
 import logo from '../assets/images/logo_large.jpg';
 import { CATEGORY_LABEL, MAIN_CATEGORIES } from '../lib/courses';
 import { BOOKING_ANCHOR, BOOKING_LABEL, SITE } from '../lib/site';
@@ -33,7 +34,16 @@ const ticks = Array.from({ length: 64 }, (_, i) => {
 });
 ---
 
+{/* 桌機：首屏外面多一段捲動距離（.hero-track），推進的這段首屏停在畫面上，鏡頭往前推完才交給下一幕。 */}
+<div class="hero-track">
 <section class="hero" aria-labelledby="hero-title">
+  {/* 演武場（第三版追加）：有縱深的剪影場景，在所有內容後面。 */}
+  <Scene scene="hero" />
+  {/* 第三版「一震開門」：地平線、衝擊層（裂紋與塵浪）、跳過鈕。腳本在 src/scripts/opening.ts。 */}
+  <canvas class="hero__impact" data-impact aria-hidden="true"></canvas>
+  <span class="hero__horizon" aria-hidden="true"></span>
+  <button type="button" class="hero__skip" data-opening-skip>跳過</button>
+
   <div class="hero__stage">
     <h1 id="hero-title" class="hero__title">
       <span class="hero__title-main">
@@ -50,9 +60,9 @@ const ticks = Array.from({ length: 64 }, (_, i) => {
         <Image
           src={logo}
           alt="六藝武術工作室的標誌：踏浪的獅子"
-          width={900}
-          height={900}
-          sizes="(min-width: 60rem) min(62vh, 42vw), 60vw"
+          width={480}
+          height={480}
+          sizes="(min-width: 60rem) min(21vh, 16vw), 30vw"
           loading="eager"
           fetchpriority="high"
           class="hero__lion"
@@ -89,11 +99,19 @@ const ticks = Array.from({ length: 64 }, (_, i) => {
     <span class="wave-band"></span>
   </div>
 </section>
+</div>
 
 <script>
   import { initHeroSheen } from '../scripts/hero-sheen';
+  import { initOpening } from '../scripts/opening';
 
-  initHeroSheen();
+  // 掃光出錯也不能擋到開場（開場沒跑起來，首屏會一直藏著）。
+  try {
+    initHeroSheen();
+  } catch (error) {
+    console.error(error);
+  }
+  initOpening();
 </script>
 
 <style>
@@ -102,6 +120,84 @@ const ticks = Array.from({ length: 64 }, (_, i) => {
     overflow: hidden;
     min-height: var(--stage-height);
     display: grid;
+  }
+
+  /* ── 一震開門 ─────────────────────────────────────── */
+  .hero__impact {
+    position: absolute;
+    inset: 0;
+    /* 畫在首屏內容上面：裂紋從獅子的正中央裂出來，塵浪蓋過牠往外推。 */
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    /* 和人形那一層（景深 0.55，指標視差約 40px）一起橫移：裂紋中心一直在腳下。 */
+    transform: translate3d(calc(var(--px, 0) * -40px), 0, 0);
+  }
+
+  /* 地平線：開場時全黑的畫面上唯一的東西。 */
+  .hero__horizon {
+    position: absolute;
+    inset: 50% 6% auto;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      var(--color-accent) 22%,
+      var(--color-accent-strong) 50%,
+      var(--color-accent) 78%,
+      transparent
+    );
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.35s var(--ease-out);
+  }
+
+  .hero__skip {
+    position: absolute;
+    right: var(--gutter);
+    bottom: calc(64px + var(--space-4));
+    z-index: 2;
+    display: none;
+    padding: var(--space-2) var(--space-3);
+    border: var(--line) solid var(--color-line-faint);
+    background: transparent;
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+    letter-spacing: 0.3em;
+    cursor: pointer;
+  }
+
+  /* 蓄：只有地平線（與跳過鈕）；首屏的內容先藏著，進場動畫停在起點。 */
+  :global(html[data-opening='pending']) .hero__stage,
+  :global(html[data-opening='playing']) .hero__stage,
+  :global(html[data-opening='pending']) .hero__waves,
+  :global(html[data-opening='playing']) .hero__waves {
+    visibility: hidden;
+  }
+
+  :global(html[data-opening='pending']) .hero__stage :global(*),
+  :global(html[data-opening='playing']) .hero__stage :global(*),
+  :global(html[data-opening='pending']) .hero__waves,
+  :global(html[data-opening='playing']) .hero__waves {
+    animation-play-state: paused !important;
+  }
+
+  :global(html[data-opening='pending']) .hero__horizon,
+  :global(html[data-opening='playing']) .hero__horizon {
+    opacity: 1;
+    animation: hero-horizon 0.5s var(--ease-out) both;
+  }
+
+  :global(html[data-opening='pending']) .hero__skip,
+  :global(html[data-opening='playing']) .hero__skip {
+    display: block;
+  }
+
+  @keyframes hero-horizon {
+    from {
+      transform: scaleX(0);
+    }
   }
 
   .hero__stage {
@@ -135,7 +231,31 @@ const ticks = Array.from({ length: 64 }, (_, i) => {
   }
 
   .hero__char {
+    position: relative;
     display: inline-block;
+  }
+
+  /* 剔紅刻字（第四輪）：刀從厚漆裡剔出字——刀口是一條斜線，分幾刀把字一段一段剔出來（--cut 是刀口走到哪），
+     刀口上一道細細的切面光跟著走，刻完就收掉。字本身維持平面的米白：不是漸層字、不是立體字。 */
+  @property --cut {
+    syntax: '<percentage>';
+    inherits: true;
+    initial-value: 110%;
+  }
+
+  .hero__char::after {
+    content: '';
+    position: absolute;
+    inset: -4%;
+    background: linear-gradient(
+      135deg,
+      transparent calc(var(--cut) - 2.5%),
+      color-mix(in srgb, var(--color-highlight) 90%, transparent) calc(var(--cut) - 0.8%),
+      var(--color-text) var(--cut),
+      transparent calc(var(--cut) + 0.6%)
+    );
+    opacity: 0;
+    pointer-events: none;
   }
 
   /* 「工作室」與方印：大字左邊的一小行，靠下對齊。 */
@@ -160,7 +280,18 @@ const ticks = Array.from({ length: 64 }, (_, i) => {
   }
 
   /* ── 主視覺 ───────────────────────────────────────── */
+  /* 場景裡有人形時，獅子收成上方的一枚徽印，把場中央讓給人。 */
+  .hero:has([data-scene-figure]) .hero__stage {
+    --lion: min(30vw, 17vh);
+  }
+
+  .hero:has([data-scene-figure]) .hero__visual {
+    align-self: start;
+  }
+
   .hero__visual {
+    /* 和後面的場景取「較亮」者：獅子的底色不會蓋掉場景的逆光。 */
+    mix-blend-mode: lighten;
     grid-column: 2;
     grid-row: 1;
     position: relative;
@@ -297,8 +428,67 @@ const ticks = Array.from({ length: 64 }, (_, i) => {
     align-self: end;
   }
 
+  /* 手機、場景裡有人形：內容收在上半、靠上；第一屏的下段留一塊地面給人站（人不壓到標語與按鈕、也不被擠到第二屏）。
+     標語與按鈕併成一塊有底色的牌，底下的場景透不上來。 */
+  @media (max-width: 59.99rem) {
+    .hero:has([data-scene-figure]) .hero__stage {
+      align-content: start;
+      gap: var(--space-5) var(--space-3);
+      padding-top: var(--space-4);
+    }
+
+    .hero:has([data-scene-figure]) .hero__title {
+      font-size: clamp(2.75rem, 12.5vw, 4.25rem);
+    }
+
+    .hero:has([data-scene-figure]) .hero__couplet,
+    .hero:has([data-scene-figure]) .hero__actions {
+      justify-self: stretch;
+      position: relative;
+      z-index: 1;
+      border: var(--line) solid var(--color-line-faint);
+      background-color: color-mix(in srgb, var(--color-bg) 92%, transparent);
+    }
+
+    .hero:has([data-scene-figure]) .hero__couplet {
+      padding: var(--space-4) var(--space-3) var(--space-3);
+      border-bottom: 0;
+    }
+
+    .hero:has([data-scene-figure]) .hero__actions {
+      /* 和標語接成同一塊牌（抵掉列與列之間的間距）。 */
+      margin-top: calc(var(--space-5) * -1);
+      padding: var(--space-3) var(--space-3) var(--space-4);
+      border-top: 0;
+    }
+  }
+
+  /* ── 桌機的捲動推進：前六成的捲動距離裡首屏釘在外框上緣，鏡頭往前推（src/scripts/scene.ts）。
+     沒有 JS、減少動態、手機：沒有這段距離，一般捲動。 */
+  @media (min-width: 60rem) and (prefers-reduced-motion: no-preference) {
+    /* 多出來的距離要在 .hero-track 的內容框裡（sticky 只在內容框裡黏得住，padding 不算）。 */
+    :global(html.js) .hero-track::after {
+      content: '';
+      display: block;
+      height: calc(var(--stage-height) * 0.6);
+    }
+
+    :global(html.js) .hero {
+      position: sticky;
+      top: var(--frame-top);
+    }
+  }
+
   /* ── 桌機：左直書大字、中獅子、右一對直排 ─────────── */
   @media (min-width: 60rem) {
+    .hero:has([data-scene-figure]) .hero__stage {
+      --lion: min(21vh, 16vw);
+    }
+
+    .hero:has([data-scene-figure]) .hero__visual {
+      margin-top: 4vh;
+    }
+
     .hero__stage {
       --lion: min(62vh, 42vw);
       grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
@@ -384,9 +574,21 @@ const ticks = Array.from({ length: 64 }, (_, i) => {
         hero-turn 240s linear infinite;
     }
 
+    /* 時間和 src/scripts/opening.ts 的 CARVE_START／CARVE_STEP／CARVE_MS 一致（刻完時落金屑）。 */
     :global(html.js) .hero__char {
-      animation: hero-char 0.6s var(--ease-out) both;
-      animation-delay: calc(0.15s + var(--i) * 0.08s);
+      clip-path: polygon(-20% -20%, calc(var(--cut) * 2 + 20%) -20%, -20% calc(var(--cut) * 2 + 20%));
+      animation: hero-carve 0.5s linear both;
+      animation-delay: calc(0.12s + var(--i) * 0.16s);
+    }
+
+    :global(html.js) .hero__char::after {
+      animation: hero-carve-light 0.5s linear both;
+      animation-delay: calc(0.12s + var(--i) * 0.16s);
+    }
+
+    /* 擊中之後、蓋印之前：獅印還沒落下。 */
+    :global(html[data-opening='struck']) .hero__visual:not(.is-stamped) {
+      opacity: 0;
     }
 
     :global(html.js) .hero__title-sub {
@@ -395,6 +597,11 @@ const ticks = Array.from({ length: 64 }, (_, i) => {
 
     :global(html.js) .hero__seal {
       animation: hero-stamp 0.35s cubic-bezier(0.3, 1.6, 0.5, 1) 0.8s both;
+    }
+
+    /* 手機上標語有底色與框：框和字一起淡入（不先出現一個空框）。 */
+    :global(html.js) .hero__couplet {
+      animation: hero-fade 0.5s var(--ease-out) 0.45s both;
     }
 
     :global(html.js) .hero__couplet-line {
@@ -441,6 +648,38 @@ const ticks = Array.from({ length: 64 }, (_, i) => {
   @keyframes hero-turn {
     to {
       transform: rotate(360deg);
+    }
+  }
+
+  /* 分三刀：每一刀快、刀與刀之間頓一下。 */
+  @keyframes hero-carve {
+    0% {
+      --cut: -12%;
+    }
+    26% {
+      --cut: 34%;
+    }
+    38% {
+      --cut: 36%;
+    }
+    62% {
+      --cut: 72%;
+    }
+    72% {
+      --cut: 73%;
+    }
+    100% {
+      --cut: 110%;
+    }
+  }
+
+  @keyframes hero-carve-light {
+    0%,
+    92% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
     }
   }
 

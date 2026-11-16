@@ -58,6 +58,9 @@ import { url } from '../lib/url';
 <style>
   .site-footer {
     position: relative;
+    /* 捲到附近才排版：頁尾的字用到的字型分包不算進首屏。 */
+    content-visibility: auto;
+    contain-intrinsic-size: auto 32rem;
     margin-top: var(--space-6);
     padding-bottom: var(--space-6);
     background: linear-gradient(var(--color-bg), var(--color-deep));

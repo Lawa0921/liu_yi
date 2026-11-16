@@ -29,9 +29,11 @@ import {
 import type { RenderPlan } from '../../lib/arsenal/capability';
 import { createSpin, dragSpin, grabSpin, releaseSpin, stepSpin, type SpinState } from '../../lib/arsenal/inertia';
 import { clamp01, scrollProgress, smoothstep, stagePose, viewportProgress, type StagePose, type WeaponKind } from '../../lib/arsenal/pose';
+import { forgeBand, forgeFromSwitch, forgeMagnify } from '../../lib/arsenal/forge';
 import { restingLean, rotatedExtent } from '../../lib/arsenal/stage';
 import { advanceSwitch, createSwitch, requestSwitch, switchPresence, type SwitchState } from '../../lib/arsenal/switcher';
 import { createMaterials, readPalette, type Materials } from './materials';
+import { Sparks } from './forge';
 import { createStudioEnvironment } from './studio';
 import { buildWeapon, type Weapon } from './weapons';
 
@@ -246,7 +248,11 @@ export function mountViewer(host: HTMLElement, plan: RenderPlan): ViewerHandle {
   // 攝影棚很暗（那是給鋼反射用的），木、繩、纓這些漫射面另外補一點環境光；金屬不吃這盞。
   scene.add(new AmbientLight(0xffffff, 0.75));
 
-  const materials: Materials = createMaterials(readPalette());
+  const palette = readPalette();
+  const materials: Materials = createMaterials(palette);
+  // 淬火的火星（只有兵器台用得到）。
+  const sparks = mode === 'stage' ? new Sparks(palette.tassel, palette.brass, plan.pixelRatio) : null;
+  if (sparks) scene.add(sparks.points);
 
   const rigs = new Map<WeaponKind, Rig>();
   const rigOf = (kind: WeaponKind): Rig => {
@@ -268,7 +274,9 @@ export function mountViewer(host: HTMLElement, plan: RenderPlan): ViewerHandle {
   /** 舞台範圍（世界座標，原點在畫布中心）：兵器要裝在這裡面。 */
   let region = { cx: 0, cy: 0, w: MAX_VIEW_HEIGHT, h: MAX_VIEW_HEIGHT };
   let spinState: SpinState = createSpin(0);
-  let switchState: SwitchState = createSwitch(initialKind);
+  // 兵器台第一次進場：兵器從尖端往柄「淬火成形」（和切換進場同一套）。減少動態時直接就在。
+  let switchState: SwitchState =
+    mode === 'stage' && plan.autoMotion ? { current: initialKind, next: null, phase: 'entering', t: 0 } : createSwitch(initialKind);
   let progress = plan.autoMotion ? 0 : STILL_PROGRESS;
   let forcedProgress: number | null = null;
   // 指標還沒動過之前，主光停在左上方的預設位置。
@@ -286,6 +294,17 @@ export function mountViewer(host: HTMLElement, plan: RenderPlan): ViewerHandle {
   let debugZoom = 1;
   let debugShift = 0;
   let debugSpin: number | null = null;
+  let glowUntil = 0;
+  let glowDrawn = false;
+  // 發光疊加的畫布放在宿主「旁邊」（宿主裡只有 3D 那一張畫布）。手機不開。
+  const bloomOn = mode === 'stage' && plan.shadows && plan.autoMotion;
+  const bloom = bloomOn ? document.createElement('canvas') : null;
+  const bloomCtx = bloom?.getContext('2d') ?? null;
+  if (bloom) {
+    bloom.className = 'weapon3d__bloom';
+    bloom.setAttribute('aria-hidden', 'true');
+  }
+  if (mode === 'stage') host.dataset.bloom = bloom && bloomCtx ? 'on' : 'off';
 
   const label = () => {
     if (mode === 'card') return;
@@ -379,22 +398,46 @@ export function mountViewer(host: HTMLElement, plan: RenderPlan): ViewerHandle {
       ({ scale, x, y } = fitInto(rig, lean, sheathed));
     }
 
-    // 切換：舊兵器沿著自己的長軸往後退出畫面，新兵器再從同一側扎進來（都不經過右邊的標題與牌子）。
-    const phase = switchState.phase;
-    const eased = phase === 'leaving' ? 1 - Math.pow(1 - presence, 2.2) : 1 - Math.pow(1 - presence, 3);
-    const retreat = (1 - eased) * (viewWidth() + rig.length * scale);
+    // 切換：兵器留在原位。舊的沿噪聲邊界燃盡，新的從尖端往柄燒出來（淬火成形）。
+    // 燒的時候兵器往鏡頭湊近一點（放大），當畫面的主角；燒完收回原本的大小。
+    const forge = forgeFromSwitch(switchState);
+    if (plan.autoMotion) scale *= forgeMagnify(switchState);
+    void presence;
 
     const idle = plan.autoMotion ? Math.sin(clock * 0.0007) * 0.04 : 0;
     rig.pose({
-      x: x - Math.cos(lean) * retreat,
-      y: y - Math.sin(lean) * retreat,
+      x,
+      y,
       scale,
       yaw: spinState.angle + idle,
       lean,
       tilt: pose.tilt * 0.6,
       // 轉台轉的時候也帶一點自轉，光帶才會跟著流動。
-      spin: pose.spin + spinState.angle * 0.6 - (1 - eased) * 1.6,
+      spin: pose.spin + spinState.angle * 0.6,
     });
+
+    const uniforms = materials.forge;
+    uniforms.uForge.value = forge.progress;
+    uniforms.uForgeAxis.value = forge.axisWeight;
+    uniforms.uForgeSpan.value.set(rig.weapon.tip, rig.weapon.butt);
+    rig.weapon.root.updateWorldMatrix(true, false);
+    uniforms.uForgeInverse.value.copy(rig.weapon.root.matrixWorld).invert();
+    if (sparks) {
+      if (forge.active && dtMs > 0 && forge.progress > 0.02 && forge.progress < 0.98) {
+        // 火星從燃燒的邊界噴出來：進場時邊界沿長軸由尖端往柄走；燃盡時到處都在燒。
+        const band = forgeBand(forge.progress, forge.axisWeight);
+        const amount = plan.shadows ? 10 : 4;
+        for (let n = 0; n < amount; n++) {
+          const axis = band.from + ((clock * 0.6131 + n * 0.377) % 1) * (band.to - band.from);
+          sparks.emit(rig.weapon.root, rig.weapon.tip - axis * (rig.weapon.tip - rig.weapon.butt), 1, scale);
+        }
+      }
+      sparks.step(dtMs);
+    }
+    // 發光疊加：正在燒、或亮刃的那一段才開（之後多留一下讓光暈收掉）。
+    if (forge.active || (plan.autoMotion && pose.flare > 0.05)) glowUntil = clock + 350;
+    host.dataset.forge = forge.progress.toFixed(2);
+    if (scope) scope.dataset.chapter = kind;
     rig.setSheath(sheath, VIEW_HEIGHT * 1.5);
     rig.hang(dtMs, plan.autoMotion);
 
@@ -549,6 +592,7 @@ export function mountViewer(host: HTMLElement, plan: RenderPlan): ViewerHandle {
       spinState = nextSpin;
     }
 
+    if (sparks && sparks.alive > 0) changed = true;
     // 有自動動態（閒置的微晃、自轉）時每一格都要畫。
     if (plan.autoMotion) changed = true;
     if (!changed) return false;
@@ -559,8 +603,30 @@ export function mountViewer(host: HTMLElement, plan: RenderPlan): ViewerHandle {
     return true;
   };
 
+  // 發光疊加（選擇性 bloom 的替代做法）：把剛畫好的 3D 畫布縮小畫到一張 2D 畫布上，只留亮的部分
+  //（壓暗再拉對比），CSS 再把它糊開、用濾色疊回去。不用 three 的後製（EffectComposer 的 bloom 會吃掉透明背景，
+  // 也會讓 three 的 chunk 變大）。只在桌機的兵器台、而且正在淬火或亮刃時才畫。
+  const drawGlow = () => {
+    if (!bloom || !bloomCtx) return;
+    const lit = clock < glowUntil;
+    if (!lit && !glowDrawn) return;
+    const w = Math.max(1, Math.round(width / 3));
+    const h = Math.max(1, Math.round(height / 3));
+    if (bloom.width !== w || bloom.height !== h) {
+      bloom.width = w;
+      bloom.height = h;
+    }
+    bloomCtx.clearRect(0, 0, w, h);
+    glowDrawn = lit;
+    if (!lit) return;
+    bloomCtx.filter = 'brightness(0.8) contrast(2.6)';
+    bloomCtx.drawImage(canvas, 0, 0, w, h);
+    bloomCtx.filter = 'none';
+  };
+
   const draw = () => {
     renderer.render(scene, camera);
+    drawGlow();
     dirty = false;
     frames += 1;
     host.dataset.frames = String(frames);
@@ -724,6 +790,7 @@ export function mountViewer(host: HTMLElement, plan: RenderPlan): ViewerHandle {
 
   // ── 上場 ────────────────────────────────────────────────────────
   host.append(canvas);
+  if (bloom) host.after(bloom);
   resize();
   label();
   if (mode === 'stage') {
@@ -735,6 +802,8 @@ export function mountViewer(host: HTMLElement, plan: RenderPlan): ViewerHandle {
 
   const debug: ViewerDebug = {
     snapshot() {
+      // 量的是成形之後的樣子：還在淬火就先走完。
+      if (switchState.phase !== 'idle') switchState = advanceSwitch(switchState, 60_000);
       update(0);
       if (mode === 'stage') layoutStage(0);
       else if (mode === 'single') layoutSingle(0);
@@ -757,6 +826,7 @@ export function mountViewer(host: HTMLElement, plan: RenderPlan): ViewerHandle {
       return { width: w, height: h, covered: covered / total, bright: bright / total };
     },
     bounds() {
+      if (switchState.phase !== 'idle') switchState = advanceSwitch(switchState, 60_000);
       update(0);
       if (mode === 'stage') layoutStage(0);
       else if (mode === 'single') layoutSingle(0);
@@ -809,7 +879,10 @@ export function mountViewer(host: HTMLElement, plan: RenderPlan): ViewerHandle {
       draw();
     },
   };
-  (host as HTMLElement & { weaponDebug?: ViewerDebug }).weaponDebug = debug;
+  // 除錯介面只在開發模式、或測試明確要求時（window.__LIUYI_TEST__）才掛到宿主元素上；正式站不掛。
+  if (import.meta.env.DEV || (window as Window & { __LIUYI_TEST__?: boolean }).__LIUYI_TEST__ === true) {
+    (host as HTMLElement & { weaponDebug?: ViewerDebug }).weaponDebug = debug;
+  }
 
   return {
     dispose() {
@@ -822,6 +895,8 @@ export function mountViewer(host: HTMLElement, plan: RenderPlan): ViewerHandle {
       for (const pick of picks) pick.removeEventListener('click', onPick);
       for (const rig of rigs.values()) rig.dispose();
       materials.dispose();
+      sparks?.dispose();
+      bloom?.remove();
       environment.dispose();
       renderer.dispose();
       canvas.remove();

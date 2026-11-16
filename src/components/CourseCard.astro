@@ -342,10 +342,8 @@ const glyph = category === 'other' ? undefined : CATEGORY_GLYPH[category];
     font-size: clamp(6rem, 11vw, 8.5rem);
     font-weight: 700;
     line-height: 1;
-    background: linear-gradient(170deg, var(--color-text) 10%, var(--color-accent-strong) 48%, var(--color-accent) 85%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+    /* 平面單色古金（和幕中大字一致；不做金色漸層字）。 */
+    color: var(--color-accent-strong);
     /* 字後面墊一圈底色，讓紋樣的線不穿過筆畫。 */
     filter: drop-shadow(0 0 14px var(--color-bg)) drop-shadow(0 0 6px var(--color-bg));
     transition: transform 1.4s var(--ease-out);

@@ -5,6 +5,7 @@
 //   木、纏繩、漆、纓：非金屬。
 
 import { Color, DoubleSide, MeshPhysicalMaterial, MeshStandardMaterial } from 'three';
+import { applyForge, createForgeUniforms, type ForgeUniforms } from './forge';
 import { agedBrass, bladeRoughness, brushedRoughness, cordWrap, fretBrass, rippleNormal, woodGrain, type Band } from './textures';
 
 export interface Palette {
@@ -64,6 +65,8 @@ export interface Materials {
   /** 纓、穗。 */
   tassel: MeshStandardMaterial;
   tasselDeep: MeshStandardMaterial;
+  /** 淬火成形的共用參數（這個檢視器的所有兵器材質共用）。 */
+  forge: ForgeUniforms;
   dispose(): void;
 }
 
@@ -77,8 +80,11 @@ const GROUND_ROUGHNESS = 0.42;
 
 export function createMaterials(palette: Palette): Materials {
   const disposables: { dispose(): void }[] = [];
+  const forge = createForgeUniforms(palette.tassel, palette.brass);
   const keep = <T extends { dispose(): void }>(item: T): T => {
     disposables.push(item);
+    // 每個兵器材質的著色器都插進淬火的那一段。
+    if (item instanceof MeshStandardMaterial) applyForge(item, forge);
     return item;
   };
 
@@ -217,6 +223,7 @@ export function createMaterials(palette: Palette): Materials {
     cord,
     tassel,
     tasselDeep,
+    forge,
     dispose() {
       for (const item of disposables) item.dispose();
     },
