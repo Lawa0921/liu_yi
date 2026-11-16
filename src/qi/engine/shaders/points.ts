@@ -15,6 +15,7 @@
  */
 
 import { STREAK, THICK_KIND_SCALE } from '../effects';
+import { SHAPE_COUNT } from '../../shapes/format';
 import { HASH } from './noise';
 
 /**
@@ -27,11 +28,30 @@ export const GRAIN = 0.02;
 export const REFLECTION = 0.2;
 /**
  * 兵器上最密的幾種點（鋼、銅、朱紅纓、兵器四周的氣）在高階 tier 會疊成白團：槍頭與纓穗的面積很小，點數卻是人形的同一個量級。
- * 依點密度（`uDensity` ＝ 點數 / 形體檔的點數）調淡：`pow(uDensity, -DENSE_POWER)`，最多回到原亮度（不加亮）。
- * 高階（4 倍）約 0.38，最低階（0.77 倍）不變。朱紅纓另外把基準亮度由 0.75 降到 0.5：大槍的纓穗又細又密（點數占約 9%），
+ * 依覆蓋密度（`uCoverage`，見 `coverageOf`）調淡：`pow(uCoverage, -DENSE_POWER)`，最多回到原亮度（不加亮）。
+ * 對照視窗的高階桌機（4）約 0.38，手機 low（約 4）也約 0.38，min 不變。朱紅纓另外把基準亮度由 0.75 降到 0.5：大槍的纓穗又細又密（點數占約 9%），
  * 0.75 加色後核心會糊成橘白，降到 0.5 才是紅色；纓穗與桿（DARK）的點徑加大 `THICK_KIND_SCALE`（15%），桿才看得出粗細。
  */
 export const DENSE_POWER = 0.7;
+
+/** 調參用的對照視窗（1280×720）：焦點平面上每個世界單位是幾個 CSS 像素（`720 / 3.4`；人形佔畫面的比例見 `stage.ts` 的取景）。 */
+export const COVERAGE_REFERENCE_PX_PER_UNIT = 720 / 3.4;
+
+/**
+ * 覆蓋密度（`uCoverage`）：兵器上同一小塊面積被多少倍的點疊到，相對於「1280×720、桌機點徑、形體檔原本的點數」。
+ * 重疊的亮度正比於「點數 × 點面積 / 兵器佔的螢幕面積」，所以要同時看三件事：
+ *   - 點數：點數 / 形體檔的點數（高階 4 倍）；
+ *   - 點徑：手機 low／lite 的點徑 2.6（桌機 2.2），面積是 1.4 倍；
+ *   - 世界單位的螢幕大小：手機直向取景小（約 142 px／單位，對照視窗 212），同一件兵器在螢幕上只佔 0.45 倍的面積。
+ * 只看點數會讓手機 low 的槍頭燒白、纓穗被沖成黃白（Task 16 審查）。
+ */
+export function coverageOf(count: number, pointPx: number, pxPerUnit: number): number {
+  const sizeRatio = (pointPx * COVERAGE_REFERENCE_PX_PER_UNIT) / (POINT_PX.rich * pxPerUnit);
+  return (count / SHAPE_COUNT) * sizeRatio * sizeRatio;
+}
+
+/** 兵器密集點的亮度倍率：`min(1, 覆蓋密度 ^ −DENSE_POWER)`（著色器裡是同一個式子）。 */
+export const denseFade = (coverage: number): number => Math.min(1, Math.pow(coverage, -DENSE_POWER));
 
 /** 光點大小的像素基準（桌機／低階各一）；實際 `gl_PointSize` 還乘以隨機大小與景深。 */
 export const POINT_PX = { rich: 2.2, lite: 2.6 } as const;
@@ -46,7 +66,7 @@ uniform float uFocus;
 uniform float uPixelRatio;
 uniform float uMirror;
 uniform float uStreak;
-uniform float uDensity;
+uniform float uCoverage;
 uniform vec3 uGold;
 uniform vec3 uPaper;
 uniform vec3 uSeal;
@@ -72,7 +92,7 @@ void main(){
 
   // gold to paper white; outlines and fast particles are brighter
   vec3 c=mix(uGold,uPaper,clamp(fract(seed*13.7)*0.55+(kind>=0.0&&kind<=1.0?kind*0.45:0.0)+speed*0.15,0.0,1.0));
-  float dense=min(1.0,pow(uDensity,-${f(DENSE_POWER)}));
+  float dense=min(1.0,pow(max(uCoverage,0.01),-${f(DENSE_POWER)}));
   float a=0.55;
   if(kind>1.5&&kind<2.5){c=mix(uPaper,vec3(1.0),0.15);a=0.42*dense;}
   else if(kind>2.5&&kind<3.5){c=uGold*1.2;a=0.55*dense;}

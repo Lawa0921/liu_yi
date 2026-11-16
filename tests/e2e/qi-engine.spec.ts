@@ -365,6 +365,7 @@ test.describe('光暈（桌機級 tier=high）', () => {
     await setPose(page, 'land');
     await run(page, 1500);
     expect((await uniforms(page)).uPixelRatio).toBe(1); // DPR 1 × 場景 RT 的比例 1（Task 16：半解析度會把顆粒糊成塊）
+    expect((await uniforms(page)).sceneScale).toBe(1); // high 在 DPR 1：全解析度
     expect((await uniforms(page)).glow).toBe(1);
     const shot = await snapshot(page);
     expect(shot.covered).toBeGreaterThan(0.06);
@@ -375,6 +376,48 @@ test.describe('光暈（桌機級 tier=high）', () => {
     await page.evaluate(() => stageOf().setTier('min'));
     expect((await uniforms(page)).uPixelRatio).toBe(1);
     expect((await snapshot(page)).covered).toBeGreaterThanOrEqual(0.01);
+  });
+});
+
+test.describe('光暈場景 RT 的比例（降級要有減載台階，Task 16 審查）', () => {
+  test.use({ viewport: { width: 640, height: 400 } });
+
+  test('mid 在 DPR 1：0.75（點大小同步縮到 0.75）；mid → high 回到 1；降到 min（沒有光暈）是 1', async ({ page }) => {
+    await open(page, './lab/qi-harness/?qi-tier=mid&qi-debug=1');
+    await setPose(page, 'land');
+    let u = await uniforms(page);
+    expect(u.glow).toBe(1);
+    expect(u.sceneScale).toBe(0.75);
+    expect(u.uPixelRatio).toBe(0.75);
+    await page.evaluate(() => stageOf().setTier('high'));
+    u = await uniforms(page);
+    expect(u.sceneScale).toBe(1);
+    expect(u.uPixelRatio).toBe(1);
+    await page.evaluate(() => stageOf().setTier('mid')); // 降級：場景 RT 的像素數變少，不是只少了點
+    expect((await uniforms(page)).sceneScale).toBe(0.75);
+    await page.evaluate(() => stageOf().setTier('min'));
+    u = await uniforms(page);
+    expect(u.glow).toBe(0);
+    expect(u.sceneScale).toBe(1);
+    expect((await snapshot(page)).covered).toBeGreaterThanOrEqual(0.01);
+  });
+});
+
+test.describe('光暈場景 RT 的比例（高 DPR）', () => {
+  test.use({ viewport: { width: 640, height: 400 }, deviceScaleFactor: 2 });
+
+  test('high 在 DPR 2：0.75（renderer 的 pixel ratio 上限 1.75，點大小 = 1.75 × 0.75）；mid 同樣 0.75', async ({ page }) => {
+    await open(page, './lab/qi-harness/?qi-tier=high&qi-debug=1');
+    await setPose(page, 'land');
+    let u = await uniforms(page);
+    expect(u.glow).toBe(1);
+    expect(u.sceneScale).toBe(0.75);
+    expect(u.uPixelRatio).toBeCloseTo(1.75 * 0.75, 10);
+    expect((await snapshot(page)).covered).toBeGreaterThanOrEqual(0.01); // 縮小的場景 RT 仍有畫面
+    await page.evaluate(() => stageOf().setTier('mid'));
+    u = await uniforms(page);
+    expect(u.sceneScale).toBe(0.75);
+    expect(u.uPixelRatio).toBeCloseTo(1.75 * 0.75, 10);
   });
 });
 

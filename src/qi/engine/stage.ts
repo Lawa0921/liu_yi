@@ -24,13 +24,13 @@ import {
   type Texture,
   type WebGLRenderer,
 } from 'three';
-import { SHAPE_COUNT } from '../shapes/format';
 import { rng } from '../shapes/rng';
 import { halfFloatTargets } from './caps';
 import { cameraShake, shockwave, shockwaveSecond } from './effects';
 import { createGlow, type Glow } from './glow';
 import { GROUND, groundVertex } from './shaders/ground';
-import { POINT_PX, pointsFragment, pointsVertex } from './shaders/points';
+import { coverageOf, POINT_PX, pointsFragment, pointsVertex } from './shaders/points';
+import { sceneScaleFor, type TierId } from './tiers';
 
 /** 頁面底色（`--qi-bg`）。 */
 export const BACKDROP_HEX = 0x0b0a09;
@@ -48,6 +48,8 @@ const EXPOSURE = 1.05;
 const MAX_PIXEL_RATIO = { rich: 1.75, lite: 1.5 } as const;
 
 export interface StageBuild {
+  /** 這一級；光暈場景 RT 的比例依它與 pixel ratio 決定（`sceneScaleFor`）。 */
+  tier: TierId;
   /** 光點貼圖的邊長（光點數 = side²）。 */
   side: number;
   /** 低階：不畫倒影、地面光點較少、點稍大。 */
@@ -111,6 +113,7 @@ export function createStage(renderer: WebGLRenderer, canvas: HTMLCanvasElement):
   const drawingSize = new Vector2();
   let cssWidth = 1;
   let cssHeight = 1;
+  let pointCount = 0; // 這個 tier 的光點數（`build` 設）；覆蓋密度要用
 
   const shared = {
     tPos: { value: null as Texture | null },
@@ -119,7 +122,7 @@ export function createStage(renderer: WebGLRenderer, canvas: HTMLCanvasElement):
     uFocus: { value: 6 },
     uPixelRatio: { value: 1 },
     uStreak: { value: 1 },
-    uDensity: { value: 1 }, // 點數 / 形體檔的點數：重複展開的倍數（高階約 4）
+    uCoverage: { value: 1 }, // 覆蓋密度：點數 / 形體檔點數 × (點徑 / 桌機點徑)²（`coverageOf`；高階桌機 4）
     uGold: { value: GOLD },
     uPaper: { value: PAPER },
     uSeal: { value: SEAL },
@@ -158,6 +161,8 @@ export function createStage(renderer: WebGLRenderer, canvas: HTMLCanvasElement):
       visibleH = Math.max(3.4, 2.75 / aspect);
       look.set(0, 1.05 - visibleH * 0.13, 0);
     }
+    // 兵器在螢幕上的大小隨取景變（手機直向小）：覆蓋密度（密集點的亮度倍率）要跟著
+    shared.uCoverage.value = coverageOf(pointCount, shared.uPx.value, cssHeight / visibleH);
     const distance = visibleH / (2 * Math.tan((camera.fov * Math.PI) / 360));
     baseCamera.set(look.x, look.y + 0.15, distance);
     shared.uFocus.value = distance;
@@ -188,11 +193,11 @@ export function createStage(renderer: WebGLRenderer, canvas: HTMLCanvasElement):
       const count = side * side;
       // 光暈的場景 RT 是半精度：兩個浮點 render target 擴充都沒有就退成不開光暈（直接畫到螢幕），不能黑畫面
       const glowOn = opts.glow && halfFloatTargets(renderer);
-      glow.setEnabled(glowOn);
-      renderer.setClearColor(glowOn ? 0x000000 : BACKDROP_HEX, 1);
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, lite ? MAX_PIXEL_RATIO.lite : MAX_PIXEL_RATIO.rich));
+      glow.setEnabled(glowOn, sceneScaleFor(opts.tier, renderer.getPixelRatio()));
+      renderer.setClearColor(glowOn ? 0x000000 : BACKDROP_HEX, 1);
       shared.uPx.value = lite ? POINT_PX.lite : POINT_PX.rich;
-      shared.uDensity.value = count / SHAPE_COUNT;
+      pointCount = count; // 覆蓋密度在 applySize → fit 算（要有取景）
 
       const refs = new Float32Array(count * 2);
       const seeds = new Float32Array(count);
@@ -353,6 +358,7 @@ export function createStage(renderer: WebGLRenderer, canvas: HTMLCanvasElement):
         if (typeof uniform.value === 'number') out[name] = uniform.value;
       }
       out.glow = glow.enabled ? 1 : 0;
+      out.sceneScale = glow.sceneScale;
       out.uShockT = shockT;
       out.uFlash = flash.value;
       out.uShake = shake;

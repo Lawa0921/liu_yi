@@ -11,6 +11,8 @@ const HARNESS = './lab/qi-harness/?qi-tier=min&qi-debug=1';
 const T0 = new Date('2026-01-01T08:00:00');
 const T1 = new Date('2026-01-01T09:00:00');
 const READY = { timeout: 30_000 };
+/** 落地 0.4 s 時兩個環帶的亮點比例（有環時的實測值）。 */
+const RING_BRIGHT = 0.0043;
 
 type Debug = NonNullable<QiStage['debug']>;
 type W = { __qiStage: QiStage & { debug: Debug } };
@@ -151,7 +153,7 @@ test.describe('開場吸氣流線（桌機，tier=min）', () => {
     expect((await uniforms(page)).uShockT).toBe(-1);
   });
 
-  test('演出中 setPose("land") 不打斷開場（它本來就停在 land）；開場還在等形體載入時 setPose 別的姿勢則取消它', async ({ page }) => {
+  test('演出中 setPose("land") 不打斷開場（它本來就停在 land）', async ({ page }) => {
     await open(page);
     await settleLand(page);
     await page.evaluate(() => stageOf().playIntro());
@@ -163,6 +165,36 @@ test.describe('開場吸氣流線（桌機，tier=min）', () => {
     expect((await uniforms(page)).uIntroT).toBe(-1);
     expect(await poseOf(page)).toBe('land');
     expect(await meanError(page)).toBeLessThan(0.05);
+  });
+
+  test('開場還在等形體載入（introPending）時 setPose 別的姿勢：開場被取消、不丟錯，之後 lift 載好也不會補演', async ({ page }) => {
+    await open(page);
+    await setPose(page, 'land', false); // lift 還沒載過：playIntro 要等它
+    const outcome = await page.evaluate(async () => {
+      const stage = stageOf();
+      stage.playIntro(); // introPending（lift 的請求在路上）
+      try {
+        await stage.setPose('dingzhou'); // 同一刻換成別的姿勢
+        return 'ok';
+      } catch (error) {
+        return `${(error as Error).name}: ${(error as Error).message}`;
+      }
+    });
+    expect(outcome).toBe('ok');
+    await run(page, 3500);
+    const u = await uniforms(page);
+    expect(u.uIntroT, '開場沒有補演（取消的 token 不會在 lift 載好後開始計時）').toBe(-1);
+    expect(u.uShockT, '沒有落地').toBe(-1);
+    expect(await poseOf(page)).toBe('dingzhou');
+    expect(await meanError(page)).toBeLessThan(0.05);
+  });
+
+  test('對照：沒有人取消時，同樣的 pending 會在形體載好後開始計時（上一個測試取消的是真的）', async ({ page }) => {
+    await open(page);
+    await setPose(page, 'land', false);
+    await page.evaluate(() => stageOf().playIntro());
+    await page.waitForFunction(() => stageOf().debug.uniforms().uIntroT! >= 0); // lift 是真的網路請求，不受假時鐘控制
+    expect((await uniforms(page)).uIntroT).toBeGreaterThanOrEqual(0);
   });
 
   test('演出中換姿勢（setPose）：開場到此為止，姿勢以最後一次為準', async ({ page }) => {
@@ -239,6 +271,9 @@ test.describe('落地衝擊波（桌機，tier=min）', () => {
     expect(mid.uRing2Amp, '第二圈（晚 0.12 s）也已出發').toBeGreaterThan(0.5);
     const ring = await brightIn(page, boxes);
     expect(ring, `環帶亮點 ${ring} 應 ≥ 落地前基線 ${baseline} 的 2.5 倍`).toBeGreaterThanOrEqual(Math.max(baseline, 1e-4) * 2.5);
+    // 相對於「有環時」的實測值（1280×720、tier=min、這兩個環帶：0.0043）設下限：環變淡（亮度 ×0.8 就掉到 0.0023）也會紅燈，
+    // 不只是「比沒有環時亮」。
+    expect(ring, `環帶亮點 ${ring} 不得低於實測值 ${RING_BRIGHT} 的 70%`).toBeGreaterThanOrEqual(RING_BRIGHT * 0.7);
 
     await run(page, 200); // 0.6 s：彈簧回到 26
     expect((await uniforms(page)).uSpring).toBeCloseTo(26, 3);

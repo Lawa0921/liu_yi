@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { groundVertex } from '../../src/qi/engine/shaders/ground';
-import { pointsFragment, pointsVertex } from '../../src/qi/engine/shaders/points';
+import { COVERAGE_REFERENCE_PX_PER_UNIT, coverageOf, DENSE_POWER, denseFade, POINT_PX, pointsFragment, pointsVertex } from '../../src/qi/engine/shaders/points';
 import { velocityShader } from '../../src/qi/engine/shaders/velocity';
 import {
   CAMERA_SHAKE,
@@ -280,5 +280,49 @@ describe('著色器與這裡的公式同步（GLSL 是字串，改了常數要�
 
   it('吐氣：力道是 BURSTS.lift 的倍數，大於 1（散得夠遠，吸氣才有一段流回來的路）', () => {
     expect(EXHALE.gain).toBeGreaterThan(1);
+  });
+});
+
+describe('coverageOf／denseFade（密集的兵器點依「點數 × 點面積 / 兵器的螢幕面積」調淡）', () => {
+  const REF = COVERAGE_REFERENCE_PX_PER_UNIT;
+  // 取景（stage.ts fit）：橫向 visibleH = max(3.4, 5.9 / aspect)，直向 max(3.4, 2.75 / aspect)；px／單位 = CSS 高 / visibleH
+  const pxPerUnit = (w: number, h: number) => h / (w >= h ? Math.max(3.4, 5.9 / (w / h)) : Math.max(3.4, 2.75 / (w / h)));
+
+  it('對照視窗（1280×720）的高階桌機是 4（就是形體檔重複的倍數）', () => {
+    expect(REF).toBeCloseTo(pxPerUnit(1280, 720), 6);
+    expect(coverageOf(256 * 256, POINT_PX.rich, pxPerUnit(1280, 720))).toBeCloseTo(4, 10);
+  });
+
+  it('點徑大、點數少的手機 low 比只看點數（1.27）高；直向取景小，同一件兵器佔的螢幕面積小，重疊更多', () => {
+    const byCount = (144 * 144) / 16384;
+    const lowPhone = coverageOf(144 * 144, POINT_PX.lite, pxPerUnit(390, 844));
+    expect(pxPerUnit(390, 844)).toBeCloseTo(141.8, 0);
+    expect(lowPhone).toBeGreaterThan(byCount * (POINT_PX.lite / POINT_PX.rich) ** 2); // 連點徑都算進去還要高：取景也算
+    expect(lowPhone).toBeGreaterThan(3.5); // 約 4，和對照視窗的高階桌機差不多
+  });
+
+  it('同一個 tier 與點徑：螢幕上每單位的像素愈少（取景愈遠）覆蓋密度愈高', () => {
+    expect(coverageOf(10000, 2.2, 100)).toBeGreaterThan(coverageOf(10000, 2.2, 200));
+  });
+
+  it('denseFade：覆蓋密度越高越淡、上限 1（不加亮）；高階桌機約 0.38', () => {
+    expect(denseFade(0.5)).toBe(1);
+    expect(denseFade(1)).toBe(1);
+    expect(denseFade(4)).toBeCloseTo(4 ** -DENSE_POWER, 10);
+    expect(denseFade(4)).toBeCloseTo(0.38, 2);
+    expect(denseFade(2)).toBeGreaterThan(denseFade(4));
+  });
+
+  it('手機 low 比只看點數時淡很多（Task 16 審查：手機槍頭燒白），和高階桌機差不多（約 0.38）；min 桌機不變（1）', () => {
+    const lowByCount = denseFade((144 * 144) / 16384);
+    const low = denseFade(coverageOf(144 * 144, POINT_PX.lite, pxPerUnit(390, 844)));
+    expect(lowByCount).toBeGreaterThan(0.8);
+    expect(low).toBeLessThan(0.45);
+    expect(denseFade(coverageOf(112 * 112, POINT_PX.lite, pxPerUnit(1440, 900)))).toBe(1);
+  });
+
+  it('著色器用 uCoverage 與同一個 DENSE_POWER', () => {
+    expect(pointsVertex).toContain('uniform float uCoverage;');
+    expect(pointsVertex).toContain(`pow(max(uCoverage,0.01),-${DENSE_POWER.toFixed(3)})`);
   });
 });

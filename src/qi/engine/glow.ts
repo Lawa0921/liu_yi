@@ -28,8 +28,10 @@ import {
 } from 'three';
 import { blurFragment, compositeFragment, fullscreenVertex } from './shaders/glow';
 
-/** 場景 RT 相對於 drawing buffer 的比例：1 ＝ 全解析度。半解析度會把每顆光點放大成至少 2 個裝置像素再拉伸，人形變成糊的塊，沒有試作那種細顆粒。 */
-export const SCENE_SCALE = 1;
+/**
+ * 場景 RT 相對於 drawing buffer 的比例由呼叫端依 tier 與 DPR 決定（`tiers.ts` 的 `sceneScaleFor`）：1 ＝ 全解析度才有試作那種細顆粒；
+ * 半解析度（0.5）會把每顆光點放大成至少 2 個裝置像素再拉伸，人形變成糊的塊；降級要有減載台階，所以 mid 與高 DPR 用 0.75。
+ */
 /** 模糊 RT 相對於 drawing buffer 的比例（1/4）。 */
 const BLUR_SCALE = 0.25;
 /** 橫＋直算一輪；每輪的取樣間距（texel）逐輪放大（前一輪已經夠糊，大間距不會出現波紋），仍是 1/4 解析度的 9-tap。 */
@@ -47,12 +49,12 @@ const NEAR_STRENGTH = 3.6;
 const FAR_STRENGTH = 4.2;
 
 export interface Glow {
-  /** 場景的解析度比例：開光暈時 `SCENE_SCALE`，否則 1。呼叫端用它換算點大小。 */
+  /** 場景的解析度比例：開光暈時是 `setEnabled` 給的比例，否則 1。呼叫端用它換算點大小。 */
   readonly sceneScale: number;
   /** 有沒有開光暈（場景畫到 RT 再合成）。 */
   readonly enabled: boolean;
-  /** 開／關光暈：開時配置 RT，關時釋放。 */
-  setEnabled(on: boolean): void;
+  /** 開／關光暈：開時配置 RT（場景 RT 的比例為 `sceneScale`，預設 1），關時釋放；已經開著時只改比例並重設 RT 大小。 */
+  setEnabled(on: boolean, sceneScale?: number): void;
   /** drawing buffer 的像素尺寸（已乘 pixel ratio）；RT 隨之調整。 */
   setSize(bufferWidth: number, bufferHeight: number): void;
   /** 畫一格到螢幕（含光暈或直接畫）。 */
@@ -104,6 +106,7 @@ export function createGlow(renderer: WebGLRenderer, backdrop: Vector3): Glow {
   let blurA: WebGLRenderTarget | null = null;
   let blurB: WebGLRenderTarget | null = null;
   let near: WebGLRenderTarget | null = null;
+  let scale = 1;
   let width = 1;
   let height = 1;
 
@@ -115,8 +118,8 @@ export function createGlow(renderer: WebGLRenderer, backdrop: Vector3): Glow {
 
   const applySize = (): void => {
     if (!sceneTarget || !blurA || !blurB || !near) return;
-    const sw = Math.max(1, Math.round(width * SCENE_SCALE));
-    const sh = Math.max(1, Math.round(height * SCENE_SCALE));
+    const sw = Math.max(1, Math.round(width * scale));
+    const sh = Math.max(1, Math.round(height * scale));
     const bw = Math.max(1, Math.round(width * BLUR_SCALE));
     const bh = Math.max(1, Math.round(height * BLUR_SCALE));
     sceneTarget.setSize(sw, sh);
@@ -135,13 +138,17 @@ export function createGlow(renderer: WebGLRenderer, backdrop: Vector3): Glow {
 
   const glow: Glow = {
     get sceneScale() {
-      return sceneTarget ? SCENE_SCALE : 1;
+      return sceneTarget ? scale : 1;
     },
     get enabled() {
       return sceneTarget !== null;
     },
-    setEnabled(on) {
-      if (on === (sceneTarget !== null)) return;
+    setEnabled(on, sceneScale = 1) {
+      if (on) scale = Math.min(1, Math.max(0.25, Number.isFinite(sceneScale) ? sceneScale : 1));
+      if (on === (sceneTarget !== null)) {
+        if (on) applySize(); // 已經開著（例如 high → mid）：比例可能變了
+        return;
+      }
       if (on) {
         sceneTarget = makeTarget();
         blurA = makeTarget();

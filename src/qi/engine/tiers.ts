@@ -17,6 +17,17 @@ export const TIERS: Record<TierId, { side: number; count: number; glow: boolean 
   min: { side: 112, count: 112 * 112, glow: false },
 };
 
+/**
+ * 光暈的場景 RT 相對於 drawing buffer 的比例（Task 16 審查）。全解析度才有試作那種細顆粒，但降級（high → mid）
+ * 要真的減載：mid 一律 0.75；high 在 DPR ≤ 1.25 用 1、DPR ≥ 1.5 用 0.75（1.25 與 1.5 之間取 0.75，保守）。
+ * 沒有光暈的 tier（low、min）不配場景 RT，傳 1。`pixelRatio` 是 renderer 實際的 pixel ratio（DPR 已套上限）。
+ */
+export function sceneScaleFor(tier: TierId, pixelRatio: number): number {
+  if (!TIERS[tier].glow) return 1;
+  if (tier === 'mid') return 0.75;
+  return pixelRatio <= 1.25 ? 1 : 0.75;
+}
+
 /** 桌機判定的最小寬度。 */
 const DESKTOP_MIN_WIDTH = 960;
 

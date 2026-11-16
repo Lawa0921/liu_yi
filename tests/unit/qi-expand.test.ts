@@ -397,6 +397,21 @@ describe('纓穗（RED）：套 layout 後仍朝下垂（試作：pendulum 反�
     expect(meanX).toBeCloseTo(0.4 * 3.8 * Math.cos(0.05), 2);
   });
 
+  it('紮點正好在單位形的 x = 0（紅點 x 平均為 0）時，紅纓仍掛在隨 layout 平移的紮點下（不能把 0 當成「沒有紮點」）', () => {
+    const shape = tasselWeapon();
+    for (let i = 2; i < 26; i++) shape.positions[i * 3] = ((i - 2) % 3 - 1) * 0.004; // 紅點 x 平均 0
+    const ambient = ambientField(112 * 112);
+    const layout = { scale: 2, rotZ: 0.4, offset: [1, 2, 3] as [number, number, number] };
+    const out = expandTargets(shape, 112, ambient, layout);
+    const slots = reds(ambient, shape);
+    const meanX = slots.reduce((s, i) => s + out[i * 4]!, 0) / slots.length;
+    const topY = Math.max(...slots.map((i) => out[i * 4 + 1]!));
+    // 紮點 (0, 0) → 世界 (offset.x, offset.y)；紅點只受 scale、掛在它下面
+    expect(meanX).toBeCloseTo(1, 2);
+    expect(topY).toBeLessThanOrEqual(2 + 1e-6);
+    expect(topY).toBeGreaterThan(2 - 0.01);
+  });
+
   it('沒有紅纓的兵器（苗刀）不受影響，也不丟錯；沒給 layout 時紅點座標原樣', () => {
     const none = tasselWeapon(false);
     const ambient = ambientField(112 * 112);

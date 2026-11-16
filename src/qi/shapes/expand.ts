@@ -143,8 +143,8 @@ export function expandTargets(shape: Shape, size: number, ambient: AmbientField,
     // 紅纓是掛著的，順著重力垂下：兵器傾斜時纓穗不跟著傾斜。試作把纓穗（pendulum）反向旋轉；這裡等價於
     // 「紅點相對紮點只受 scale 影響（不轉）」：紮點隨兵器轉到位，纓穗從紮點起仍朝下。
     const pivot = tasselPivot(shape);
-    const pivotX = pivot ? pivot * cos + ox : 0;
-    const pivotY = pivot ? pivot * sin + oy : 0;
+    const pivotX = pivot !== null ? pivot * cos + ox : 0;
+    const pivotY = pivot !== null ? pivot * sin + oy : 0;
     const laid = new Float64Array(count * 3);
     for (let k = 0; k < count; k++) {
       const x = shape.positions[k * 3]!;

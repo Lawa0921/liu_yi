@@ -175,7 +175,7 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
     const spec = TIERS[tier];
     releaseGeneration();
     side = spec.side;
-    stage.build({ side, lite: !spec.glow, glow: spec.glow }); // 取景與 RT 尺寸沿用 stage 記住的大小
+    stage.build({ tier, side, lite: !spec.glow, glow: spec.glow }); // 取景與 RT 尺寸沿用 stage 記住的大小
     ambient = ambientField(side * side);
     if (reducedMotion) zero = zeroTexture(side);
     else sim = createSim(renderer, side);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createGovernor, initialTier, TIER_ORDER, TIERS, type TierId } from '../../src/qi/engine/tiers';
+import { createGovernor, initialTier, sceneScaleFor, TIER_ORDER, TIERS, type TierId } from '../../src/qi/engine/tiers';
 
 describe('TIERS（D16）', () => {
   it('四級：256² / 192² / 144² / 112²，count 就是 side²', () => {
@@ -176,5 +176,44 @@ describe('createGovernor（D16）', () => {
     // 冷卻 0：下一個 500 ms 視窗結束就能再降
     expect(feed(gov, 50, 550, 950)).toEqual([]);
     expect(gov.frame(1000)).toBe('low');
+  });
+});
+
+describe('sceneScaleFor（光暈場景 RT 的比例：降級要有減載台階）', () => {
+  it.each([
+    ['high', 1, 1],
+    ['high', 1.25, 1],
+    ['high', 1.5, 0.75],
+    ['high', 2, 0.75],
+    ['mid', 1, 0.75],
+    ['mid', 1.25, 0.75],
+    ['mid', 1.5, 0.75],
+    ['mid', 2, 0.75],
+  ] as const)('%s 在 DPR %s → %s', (tier, dpr, expected) => {
+    expect(sceneScaleFor(tier, dpr)).toBe(expected);
+  });
+
+  it('high 在 DPR 1.25–1.5 之間（不含 1.25）取 0.75', () => {
+    expect(sceneScaleFor('high', 1.26)).toBe(0.75);
+    expect(sceneScaleFor('high', 1.4)).toBe(0.75);
+  });
+
+  it('沒有光暈的 tier（low、min）不配場景 RT，比例是 1', () => {
+    for (const dpr of [1, 1.5, 2]) {
+      expect(sceneScaleFor('low', dpr)).toBe(1);
+      expect(sceneScaleFor('min', dpr)).toBe(1);
+    }
+  });
+
+  it('降級（high → mid）在任何 DPR 下場景 RT 的像素都不會變多', () => {
+    for (const dpr of [1, 1.25, 1.5, 1.75, 2]) {
+      expect(sceneScaleFor('mid', dpr)).toBeLessThanOrEqual(sceneScaleFor('high', dpr));
+    }
+    // DPR 1：high 是全解析度、mid 是 0.75，像素與點數都少，才有台階
+    expect(sceneScaleFor('mid', 1)).toBeLessThan(sceneScaleFor('high', 1));
+  });
+
+  it('非有限的 DPR 保守取 0.75（high）', () => {
+    expect(sceneScaleFor('high', Number.NaN)).toBe(0.75);
   });
 });
