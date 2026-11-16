@@ -20,6 +20,11 @@
   overflow-x: clip;
 }
 
+/* 退回靜態圖時，焦點若正在「略過」鈕上，腳本會把它移到 main（fallback.ts）；程式移的焦點不畫整個 main 的外框。 */
+[data-home]:focus {
+  outline: none;
+}
+
 /* ── 光點畫布（Task 19 接上引擎）──────────────────── */
 
 /*
@@ -72,25 +77,47 @@ html.js:not(.qi-static) .beat__still {
 .opening {
   /*
    * 海報人形的大小與位置：要與引擎的 `land`（取景見 engine/stage.ts 的 `fit`）疊得起來，交叉淡化時才不會「跳」一下。
-   * 數字由 e2e（home-fallback.spec 的「海報人形與引擎 land 的外框對齊」，1440×900 與 390×844，另加三個尺寸）量測：
+   * 引擎依畫布寬高比選取景（aspect ≥ 1 橫向、否則直向），與視窗寬度（版面的 60rem 斷點）無關，所以這裡的算式也用同一個條件切換：
+   * 橫向在這裡、直向在下方的 `@media (max-aspect-ratio: 1/1)`（與 Opening.astro 的 <source media> 同源）。
+   * 數字由 e2e（home-fallback.spec 的「海報人形與引擎 land 的外框對齊」，九個尺寸，含橫放手機與直式平板）量測：
    *   - 海報圖裡的人形外框占圖高 81%（取景 80% ＋ 光暈），所以 --poster-h ＝ 引擎人形高 ÷ 0.81。
-   *   - 桌機：人形高 ＝ 0.588 × 畫布高（畫布寬高比 ≥ 1.74，可視高在下限 3.4）；寬高比較窄時改由寬度決定，＝ 0.339 × 畫布寬。
-   *     兩者取小；人形中心在畫布寬 63% 處、畫布高 51.2% 處（畫布 ＝ 視窗扣掉外框的 inset／上／下）。
-   *   - 手機（直向）：人形高 ＝ 0.727 × 畫布寬（與視窗高無關）；中心在畫布寬 50%、畫布高 37.8% 處。
-   * --poster-x／--poster-y 是人形中心（海報盒子與視窗一樣大，百分比以視窗為準）。
+   *   - 畫布 ＝ 視窗扣掉外框的 inset／上／下；引擎的可視高有下限 3.4，所以人形高 ＝ 0.588 × 畫布高，
+   *     可視高超過下限時改由畫布寬決定（橫向 0.339、直向 0.727 × 畫布寬）；兩者取小。
+   *   - 橫向：人形中心在畫布寬 63% 處、畫布高 51.2% 處（引擎把鏡頭往左移，人形偏右）。
+   *   - 直向：中心在畫布寬 50% 處、畫布高 37.8% 處（鏡頭往下移，人形偏上）。
+   * 高度一律用視窗單位（--poster-vh：lvh，與畫布同一把尺），不用 %：橫放手機上 .opening 比視窗高，% 會跟著變大。
+   * --poster-x／--poster-y 是人形中心，量自海報盒子的左上角（盒子的上緣與視窗上緣重合）。
    */
+  --poster-vh: 100%;
   --poster-h: min(
-    0.724 * (100% - var(--frame-top) - var(--frame-bottom)),
+    0.724 * (var(--poster-vh) - var(--frame-top) - var(--frame-bottom)),
     0.4188 * (100vw - 2 * var(--frame-inset))
   );
   --poster-x: calc(var(--frame-inset) + 0.63 * (100% - 2 * var(--frame-inset)));
-  --poster-y: calc(var(--frame-top) + 0.512 * (100% - var(--frame-top) - var(--frame-bottom)));
+  --poster-y: calc(var(--frame-top) + 0.512 * (var(--poster-vh) - var(--frame-top) - var(--frame-bottom)));
   position: relative;
   isolation: isolate;
   display: grid;
   align-items: center;
   min-height: var(--stage-height);
   padding: var(--space-6) var(--home-pad);
+}
+
+@supports (height: 100lvh) {
+  .opening {
+    --poster-vh: 100lvh;
+  }
+}
+
+@media (max-aspect-ratio: 1/1) {
+  .opening {
+    --poster-h: min(
+      0.724 * (var(--poster-vh) - var(--frame-top) - var(--frame-bottom)),
+      0.899 * (100vw - 2 * var(--frame-inset))
+    );
+    --poster-x: 50%;
+    --poster-y: calc(var(--frame-top) + 0.378 * (var(--poster-vh) - var(--frame-top) - var(--frame-bottom)));
+  }
 }
 
 /* 海報（hero 靜態圖）：蓋滿整個視窗（含頁首與頁尾底下），人形的位置與大小對應引擎的取景。 */
@@ -643,9 +670,6 @@ html:not(.js) .home-rail {
 
 @media (max-width: 59.999rem) {
   .opening {
-    --poster-h: 89.9vw;
-    --poster-x: 50%;
-    --poster-y: calc(var(--frame-top) + 0.378 * (100% - var(--frame-top) - var(--frame-bottom)));
     align-items: end;
     padding-block: var(--space-5) 6rem;
   }

@@ -141,7 +141,6 @@ export async function initHome(): Promise<void> {
       canvas,
       tier,
       loader,
-      reducedMotion: false,
       debug: params.get('qi-debug') === '1',
       onContextLost: () => enterStatic('context-lost'), // RF5：靜態圖接手，DOM 內容不變
     });
@@ -153,19 +152,17 @@ export async function initHome(): Promise<void> {
   engine = stage;
   if (stage.debug) qi.debug = stage.debug;
 
-  // ── 視窗（先於第一個姿勢掛上）─────────────────────────────────
+  // ── 取景 ─────────────────────────────────────────────────────
   // prev 是「上次取景時的尺寸」，不是上一個 resize 事件的（RF1）：網址列伸縮的小抖動不取景，累計超過門檻才取景。
-  // 起點是引擎掛上當下的尺寸（這一行與 mountQiStage 之間沒有 await，與引擎量到的一致）；監聽器也在載入第一個姿勢之前就掛上，
-  // 載入途中視窗變了，引擎一樣會重新取景。
+  // 起點是引擎掛上當下的尺寸（這一行與 mountQiStage 之間沒有 await，與引擎量到的一致）。載入第一個姿勢期間視窗可能變了
+  // （那時 resize 監聽器還沒掛）：載入完成後立刻 `refit()` 一次，與掛上當時的尺寸比，超過門檻就取景。
   let fitted = { w: window.innerWidth, h: window.innerHeight };
-  window.addEventListener('resize', () => {
-    if (!alive) return;
+  const refit = (): void => {
     const next = { w: window.innerWidth, h: window.innerHeight };
-    if (viewportChanged(fitted, next)) {
-      stage.resize(canvas.clientWidth, canvas.clientHeight);
-      fitted = next;
-    }
-  });
+    if (!viewportChanged(fitted, next)) return;
+    stage.resize(canvas.clientWidth, canvas.clientHeight);
+    fitted = next;
+  };
 
   // ── 姿勢 ─────────────────────────────────────────────────────
   let requested: PoseId | null = null;
@@ -196,6 +193,7 @@ export async function initHome(): Promise<void> {
     await stage.setPose(initial, { burst: false });
     if (!alive) return; // 載入途中退回靜態圖了（context 遺失）
     setAttr('qiPose', initial);
+    refit(); // RF1 邊角：載入途中視窗變了
   } catch (error) {
     console.warn('The first pose could not be loaded; showing still images.', error);
     enterStatic('init-failed');
@@ -284,9 +282,10 @@ export async function initHome(): Promise<void> {
     }),
   );
 
-  // ── 視窗：版面位移 ───────────────────────────────────────────
+  // ── 視窗 ─────────────────────────────────────────────────────
   window.addEventListener('resize', () => {
     if (!alive) return;
+    refit();
     refreshBeats();
     schedule();
   });
@@ -300,7 +299,7 @@ export async function initHome(): Promise<void> {
   // ── 離開頁面、bfcache ────────────────────────────────────────
   window.addEventListener('pagehide', (event) => {
     if (event.persisted) return; // 進 bfcache：引擎原封不動，pageshow 回來繼續
-    shutdown(); // 真的離開：釋放引擎與 GL context
+    enterStatic('page-hide'); // 真的離開：釋放引擎與 GL context，並讓這個頁面（若又被顯示）是靜態圖，不是一張死掉的畫布
   });
   window.addEventListener('pageshow', (event) => {
     if (!event.persisted || !alive) return;

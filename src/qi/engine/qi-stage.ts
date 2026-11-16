@@ -39,7 +39,8 @@ export interface QiStageOptions {
   canvas: HTMLCanvasElement;
   tier: TierId;
   loader: ShapeLoader;
-  reducedMotion: boolean;
+  /** 減少動態：不跑模擬、不排 rAF。預設 false（首頁在減少動態時根本不掛引擎，只有開發用的 harness 會傳）。 */
+  reducedMotion?: boolean;
   /** 暴露 `stage.debug`（`?qi-debug=1`）。預設不暴露。 */
   debug?: boolean;
   /**

@@ -221,7 +221,7 @@ async function expectStaticHome(page: Page, requests: string[], reason: string):
   await expect(html(page)).toHaveAttribute('data-qi-reason', reason);
   expect(requests.filter((url) => /qi-stage/.test(url)), '沒有請求引擎 chunk').toEqual([]);
   expect(requests.filter((url) => /\.bin(\?|$)/.test(url)), '沒有請求形體檔').toEqual([]);
-  await expect(page.locator('[data-skip-intro]')).toHaveCount(0);
+  await expect(page.locator('[data-skip-intro]')).toBeHidden();
   await expect(page.locator('canvas[data-qi-canvas]')).toBeHidden();
   expect(await page.evaluate(() => (window as unknown as W).__qi.mode)).toBe('static');
 
@@ -243,6 +243,34 @@ async function expectStaticHome(page: Page, requests: string[], reason: string):
   await expect.poll(() => fist.getAttribute('src')).not.toBe(before);
   await expectStillsLoaded(page, '#courses');
   expect(await hiddenRendered(page), '切到小孩後沒有被樣式藏住的內容').toEqual([]);
+}
+
+/**
+ * 退回靜態圖後，課程、師資、預約三種入口都真的點得到（實際點擊，不是 trial）：
+ * 課程連結進課程頁、教練連結進教練頁、預約按鈕開 LINE 視窗。每一輪重新載入首頁。
+ */
+async function expectClickThrough(page: Page, baseURL: string | undefined): Promise<void> {
+  const base = basePath(baseURL);
+
+  await page.goto('./');
+  const course = page.getByRole('link', { name: /^看這門課/ }).first();
+  await course.scrollIntoViewIfNeeded();
+  await course.click();
+  await expect(page, '課程').toHaveURL(new RegExp(`${base}courses/[^/]+/$`));
+
+  await page.goto('./');
+  const coach = page.locator('#coaches [data-coach] a').first();
+  await coach.scrollIntoViewIfNeeded();
+  await coach.click();
+  await expect(page, '師資').toHaveURL(new RegExp(`${base}coaches/[^/]+/$`));
+
+  await page.goto('./');
+  const booking = page.locator('#booking a.button--solid');
+  await booking.scrollIntoViewIfNeeded();
+  await booking.click();
+  await expect(page.locator('#line-dialog'), '預約').toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#line-dialog')).toBeHidden();
 }
 
 // ── 首屏交接 ──────────────────────────────────────────────────────
@@ -281,12 +309,19 @@ for (const device of DEVICES) {
   });
 }
 
-/** 海報對齊要量的尺寸：計畫指定的兩個，另加小手機、平板與全高清（home.css 的算式在其他尺寸也要成立）。 */
+/**
+ * 海報對齊要量的尺寸：計畫指定的兩個，另加小手機、平板與全高清，以及「版面斷點（寬 60rem）與引擎取景斷點（畫布寬高比 1）對不上」的尺寸：
+ * 橫放手機（寬 < 60rem 但橫向）、900×600（同）、直式平板（寬 ≥ 60rem 但直向）。
+ */
 const ALIGN_SIZES = [
   ...DEVICES,
   { name: '小手機 360×640', viewport: { width: 360, height: 640 } },
   { name: '平板橫向 1024×768', viewport: { width: 1024, height: 768 } },
   { name: '桌機 1920×1080', viewport: { width: 1920, height: 1080 } },
+  { name: '橫放手機 844×390', viewport: { width: 844, height: 390 } },
+  { name: '橫放小手機 667×375', viewport: { width: 667, height: 375 } },
+  { name: '小筆電 900×600', viewport: { width: 900, height: 600 } },
+  { name: '直式平板 1024×1366', viewport: { width: 1024, height: 1366 } },
 ];
 
 for (const device of ALIGN_SIZES) {
@@ -396,15 +431,23 @@ test.describe('開場演一次', () => {
     await expect(skip).toBeHidden();
   });
 
-  test('Esc 略過：立刻 skipped、略過鈕收起', async ({ page }) => {
+  test('Esc 略過：引擎的開場計時歸零（uIntroT -1）、記為 skipped（不是 done）、略過鈕收起，之後也不會被演完的回呼改成 done', async ({ page }) => {
     await open(page, { intro: 'fresh' });
     await expect(html(page)).toHaveAttribute('data-qi-intro', 'playing');
     await run(page, 800);
+    const introT = () => page.evaluate(() => (window as unknown as W).__qi.debug.uniforms().uIntroT!);
+    expect(await introT(), '按 Esc 之前開場正在演').toBeGreaterThan(0.3);
+    await expect(page.locator('[data-skip-intro]')).toBeVisible();
+
     await page.keyboard.press('Escape');
     await expect(html(page)).toHaveAttribute('data-qi-intro', 'skipped');
     await expect(page.locator('[data-skip-intro]')).toBeHidden();
-    await run(page, 300);
-    await expect(html(page)).toHaveAttribute('data-qi-pose', 'land');
+    expect(await introT(), '引擎端的開場真的結束').toBe(-1);
+
+    // 原本該演完的時間點過後：狀態仍是 skipped，引擎沒有重新開演
+    await run(page, 4500);
+    await expect(html(page)).toHaveAttribute('data-qi-intro', 'skipped');
+    expect(await introT()).toBe(-1);
   });
 });
 
@@ -414,7 +457,7 @@ for (const device of DEVICES) {
   test.describe(`減少動態：${device.name}`, () => {
     test.use({ viewport: device.viewport, reducedMotion: 'reduce' });
 
-    test('靜態圖退回：不載入引擎、不請求形體檔、無略過鈕、顆粒不動、無水平外溢', async ({ page }) => {
+    test('靜態圖退回：不載入引擎、不請求形體檔、無略過鈕、顆粒不動、無水平外溢；課程、師資、預約都點得到', async ({ page, baseURL }) => {
       watch(page);
       const requests: string[] = [];
       page.on('request', (request) => requests.push(request.url()));
@@ -424,13 +467,14 @@ for (const device of DEVICES) {
       expect(await hiddenByStyle(page, 'main')).toEqual([]);
       expect(await page.locator('.grain').evaluate((el) => getComputedStyle(el).animationName), '顆粒不動').toBe('none');
       expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+      await expectClickThrough(page, baseURL);
     });
   });
 
   test.describe(`沒有 WebGL：${device.name}`, () => {
     test.use({ viewport: device.viewport });
 
-    test('同樣退回靜態圖；沒有 pageerror；所有課程連結可點', async ({ page }) => {
+    test('同樣退回靜態圖；沒有 pageerror；所有課程連結可點；課程、師資、預約都點得到', async ({ page, baseURL }) => {
       watch(page);
       await blockWebGL(page);
       const requests: string[] = [];
@@ -449,6 +493,7 @@ for (const device of DEVICES) {
       }
       await links.first().click();
       await expect(page).toHaveURL(/courses\/[^/]+\/$/);
+      await expectClickThrough(page, baseURL);
     });
   });
 }
@@ -471,7 +516,7 @@ test.describe('引擎掛不上（init-failed）', () => {
     await expect(html(page)).toHaveAttribute('data-qi-reason', 'init-failed');
     await expect(html(page)).toHaveClass(/qi-static/);
     await expect(html(page)).not.toHaveAttribute('data-qi-ready', /.*/);
-    await expect(page.locator('[data-skip-intro]')).toHaveCount(0);
+    await expect(page.locator('[data-skip-intro]')).toBeHidden();
     await expect(page.locator('.opening__poster')).toHaveCSS('opacity', '1');
     expect(log.warnings.some((w) => /The qi engine could not start/.test(w)), '掛不上要 warn').toBe(true);
     // 掛載失敗的路徑也要把 GL context 釋放掉
@@ -516,7 +561,7 @@ test.describe('RF5：context 中途遺失', () => {
     await expectStillsLoaded(page);
   });
 
-  test('開場演到一半 context 遺失：開場收尾（skipped）、略過鈕移除、連結不變', async ({ page }) => {
+  test('開場演到一半 context 遺失：開場收尾（skipped）、略過鈕收起、連結不變', async ({ page }) => {
     await open(page, { intro: 'fresh' });
     await expect(html(page)).toHaveAttribute('data-qi-intro', 'playing');
     await run(page, 1200);
@@ -525,8 +570,29 @@ test.describe('RF5：context 中途遺失', () => {
     await loseContext(page);
     await expect(html(page)).toHaveAttribute('data-qi-mode', 'static', { timeout: 1000 });
     await expect(html(page)).toHaveAttribute('data-qi-intro', 'skipped');
-    await expect(page.locator('[data-skip-intro]')).toHaveCount(0);
+    await expect(page.locator('[data-skip-intro]')).toBeHidden();
     expect((await domContent(page)).links).toEqual(before);
+  });
+
+  test('焦點正在略過鈕時 context 遺失：焦點移到 main（不掉回 body，鍵盤使用者不必從頭 Tab）、略過鈕收起', async ({ page }) => {
+    await open(page, { intro: 'fresh' });
+    await expect(html(page)).toHaveAttribute('data-qi-intro', 'playing');
+    const skip = page.locator('[data-skip-intro]');
+    for (let i = 0; i < 20; i++) {
+      await page.keyboard.press('Tab');
+      if (await skip.evaluate((el) => el === document.activeElement)) break;
+    }
+    await expect(skip).toBeFocused();
+
+    await loseContext(page);
+    await expect(html(page)).toHaveAttribute('data-qi-mode', 'static', { timeout: 1000 });
+    await expect(skip).toBeHidden();
+    await expect(page.locator('main#main')).toBeFocused();
+    // 焦點環不能蓋住整個 main（程式移焦點不該畫出外框）
+    expect(await page.locator('main#main').evaluate((el) => getComputedStyle(el).outlineStyle)).toBe('none');
+    // 接著按 Tab 仍從頁面內容往下走
+    await page.keyboard.press('Tab');
+    expect(await page.evaluate(() => document.activeElement !== document.body && document.activeElement?.closest('main') !== null)).toBe(true);
   });
 });
 
@@ -763,28 +829,52 @@ test.describe('引擎接線補強', () => {
     await expect(html(page)).toHaveAttribute('data-qi-pose', 'chengchui');
   });
 
-  test('pagehide：bfcache（persisted）保留引擎並在 pageshow 繼續；一般離開（!persisted）釋放引擎與 GL context', async ({ page }) => {
-    await open(page);
-    const dispatch = (type: 'pagehide' | 'pageshow', persisted: boolean) =>
-      page.evaluate(([name, flag]) => window.dispatchEvent(new PageTransitionEvent(name as string, { persisted: flag as boolean })), [type, persisted] as const);
-    const uTime = () => page.evaluate(() => (window as unknown as W).__qi.debug.uniforms().uTime!);
+  const dispatchPageEvent = (page: Page, type: 'pagehide' | 'pageshow', persisted: boolean) =>
+    page.evaluate(([name, flag]) => window.dispatchEvent(new PageTransitionEvent(name as string, { persisted: flag as boolean })), [type, persisted] as const);
+  const uTimeOf = (page: Page) => page.evaluate(() => (window as unknown as W).__qi.debug.uniforms().uTime!);
 
-    await dispatch('pagehide', true);
-    const t0 = await uTime();
+  test('bfcache（pagehide／pageshow persisted）：引擎保留；回來時重設時間戳與捲動（速度不暴衝）、迴圈繼續；之後 context 被收走仍退回靜態圖', async ({ page }) => {
+    await open(page);
+    const speedOf = () => page.evaluate(() => (window as unknown as W).__qi.debug.uniforms().uScrollSpeed!);
+
+    await dispatchPageEvent(page, 'pagehide', true);
+    const t0 = await uTimeOf(page);
     await run(page, 300);
-    expect(await uTime(), 'bfcache：引擎保留，時間照走').toBeGreaterThan(t0);
-    await dispatch('pageshow', true);
+    expect(await uTimeOf(page), 'bfcache：引擎保留，時間照走').toBeGreaterThan(t0);
+    await expect(html(page)).toHaveAttribute('data-qi-mode', 'webgl');
+
+    // 凍結期間捲動位置變了（瀏覽器還原捲動）：回來的第一格不能把「一大段位移 ÷ 很短的 dt」當成捲動速度
+    await scrollToY(page, 3000);
+    await dispatchPageEvent(page, 'pageshow', true);
+    await run(page, 16);
+    expect(await speedOf(), 'pageshow 重設了上一格的捲動位置').toBeLessThan(0.5);
     const f0 = await frames(page);
     await run(page, 300);
     expect(await frames(page), 'pageshow 之後迴圈繼續').toBeGreaterThan(f0);
     await expect(html(page)).toHaveAttribute('data-qi-mode', 'webgl');
 
-    await dispatch('pagehide', false);
-    const t1 = await uTime();
+    // 回來之後 context 若被瀏覽器收走，一樣退回靜態圖
+    await page.evaluate(() => document.querySelector<HTMLCanvasElement>('canvas[data-qi-canvas]')!.getContext('webgl2')!.getExtension('WEBGL_lose_context')!.loseContext());
+    await expect(html(page)).toHaveAttribute('data-qi-mode', 'static', { timeout: 1000 });
+    await expect(html(page)).toHaveAttribute('data-qi-reason', 'context-lost');
+  });
+
+  test('pagehide（!persisted，真的離開）：走 enterStatic——引擎與 GL context 釋放、不留下一張死掉的畫布（頁面若又顯示，看到的是靜態圖）', async ({ page }) => {
+    await open(page);
+    await dispatchPageEvent(page, 'pagehide', false);
+    await expect(html(page)).toHaveClass(/qi-static/);
+    await expect(html(page)).toHaveAttribute('data-qi-mode', 'static');
+    await expect(html(page)).toHaveAttribute('data-qi-reason', 'page-hide');
+    await expect(html(page)).not.toHaveAttribute('data-qi-ready', /.*/);
+    await expect(page.locator('canvas[data-qi-canvas]')).toBeHidden();
+    await expect(page.locator('.opening__poster')).toHaveCSS('opacity', '1');
+
+    const t1 = await uTimeOf(page);
     const f1 = await frames(page);
     await run(page, 1000);
-    expect(await uTime(), '一般離開：引擎已釋放，不再前進').toBe(t1);
+    expect(await uTimeOf(page), '引擎已釋放，不再前進').toBe(t1);
     expect(await frames(page), '每格迴圈也停了').toBe(f1);
     expect(await page.evaluate(() => document.querySelector<HTMLCanvasElement>('canvas[data-qi-canvas]')!.getContext('webgl2')?.isContextLost())).toBe(true);
+    await expectStillsLoaded(page);
   });
 });

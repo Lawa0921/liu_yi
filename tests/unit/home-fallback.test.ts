@@ -1,22 +1,54 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * 首頁退回靜態圖（Task 20）：`enterStatic` 只動 <html> 的 class／data 屬性、移除略過鈕，並通知引擎端停掉自己的東西。
- * 測試環境是 node，沒有 DOM，所以只給 `fallback.ts` 用到的那一點：`document.documentElement`（classList、dataset）與
- * `document.querySelectorAll('[data-skip-intro]')`。
+ * 首頁退回靜態圖（Task 20）：`enterStatic` 只動 <html> 的 class／data 屬性、收起略過鈕（焦點在上面就先移到 main），
+ * 並通知引擎端停掉自己的東西。測試環境是 node，沒有 DOM，所以只給 `fallback.ts` 用到的那一點：
+ * `document.documentElement`（classList、dataset）、`document.querySelectorAll('[data-skip-intro]')`、
+ * `document.querySelector('main')`、`document.activeElement`。
  */
 type Dataset = Record<string, string | undefined>;
 
-function fakeDocument(initial: Dataset = {}, skipButtons = 1) {
+interface FakeButton {
+  hidden: boolean;
+  contains(node: unknown): boolean;
+}
+
+function fakeDocument(initial: Dataset = {}, skipButtons = 1, focusedButton: number | null = null) {
   const classes = new Set<string>();
   const dataset: Dataset = { ...initial };
-  const removed: number[] = [];
-  const nodes = Array.from({ length: skipButtons }, (_, index) => ({ remove: () => void removed.push(index) }));
+  const buttons: FakeButton[] = Array.from({ length: skipButtons }, () => ({
+    hidden: false,
+    contains(this: FakeButton, node: unknown) {
+      return node === this;
+    },
+  }));
+  const log: string[] = []; // 動作先後：'focus-main'、'hide-0'…
+  const main = {
+    tabIndex: 0,
+    focusOptions: undefined as unknown,
+    focus(options?: unknown) {
+      main.focusOptions = options;
+      log.push(`focus-main(tabIndex=${main.tabIndex})`);
+    },
+  };
+  buttons.forEach((button, index) => {
+    let hidden = button.hidden;
+    Object.defineProperty(button, 'hidden', {
+      get: () => hidden,
+      set: (value: boolean) => {
+        hidden = value;
+        if (value) log.push(`hide-${index}`);
+      },
+    });
+  });
+  const body = {};
   const document = {
     documentElement: { classList: { add: (name: string) => void classes.add(name), contains: (name: string) => classes.has(name) }, dataset },
-    querySelectorAll: (selector: string) => (selector === '[data-skip-intro]' ? nodes : []),
+    activeElement: focusedButton === null ? body : buttons[focusedButton],
+    querySelectorAll: (selector: string) => (selector === '[data-skip-intro]' ? buttons : []),
+    querySelector: (selector: string) => (selector === 'main' ? main : null),
   };
-  return { document, classes, dataset, removed };
+  return { document, classes, dataset, buttons, main, log };
 }
 
 async function load() {
@@ -33,7 +65,7 @@ afterEach(() => {
 });
 
 describe('enterStatic', () => {
-  it('加 html.qi-static、data-qi-mode="static"、記下原因，並移除 [data-skip-intro]', async () => {
+  it('加 html.qi-static、data-qi-mode="static"、記下原因，並收起（hidden）[data-skip-intro]——不從 DOM 移除', async () => {
     const env = fakeDocument({}, 2);
     vi.stubGlobal('document', env.document);
     const { enterStatic } = await load();
@@ -41,17 +73,34 @@ describe('enterStatic', () => {
     expect(env.classes.has('qi-static')).toBe(true);
     expect(env.dataset.qiMode).toBe('static');
     expect(env.dataset.qiReason).toBe('reduced-motion');
-    expect(env.removed).toEqual([0, 1]);
+    expect(env.buttons.map((button) => button.hidden)).toEqual([true, true]);
   });
 
-  it('四種原因都收：reduced-motion、no-webgl、context-lost、init-failed', async () => {
-    for (const reason of ['reduced-motion', 'no-webgl', 'context-lost', 'init-failed'] as const) {
+  it('五種原因都收：reduced-motion、no-webgl、context-lost、init-failed、page-hide', async () => {
+    for (const reason of ['reduced-motion', 'no-webgl', 'context-lost', 'init-failed', 'page-hide'] as const) {
       const env = fakeDocument();
       vi.stubGlobal('document', env.document);
       const { enterStatic } = await load();
       enterStatic(reason);
       expect(env.dataset.qiReason, reason).toBe(reason);
     }
+  });
+
+  it('焦點正在略過鈕上：先把焦點移到 main（不掉回 body；preventScroll、tabIndex 設成 -1 才能接焦點），再收起鈕', async () => {
+    const env = fakeDocument({}, 1, 0);
+    vi.stubGlobal('document', env.document);
+    const { enterStatic } = await load();
+    enterStatic('context-lost');
+    expect(env.log).toEqual(['focus-main(tabIndex=-1)', 'hide-0']);
+    expect(env.main.focusOptions).toEqual({ preventScroll: true });
+  });
+
+  it('焦點不在略過鈕上：不動焦點', async () => {
+    const env = fakeDocument({}, 1, null);
+    vi.stubGlobal('document', env.document);
+    const { enterStatic } = await load();
+    enterStatic('context-lost');
+    expect(env.log).toEqual(['hide-0']);
   });
 
   it('引擎中途掉了：拿掉 data-qi-ready（海報才會回來），播放中的開場改成 skipped', async () => {
@@ -88,9 +137,9 @@ describe('enterStatic', () => {
     expect(env.dataset.qiReason).toBe('context-lost');
   });
 
-  it('沒有 [data-skip-intro] 也不丟錯', async () => {
+  it('沒有 [data-skip-intro]、沒有 main 也不丟錯', async () => {
     const env = fakeDocument({}, 0);
-    vi.stubGlobal('document', env.document);
+    vi.stubGlobal('document', { ...env.document, querySelector: () => null });
     const { enterStatic } = await load();
     expect(() => enterStatic('no-webgl')).not.toThrow();
   });
