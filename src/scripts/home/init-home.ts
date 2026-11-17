@@ -8,6 +8,8 @@
 //   - 退回靜態圖（Task 20，`fallback.ts`）：減少動態、沒有 WebGL2（`<head>` 的探測已加 `html.qi-static`）時根本不載入引擎；
 //     引擎掛不上、第一個姿勢載不到、WebGL context 中途遺失時，停掉迴圈、釋放舞台再退回。退回後這個檔案的處理器一律不再動作。
 //   - 離開頁面（`pagehide`、非 bfcache）釋放引擎與 GL context；bfcache 返回（`pageshow` persisted）重設時間戳後繼續。
+//   - 開場的燙金館徽（Task 24）：金屬掃光跟指標走（`crest-sheen.ts`，與引擎無關）；擦出的時機用 `html[data-qi-crest="in"]` 表示——
+//     不演開場就一載入標上，演開場則在落地的衝擊波（`playIntro` 的 `onLand`）、或開場提早收尾（略過、捲走）時標上；退回靜態圖由 CSS 直接露出。
 //   - 這個檔案會被打進首頁的腳本：程式字串與錯誤訊息只用英文（字型守門會掃 JS 裡的中文字）；也不得 import `config/copy.ts`。
 
 import { CENTER_BAND_MARGIN } from '../card-carousel';
@@ -23,6 +25,7 @@ import { resolveShapeUrl } from '../../qi/shapes/urls';
 import type { QiDebug, QiStage } from '../../qi/engine/qi-stage';
 import { currentAudience, observeAudience } from './audience-sync';
 import { readBeatRects } from './beats';
+import { initCrestSheen } from './crest-sheen';
 import { textInkRight, textInkTop } from './text-extent';
 import { enterStatic, onEnterStatic } from './fallback';
 import { introSeen, markIntroSeen } from './intro-gate';
@@ -64,6 +67,8 @@ export async function initHome(): Promise<void> {
     override: params.get('qi-tier'),
   });
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // 開場館徽的金屬掃光（Task 24）：跟指標走，與引擎無關（沒有 WebGL 的靜態圖模式照樣有）；減少動態時什麼都不掛。
+  initCrestSheen(reducedMotion);
 
   // window.__qi 與 html 屬性：先有殼，引擎掛上後才 ready。
   const qi: QiGlobal = { ready: false, frames: 0, tier, mode: 'webgl' };
@@ -123,6 +128,11 @@ export async function initHome(): Promise<void> {
   teardowns.push(() => window.removeEventListener('qi:tier', onTier));
   setAttr('qiScatter', '0.00');
   if (!willPlayIntro) setAttr('qiIntro', 'skipped');
+  // 開場館徽（Task 24）：有 JS 且引擎沒退回時，館徽預設是擦掉的（home.css），要等這個屬性才擦出來。
+  // 不演開場（再訪、帶 #hash）就一載入擦出；演開場則等落地的衝擊波（`onLand`）、或開場提早收尾（`setIntro`）。
+  // 退回靜態圖時 CSS 直接讓它一直在，不需要這個屬性。
+  const revealCrest = (): void => setAttr('qiCrest', 'in');
+  if (!willPlayIntro) revealCrest();
 
   // ── 形體載入與預取（引擎一載入完成就用得到）──────────────────────
   const loader = createShapeLoader({ fetch: fetchBytes, resolveUrl: resolveShapeUrl });
@@ -246,7 +256,10 @@ export async function initHome(): Promise<void> {
     intro = next;
     setAttr('qiIntro', next);
     if (skipButton) skipButton.hidden = next !== 'playing';
-    if (next !== 'playing') prefetchAround(locate().beat?.id ?? first);
+    if (next !== 'playing') {
+      revealCrest(); // 演完、略過、捲走：館徽（還沒擦出來的話）現在擦出
+      prefetchAround(locate().beat?.id ?? first);
+    }
   };
   /** 開場提前收尾（略過、捲走、跳段落）：不播任何特效，引擎停在 land；之後的姿勢由捲動位置決定。 */
   const endIntro = (reason: 'done' | 'skipped'): void => {
@@ -416,6 +429,9 @@ export async function initHome(): Promise<void> {
     markIntroSeen(session);
     setIntro('playing');
     stage.playIntro({
+      onLand: () => {
+        if (alive) revealCrest(); // 落地的衝擊波：館徽由下往上擦出
+      },
       onEnd: () => {
         if (intro === 'playing') setIntro('done');
       },

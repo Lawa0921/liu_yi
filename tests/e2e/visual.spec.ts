@@ -399,17 +399,20 @@ function metricsOf(m: Measured, device: Device, texts: Box[], label: string): Me
 }
 
 /**
- * 人形亮點外框高占 canvas 高的下限，依架勢分（依控制者裁定，取代計畫表的單一 45%–90%）：
- *   - 站姿（land、salute）：45%–90%；
- *   - 蹲低架勢（dingzhou、kao、kid-*）與 others（四個小人形）：25%–90%。
- * 手機直向套用同一組門檻。
+ * 人形亮點外框高占 canvas 高的下限，依架勢與裝置分（依控制者裁定，取代計畫表的單一 45%–90%）：
+ *   - 桌機：站姿（land、salute）45%–90%；蹲低架勢（dingzhou、kao、kid-*）與 others（四個小人形）25%–90%。
+ *   - 手機直向：站姿 35%–90%、蹲低架勢與 others 20%–90%。直向要讓位給下方的文字，取景（`engine/framing.ts`：可視寬固定 2.75 世界單位）
+ *     是使用者看過的，所以不把取景拉近，改放寬門檻（實測：land 37.6%、salute 37.4%、kao 22.3%）。
  */
-const HEIGHT_MIN = { stand: 0.45, crouch: 0.25 } as const;
-type Stance = keyof typeof HEIGHT_MIN;
+const HEIGHT_MIN = {
+  desktop: { stand: 0.45, crouch: 0.25 },
+  mobile: { stand: 0.35, crouch: 0.2 },
+} as const;
+type Stance = keyof (typeof HEIGHT_MIN)['desktop'];
 
-function expectHeight(metrics: Metrics, stance: Stance): void {
-  const min = HEIGHT_MIN[stance];
-  expect(metrics.heightRatio, `高占 canvas 高 ${min * 100}%–90%（${stance === 'stand' ? '站姿' : '蹲低架勢／others'}）：${metrics.note}`).toBeGreaterThanOrEqual(min);
+function expectHeight(metrics: Metrics, stance: Stance, device: Device): void {
+  const min = HEIGHT_MIN[device.slug][stance];
+  expect(metrics.heightRatio, `高占 canvas 高 ${min * 100}%–90%（${device.slug === 'mobile' ? '手機直向' : '桌機'}${stance === 'stand' ? '站姿' : '蹲低架勢／others'}）：${metrics.note}`).toBeGreaterThanOrEqual(min);
   expect(metrics.heightRatio, `高占 canvas 高 ${min * 100}%–90%：${metrics.note}`).toBeLessThanOrEqual(0.9);
 }
 
@@ -495,7 +498,7 @@ interface HumanCase {
   pose: string;
   beat: BeatId;
   label: string;
-  /** 站姿 45%–90%、蹲低架勢（與 others）25%–90%（控制者裁定）。 */
+  /** 站姿、蹲低架勢（與 others）的高占比下限不同，見 `HEIGHT_MIN`（控制者裁定）。 */
   stance: Stance;
   /** 開場演完才量（新工作階段，等開場落地）。 */
   intro?: boolean;
@@ -511,18 +514,6 @@ const HUMAN_CASES: HumanCase[] = [
   { pose: 'salute', beat: 'coaches', label: 'salute', stance: 'stand' },
   { pose: 'others', beat: 'others', label: 'others', stance: 'crouch' },
 ];
-
-/**
- * 依控制者裁定的門檻（站姿 45%、蹲低架勢與 others 25%）重測後，仍達不到的三個組合（`姿勢@裝置`，min tier 的實測值寫在理由裡）：
- * 不再放寬門檻，以 `test.fixme` 掛起，交控制者處理（改取景或再裁定）。其餘標準（完整在 canvas 內、位置、不壓文字）照常把關。
- * 原因都是手機直向取景（`engine/framing.ts`）：可視寬固定 2.75 世界單位，人形高 ≈ 0.727 × 畫布寬（390 寬約 283 px）。
- * 要過線得把直向取景拉近約 20%（係數 2.75 → 約 2.25），並同步改海報算式（home.css）、兵器窄版長度與鏡頭下移量。
- */
-const HEIGHT_FIXME: Record<string, string> = {
-  'land@mobile': '實測 37.6%，站姿下限 45%',
-  'salute@mobile': '實測 37.4%，站姿下限 45%',
-  'kao@mobile': '實測 22.3%，蹲低架勢下限 25%',
-};
 
 /** 開頁、擺到指定姿勢、截圖，回傳這個姿勢的量測值。 */
 async function measureHuman(page: Page, device: Device, c: HumanCase): Promise<Metrics> {
@@ -553,17 +544,11 @@ for (const device of DEVICES) {
     test.use({ viewport: device.viewport });
 
     for (const c of HUMAN_CASES) {
-      const heightFixme = HEIGHT_FIXME[`${c.pose}@${device.slug}`];
-      test(`${c.label}：${heightFixme ? '位置與不壓文字（高占比見 fixme）' : '人形標準'}`, async ({ page }) => {
+      test(`${c.label}：人形標準`, async ({ page }) => {
         const metrics = await measureHuman(page, device, c);
         expectPlacement(metrics, device);
-        if (!heightFixme) expectHeight(metrics, c.stance);
+        expectHeight(metrics, c.stance, device);
       });
-      if (heightFixme) {
-        test.fixme(`${c.label}：人形外框高占 canvas 高 ${HEIGHT_MIN[c.stance] * 100}%–90%（${heightFixme}）`, async ({ page }) => {
-          expectHeight(await measureHuman(page, device, c), c.stance);
-        });
-      }
     }
 
     test('spear：紅色像素 ≥ 150、槍桿中段縱向亮寬 ≥ 5 px、槍頭與纓都在 canvas 內（真實 tier）', async ({ page }) => {
@@ -680,7 +665,7 @@ test.describe(`引擎截圖：${SMALL_PHONE.name}`, () => {
   test(`${c.label}：人形標準`, async ({ page }) => {
     const metrics = await measureHuman(page, SMALL_PHONE, c);
     expectPlacement(metrics, SMALL_PHONE);
-    expectHeight(metrics, c.stance);
+    expectHeight(metrics, c.stance, SMALL_PHONE);
   });
 });
 

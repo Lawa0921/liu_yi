@@ -106,8 +106,10 @@ export interface QiStage {
    * `setPose('land')` 則不打斷它（開場本來就停在 land）。減少動態沒有效果。
    * `onEnd`（Task 19，首頁用來收起「略過」鈕）：這一次開場結束時呼叫一次——演完、被略過、被別的姿勢打斷、或形體載不到而取消；
    * 沒有演出（減少動態、已在演）時不會呼叫；`dispose` 也不呼叫。
+   * `onLand`（Task 24，首頁用來在落地衝擊波的瞬間「擦」出館徽）：開場走到落地（約 2.7 秒）的那一格呼叫一次，在 `onEnd` 之前；
+   * 落地之前就結束（略過、被打斷、形體載不到）不呼叫，沒有演出時也不呼叫。
    */
-  playIntro(opts?: { skip?: boolean; onEnd?: () => void }): void;
+  playIntro(opts?: { skip?: boolean; onEnd?: () => void; onLand?: () => void }): void;
   /**
    * 朱印在螢幕上的矩形（CSS 像素，與滑鼠座標同一個空間；首頁用來把 `.seal-hit` 定位到印上）。
    * 光點還沒聚成印就回 `null`：姿勢不是 `seal`、散開量超過 `SEAL_SCATTER_MAX`、或聚合後還沒安定滿 `SEAL_SETTLE_S`
@@ -318,6 +320,7 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
   let introExhaled = false;
   let introLanded = false;
   let introOnEnd: (() => void) | null = null; // `playIntro` 的 `onEnd`：這一次開場結束時呼叫一次
+  let introOnLand: (() => void) | null = null; // `playIntro` 的 `onLand`：這一次開場落地（衝擊波）時呼叫一次
   let sealCalm = 0; // 姿勢是 seal 且散開量夠低，已經持續幾模擬秒（`getSealRect` 的「聚合」條件）
   const impulse = { dir: new Vector3(), power: 0, mode: 0 };
   let pulses = 0;
@@ -433,6 +436,7 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
     const wasActive = introT >= 0 || introPending;
     introToken++;
     introPending = false;
+    introOnLand = null; // 還沒落地就結束：不補呼叫
     if (introT >= 0) {
       introT = -1;
       if (pose === 'lift' && shapes.has('land')) apply('land', makeTarget('land'), false);
@@ -470,6 +474,9 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
     if (state.phase === 'land' && !introLanded) {
       introLanded = true;
       land();
+      const landed = introOnLand;
+      introOnLand = null;
+      landed?.();
     }
     return state;
   };
@@ -801,6 +808,7 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
       if (!sim || introT >= 0 || introPending) return; // 減少動態沒有演出；演出中再呼叫不重來
       introPending = true;
       introOnEnd = opts?.onEnd ?? null;
+      introOnLand = opts?.onLand ?? null;
       const token = ++introToken;
       Promise.all([ensureShape('land'), ensureShape('lift')]).then(
         () => {

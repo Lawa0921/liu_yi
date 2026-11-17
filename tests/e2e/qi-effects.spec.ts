@@ -257,6 +257,41 @@ test.describe('開場結束通知 onEnd（桌機，tier=min）', () => {
     expect(await ends(page)).toEqual(['done', 'skipped', 'interrupted']);
   });
 
+  /** 落地（2.7 s）通知 onLand（Task 24：首頁用來在衝擊波的瞬間「擦」出館徽）。 */
+  test('onLand：落地那一格呼叫一次、早於 onEnd；落地前被 skip 或打斷就不呼叫', async ({ page }) => {
+    await open(page);
+    await settleLand(page);
+    const marks = () => page.evaluate(() => (window as unknown as { __marks?: string[] }).__marks ?? []);
+    const play = (tag: string) =>
+      page.evaluate((name) => {
+        const w = window as unknown as { __marks?: string[] };
+        w.__marks ??= [];
+        stageOf().playIntro({ onLand: () => w.__marks!.push(`${name}:land`), onEnd: () => w.__marks!.push(`${name}:end`) });
+      }, tag);
+
+    await play('full');
+    await run(page, 2500);
+    expect(await marks(), '2.5 s：還沒落地').toEqual([]);
+    await run(page, 400);
+    expect(await marks(), '2.9 s：已落地、還沒結束').toEqual(['full:land']);
+    await run(page, 800);
+    expect(await marks(), '演完：onLand 在 onEnd 之前，各一次').toEqual(['full:land', 'full:end']);
+    await run(page, 1000);
+    expect(await marks(), '之後不再呼叫').toEqual(['full:land', 'full:end']);
+
+    await play('skip');
+    await run(page, 1500);
+    await page.evaluate(() => stageOf().playIntro({ skip: true }));
+    await run(page, 4000);
+    expect(await marks(), '落地前 skip：只有 onEnd').toEqual(['full:land', 'full:end', 'skip:end']);
+
+    await play('cut');
+    await run(page, 1500);
+    await setPose(page, 'dingzhou');
+    await run(page, 4000);
+    expect(await marks(), '落地前被別的姿勢打斷：只有 onEnd，舊時間軸之後也不會補呼叫').toEqual(['full:land', 'full:end', 'skip:end', 'cut:end']);
+  });
+
   test('開場還在等形體載入時被別的姿勢取消：呼叫一次，之後 lift 載好也不會再呼叫', async ({ page }) => {
     await open(page);
     await setPose(page, 'land', false); // lift 還沒載過：playIntro 要等它
@@ -440,13 +475,13 @@ test.describe('大槍桿與紅纓（1440×900，tier=min）', () => {
 test.describe('減少動態', () => {
   test.use({ viewport: { width: 1280, height: 720 }, reducedMotion: 'reduce' });
 
-  test('playIntro 的 onEnd 不會被呼叫（沒有演出）', async ({ page }) => {
+  test('playIntro 的 onEnd、onLand 都不會被呼叫（沒有演出）', async ({ page }) => {
     await open(page);
     await setPose(page, 'land');
     await page.evaluate(() => {
       const w = window as unknown as { __ends?: string[] };
       w.__ends = [];
-      stageOf().playIntro({ onEnd: () => w.__ends!.push('called') });
+      stageOf().playIntro({ onEnd: () => w.__ends!.push('called'), onLand: () => w.__ends!.push('landed') });
     });
     await run(page, 1000);
     expect(await page.evaluate(() => (window as unknown as { __ends?: string[] }).__ends)).toEqual([]);

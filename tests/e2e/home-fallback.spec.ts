@@ -1,11 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import type { BeatId } from '../../src/qi/config/poses';
-import { decodeShape } from '../../src/qi/shapes/format';
 import type { QiDebug } from '../../src/qi/engine/qi-stage';
-import { hiddenByStyle, homeTitles, basePath } from './helpers';
+import { basePath, figureBoxes, hiddenByStyle, homeTitles, overlap, type Box } from './helpers';
 
 // 首頁的首屏交接、退回與無障礙（Task 20）：
 //   - 首屏：引擎 chunk 還沒到之前，海報＋h1 就是畫面（不空白）；到了之後交叉淡化、人形對得上。
@@ -307,67 +304,6 @@ for (const device of DEVICES) {
       await expect(page.locator('canvas[data-qi-canvas]')).toBeVisible();
     });
   });
-}
-
-interface Box {
-  left: number;
-  right: number;
-  top: number;
-  bottom: number;
-}
-
-/** 兩個矩形在 x、y 兩軸上各自重疊多少 px（負數＝分開）。 */
-function overlap(a: Box, b: Box): { x: number; y: number } {
-  return { x: Math.min(a.right, b.right) - Math.max(a.left, b.left), y: Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) };
-}
-
-/**
- * 首屏人形的外框（視窗座標）：
- *   - 海報：把圖解碼後取亮度 > 100 的像素外框（只剩人形與輪廓；更低的門檻會連光暈與環境煙一起算進去），再換算成視窗座標。
- *   - 引擎：land 形體的 xy 外框四角投影到螢幕。
- */
-async function figureBoxes(page: Page): Promise<{ poster: Box; engine: Box }> {
-  const land = decodeShape(new Uint8Array(readFileSync(fileURLToPath(new URL('../../src/assets/generated/qi/shapes/land.bin', import.meta.url)))));
-  const bounds = { minX: land.min[0], maxX: land.max[0], minY: land.min[1], maxY: land.max[1] };
-
-  const poster = await page.evaluate(async () => {
-    const img = document.querySelector<HTMLImageElement>('.opening__poster img')!;
-    await img.decode();
-    const canvas = document.createElement('canvas');
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
-    const context = canvas.getContext('2d')!;
-    context.drawImage(img, 0, 0);
-    const { data, width, height } = context.getImageData(0, 0, canvas.width, canvas.height);
-    let x0 = width;
-    let x1 = -1;
-    let y0 = height;
-    let y1 = -1;
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const o = (y * width + x) * 4;
-        if (0.2126 * data[o]! + 0.7152 * data[o + 1]! + 0.0722 * data[o + 2]! <= 100) continue;
-        if (x < x0) x0 = x;
-        if (x > x1) x1 = x;
-        if (y < y0) y0 = y;
-        if (y > y1) y1 = y;
-      }
-    }
-    const rect = img.getBoundingClientRect();
-    const sx = rect.width / width;
-    const sy = rect.height / height;
-    return { left: rect.left + x0 * sx, right: rect.left + (x1 + 1) * sx, top: rect.top + y0 * sy, bottom: rect.top + (y1 + 1) * sy };
-  });
-
-  const engine = await page.evaluate(({ minX, maxX, minY, maxY }) => {
-    const { project } = (window as unknown as W).__qi.debug;
-    const corners = [project(minX, minY, 0), project(maxX, minY, 0), project(minX, maxY, 0), project(maxX, maxY, 0)];
-    const xs = corners.map((c) => c.x);
-    const ys = corners.map((c) => c.y);
-    return { left: Math.min(...xs), right: Math.max(...xs), top: Math.min(...ys), bottom: Math.max(...ys) };
-  }, bounds);
-
-  return { poster, engine };
 }
 
 /**

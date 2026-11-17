@@ -1,10 +1,17 @@
 ---
-// 開場（beat: opening）：直書站名「六藝武術」、副標、靜態海報（聚合態的拳師）、略過鈕與往下捲提示。
+// 開場（beat: opening）：直書站名「六藝武術」、副標、燙金獅子館徽、靜態海報（聚合態的拳師）、略過鈕與往下捲提示。
 //
 // 海報是「光點引擎到達之前」的首屏（設計 §8.4）：建置時渲好的 WebP，寬螢幕用 hero-wide、直式螢幕用 hero-tall，
 // 高優先載入。引擎接手後交叉淡化（Task 19）；減少動態或沒有 WebGL 時它就是這一段的畫面。
 // 版面方向：橫向（寬高比 > 4:5）文字在左、光點在右；直向文字在下、光點在上（取景對應引擎的 look 位移，見 home.css）。
 // <source media> 與版面、引擎取景同一個切換點（`engine/viewport.ts` 的 `PORTRAIT_ASPECT`）。
+//
+// 館徽（Task 24，使用者要求「原本那個燙金金屬質感 logo 可以考慮整合」）：第一版首屏的獅子，這裡是透明底的金色版
+// （`scripts/crest/render-crest.ts` 由 logo_large.jpg 轉出，`npm run crest:build`），走 <Image> 輸出響應式 webp。
+// 疊兩層同一張圖：底層是燙金，上層是提亮的同一張、只露出一道掃光（CSS 漸層遮罩，位置由 scripts/home/crest-sheen.ts 隨指標寫入）。
+// 站名已有 h1，館徽純裝飾：外層 aria-hidden、圖 alt=""，不重複朗讀。進場、掃光與退回的規則在 home.css。
+import { Image } from 'astro:assets';
+import crest from '../../assets/images/crest-lion.png';
 import { SITE } from '../../lib/site';
 import { stillInfo } from '../../lib/stills';
 import { COPY } from '../../qi/config/copy';
@@ -12,6 +19,19 @@ import { PORTRAIT_ASPECT } from '../../qi/engine/viewport';
 
 const wide = stillInfo('hero-wide');
 const tall = stillInfo('hero-tall');
+// 館徽的顯示寬度由 home.css 的 --crest-w 決定（直向 4.5–7.5rem、矮的直向 4–5rem、橫向 4.5–10rem）；sizes 與它同一把尺，瀏覽器才挑得到剛好夠用的那張。
+// 線條圖的透明通道壓不小（160 寬的 webp 約 20 KB），所以寬度分得細、最大只到 288（橫向 10rem 的接近 2 倍密度）。
+const crestImage = {
+  src: crest,
+  alt: '',
+  widths: [80, 96, 128, 192, 288],
+  sizes:
+    '(max-aspect-ratio: 4/5) and (max-height: 720px) clamp(4rem, 19vw, 5rem), (max-aspect-ratio: 4/5) clamp(4.5rem, 24.5vw, 7.5rem), clamp(4.5rem, 14vh, 10rem)',
+  format: 'webp' as const,
+  quality: 70,
+  loading: 'eager' as const,
+  decoding: 'async' as const,
+};
 ---
 
 <section id="opening" class="opening" data-beat="opening" aria-labelledby="opening-title">
@@ -20,9 +40,16 @@ const tall = stillInfo('hero-tall');
     <img src={wide.src} width={wide.width} height={wide.height} alt="" fetchpriority="high" decoding="async" />
   </picture>
 
-  <div class="opening__lockup">
-    <h1 id="opening-title" class="opening__title">{SITE.shortName}</h1>
-    <p class="opening__sub">{COPY.opening.sub}</p>
+  <div class="opening__brand">
+    <div class="opening__crest" data-crest aria-hidden="true">
+      <Image {...crestImage} class="opening__crest-img" />
+      <Image {...crestImage} class="opening__crest-sheen" />
+    </div>
+
+    <div class="opening__lockup">
+      <h1 id="opening-title" class="opening__title">{SITE.shortName}</h1>
+      <p class="opening__sub">{COPY.opening.sub}</p>
+    </div>
   </div>
 
   {/* 開場動畫演出時才顯示（Task 19 接線）；沒有 JS 或沒有開場時一直是隱藏的。 */}
