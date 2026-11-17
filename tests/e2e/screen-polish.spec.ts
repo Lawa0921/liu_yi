@@ -176,14 +176,15 @@ test.describe('大槍（持械）整體外框：1440×900', () => {
   });
 
   // 小孩版（使用者：苗刀和大槍的區塊沒有小孩版）：比大人矮一截、兵器也短一些，但仍要醒目，且不壓字、不碰導覽。
-  // 實測（1440×900，extent）：小孩持刀 386×526、小孩持槍 661×296（大人苗刀 482×591、大槍 773×335）；門檻取約八成五。
+  // 實測（1440×900，extent）：小孩持刀 605×287、小孩持槍 654×297（大人苗刀 738×367、大槍 769×334）；門檻取約八成五。
+  // 苗刀第 2 輪從「直立高舉」改成低弓步前指（原本像日本劍道的架勢），外框變成又寬又矮。
   test('小孩持刀、持槍（切到小孩）：聚合後外框夠大，仍在文字右緣之右、導覽之左', async ({ page }) => {
     await open(page);
     await settlePose(page, 'weapon-b', 'miaodao');
     await page.getByRole('button', { name: '小孩' }).click();
     const rail = (await page.locator('nav.home-rail').boundingBox())!;
     for (const [beat, pose, minWidth, minHeight] of [
-      ['weapon-b', 'kid-miaodao', 330, 440],
+      ['weapon-b', 'kid-miaodao', 510, 240],
       ['weapon-c', 'kid-spear', 560, 250],
     ] as const) {
       await scrollToBeat(page, beat);

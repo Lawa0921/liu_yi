@@ -338,7 +338,9 @@ describe('renderAllStills：畫面品質（機械可驗的部分）', () => {
     expect(largestRedBlob(rasters.get('jian')!), 'jian 紅穗').toBeGreaterThan(300);
     expect(largestRedBlob(rasters.get('land')!), 'land 的火星').toBeLessThan(80);
     expect(redPixels(rasters.get('land')!), 'land 的火星總量').toBeLessThan(1500);
-    expect(redPixels(rasters.get('miaodao')!), 'miaodao 沒有紅').toBeLessThan(100);
+    // 苗刀沒有紅纓：只有人形上的零星火星（第 2 輪改成低弓步前指後，人形比較大，火星總量約 150 顆像素，仍遠小於 land 的上限，也沒有連成一塊）
+    expect(largestRedBlob(rasters.get('miaodao')!), 'miaodao 沒有紅纓').toBeLessThan(80);
+    expect(redPixels(rasters.get('miaodao')!), 'miaodao 的火星總量').toBeLessThan(1500);
   });
 
   it('朱印是朱紅色的（紅像素多，且亮部以紅為主，不是金色）', () => {
@@ -416,7 +418,7 @@ describe('renderAllStills：畫面品質（機械可驗的部分）', () => {
     expect(Math.abs(c.y - 0.5)).toBeLessThan(0.1);
   });
 
-  it('持械的人（Task 27）：亮部外框占影像寬的 45% 以上、高的 30% 以上（人加兵器，不是橫躺的一條線；實測苗刀約 50%、劍與大槍更寬）；大槍橫伸得更寬', () => {
+  it('持械的人（Task 27）：亮部外框占影像寬的 45% 以上、高的 30% 以上（人加兵器，不是橫躺的一條線；苗刀、劍與大槍都過這個門檻）；大槍橫伸得更寬', () => {
     const shares: Record<string, { w: number; h: number }> = {};
     for (const name of ['jian', 'miaodao', 'spear']) {
       const r = rasters.get(name)!;
@@ -431,10 +433,10 @@ describe('renderAllStills：畫面品質（機械可驗的部分）', () => {
       expect(share.h, `${name} 高`).toBeGreaterThanOrEqual(0.3);
       expect(share.h, `${name} 高不超出影像`).toBeLessThanOrEqual(0.95);
     }
-    // 大槍是橫著伸的：寬高比（以像素算）比劍、苗刀都大
+    // 大槍是橫著伸的：寬高比（以像素算）比劍大。苗刀第 2 輪改成低弓步前指（原本是直立高舉，像日本劍道），也是橫向的，所以不再拿它跟大槍比。
     const aspect = (name: string) => (shares[name]!.w * rasters.get(name)!.width) / (shares[name]!.h * rasters.get(name)!.height);
     expect(aspect('spear')).toBeGreaterThan(aspect('jian'));
-    expect(aspect('spear')).toBeGreaterThan(aspect('miaodao'));
+    expect(aspect('miaodao'), '苗刀是橫向的弓步前指，不是直立的一條').toBeGreaterThan(1.2);
   });
 
   it('others 是四個人形橫排：連續有亮點的欄分成 4 段（人形之間有空隙），整排占影像寬的 70% 以上、高度不到一半', () => {
