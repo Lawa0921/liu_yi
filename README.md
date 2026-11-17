@@ -100,6 +100,8 @@ npm run build:harness && npx playwright test --project=engine --workers=2  # dis
   遠景加大氣透視（霧）、前景加暗角、少量 CSS 飄塵。計算在 `lib/scene/parallax.ts`（純函式，單元測試）；全程只動 transform／opacity，passive 監聽，不用 WebGL、不載入 three 與光點引擎（`budget.spec` 量每種頁面的首屏）。
 - 課程總覽：滑過或聚焦課程卡（`data-scene-card`），人物換成該課的剪影（交叉淡化）；離開回到預設。
 - 退回：沒有 JS 時是靜態的一幕、文字完整；減少動態時不做視差、不飄塵、換人沒有轉場。
+- **推門換頁**（`styles/transition.css`）：站內換頁（跨文件）用 CSS 的 `@view-transition { navigation: auto }`——舊頁像兩扇門往中間關（0.3 s）、新頁從中間往兩邊推開（延後 0.3 s 再 0.3 s，總長 0.6 s），只動快照的 `clip-path`。
+  整組規則在 `prefers-reduced-motion: no-preference` 之內（減少動態時沒有轉場、直接換頁）；不支援 View Transitions 的瀏覽器看不懂就直接換頁、不報錯；錨點（同頁）不走轉場；首頁的入館閘門由 `<head>` 依 referrer 決定，與轉場無關。`tests/e2e/transition.spec.ts` 驗宣告與真的換頁（`pagereveal` 的 `viewTransition` 與兩段動畫）。
 
 ## 字型
 

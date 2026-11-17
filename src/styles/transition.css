@@ -1,0 +1,52 @@
+/*
+ * 推門換頁（Task 27，使用者選定「推門／捲簾轉場」）：站內換頁（跨文件）的 View Transitions。
+ *
+ * `@view-transition { navigation: auto }` 讓同源的換頁自動走轉場；舊頁與新頁各是一張快照（::view-transition-old／new(root)），
+ * 這裡把預設的交叉淡化換成兩扇門：
+ *   - 舊頁（0 → 0.3 s）：從左右兩邊往中間關，clip-path 由全開縮成中線（ease-in，門越關越快）。
+ *   - 新頁（0.3 → 0.6 s）：從中間往兩邊推開，clip-path 由中線展到全開（ease-out，門開得由快而慢）。
+ *   總長 0.6 s。兩扇門之間露出的是頁面的底色（近黑），所以看起來是黑色的門縫。
+ * 只動快照的 clip-path，不動頁面本身；不支援 View Transitions 的瀏覽器看不懂這些規則，直接換頁、不報錯。
+ * 偏好減少動態（prefers-reduced-motion: reduce）時整組規則不生效：沒有轉場、直接換頁。
+ * 錨點（同一頁內的 #錨點）不是換頁，不走轉場；上一頁、下一頁與一般連結一樣走轉場。
+ * 首頁的入館閘門由 <head> 的行內腳本依 referrer 決定（從站內其他頁來就不顯示），與轉場無關。
+ */
+
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition {
+    navigation: auto;
+  }
+
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    /* 預設是交叉淡化加 plus-lighter 疊色；這裡兩張快照各管各的（門），不疊色 */
+    mix-blend-mode: normal;
+  }
+
+  /* both：新頁的 0.3 s 延遲期間停在「門縫」（看不見），舊頁關完之後停在關上的樣子，不會彈回全開 */
+  ::view-transition-old(root) {
+    animation: 0.3s cubic-bezier(0.55, 0, 0.9, 0.5) both door-close;
+  }
+
+  ::view-transition-new(root) {
+    animation: 0.3s 0.3s cubic-bezier(0.1, 0.5, 0.45, 1) both door-open;
+  }
+}
+
+@keyframes door-close {
+  from {
+    clip-path: inset(0 0 0 0);
+  }
+  to {
+    clip-path: inset(0 50% 0 50%);
+  }
+}
+
+@keyframes door-open {
+  from {
+    clip-path: inset(0 50% 0 50%);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
