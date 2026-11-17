@@ -1,6 +1,6 @@
 ---
 // 單一教練：姓名、職稱、海報、資歷（只列海報上有的）、授課課程。
-// 教練海報只用在這一頁（設計文件 §8）。
+// 教練海報只用在這一頁（設計文件 §8）。光點層（Task 26）：抱拳（salute）的光點人形。
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import PosterFigure from '../../components/PosterFigure.astro';
 import { getPublishedCoaches, getPublishedCourses, type Coach } from '../../lib/content';
@@ -26,6 +26,7 @@ const courseNames = courses.map((course) => course.data.title).join('、');
   title={`${name}｜${role}`}
   description={courseNames ? `${name}（${role}），教授${courseNames}。` : `${name}（${role}）。`}
   ogType="article"
+  qi="coach"
 >
   <article class="section section--flush-top">
     <div class="container coach">

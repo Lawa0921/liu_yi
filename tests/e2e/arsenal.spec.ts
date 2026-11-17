@@ -1,5 +1,4 @@
 import { expect, test, type Locator, type Page } from './fixtures';
-import { trackTransfers } from './helpers';
 
 // 第二版（設計文件 §15）：3D 金屬兵器。首頁改版（氣聚成人）後，兵器台、震腳、刀光、掃光都已移除；
 // 3D 兵器只剩課程頁（中式兵器、防身兵器的子項）與課程總覽的兵器字牌。首頁的測試見 home.spec.ts。
@@ -206,16 +205,15 @@ test.describe('手機 390 寬', () => {
 test.describe('three 的載入時機', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
-  // 首頁首屏的載入量（新前提是首屏載入 three）由 budget.spec.ts 驗。
-  test('沒有 3D 的頁面（收費）完全不載入 three', async ({ page }) => {
-    const transfers = trackTransfers(page);
+  // 首頁首屏的載入量（新前提是首屏載入 three）與其他頁面的傳輸量（Task 26：全站都有光點層，控制者裁定）由 budget.spec.ts 驗。
+  // 原本的「收費頁完全不載入 three、最大的 script 不到 250 KB」前提已不成立（頁面光點層的引擎 chunk 帶著 three），改成：
+  // 沒有 3D 兵器的頁面不啟動 3D 兵器檢視器（data-three 是它設的，不是光點層）。
+  test('沒有 3D 兵器的頁面（收費）不啟動 3D 兵器檢視器', async ({ page }) => {
     await page.goto('./pricing/');
     await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
     await page.mouse.wheel(0, 400);
     await page.waitForLoadState('networkidle');
     await expect(page.locator('html')).not.toHaveAttribute('data-three', /.+/);
-    const scripts = transfers.filter((item) => item.type === 'script');
-    expect(Math.max(0, ...scripts.map((item) => item.bytes))).toBeLessThan(250_000);
     await expect(page.locator('[data-weapon3d]')).toHaveCount(0);
   });
 });

@@ -75,12 +75,24 @@ npm run build:harness && npx playwright test --project=engine --workers=2  # dis
   網址可帶 `?qi-crest-failsafe=<ms|off>` 注入開場館徽的逾時保險（測試用；預設 7 秒，閘門收起後才起算，開場一開始就解除）。
 - 課程、收費、課表與 LINE 預約一律是 DOM 文字，不只存在畫布裡。
 
+### 其他頁面的光點層
+
+- 每個非首頁的頁面也有光點（`BaseLayout` 的 `qi` 屬性，元件 `components/QiBackdrop.astro`，腳本 `scripts/qi/page.ts`，樣式 `styles/qi-page.css`）；每種頁面放什麼形體、放在哪裡在 `src/qi/config/pages.ts`：
+  課程內頁依課程的分類與對象（拳→定軸、格鬥→撐捶、兵器→劍、兒童課 `kid-*`、其他→`others`）；課程總覽是整張畫布的氣流（`flow`），滑過或聚焦課程卡才在右側欄聚成該課的姿勢；
+  師資與教練頁是抱拳（`salute`），師資總覽滑過或聚焦教練卡時脈動一下；場地是院門（`gate`，由既有的 `bg-mid-gate` 剪影走形體產線），寬螢幕往下捲時由飄散聚成門；
+  收費與課表是低亮度的竹簡（`scroll`），文字與海報圖浮在上面；404 是光點散開、慢慢聚成落地人形。
+- **版面**：桌機寬螢幕（寬 ≥ 80rem 且寬高比 ≥ 4:3，`QI_RAIL_QUERY`）光點畫布是內容右側的一欄，內容欄讓出位置、光點不在任何文字底下；其他尺寸是頁首上方的一條（隨頁面捲走，捲出視窗就暫停）；
+  竹簡與課程總覽的氣流是整張固定的背景。靜態圖（引擎到達之前、減少動態、沒有 WebGL、沒有 JS）依引擎的取景算大小（`config/still-fit.ts`、`lib/still-fit.ts`），交叉淡化時人形一樣大。
+- **引擎**：與首頁共用同一個 `mountQiStage`，取景改由「槽」決定（`engine/slot.ts`，`QiStageOptions.slot`）；兵器與合成形體縮進槽（`Layout.window`、`othersFitWindow`）。
+  首頁與各頁共用的接線（殼、退回、降級、掛載、取景、換姿勢、每格迴圈）在 `scripts/qi/host.ts`；`fallback.ts` 也搬到 `scripts/qi/`。沒有入館閘門與開場。
+- **傳輸量**：每頁首屏 ≤ 1.5 MB；three、引擎與形體等 load 事件與瀏覽器閒下來之後才載入（`budget.spec` 每種頁面各量一頁）。有 3D 兵器架的課程頁（自己有一個 WebGL context），兵器架進入視窗時頁首的光點淡出並暫停。
+
 ### 素材產線
 
 - **形體檔與靜態圖是建置產物**（`src/assets/generated/qi/`，已忽略）：`integrations/qi-assets.ts` 在建置時由入庫的剪影、兵器快照、朱印遮罩與館徽圖產生（竹簡是程序化的幾何，沒有輸入檔，所以不含任何字），輸入雜湊不變就跳過；CI 不需要 Python、OpenAI 金鑰或字型原檔。
 - **剪影**（`src/assets/silhouettes/`）：本機工具 `tools/silhouettes/{gen.py,postprocess.py,prompts.json}` 以 OpenAI Images 生成、後處理並做機械品管（金鑰只在執行時從 `%APPDATA%/agent-sprite-forge/config.json` 讀取，不得寫進 repo 或輸出）。
   提示詞、raw 雜湊、請求數與 QA 結果記在 `provenance.json`；品管閘門是 `scripts/qi/silhouette-qa.ts`（`tests/unit/silhouette-assets.test.ts` 驗已入庫的圖）。raw PNG 不入庫。
-  沒被首頁使用的剪影（`bg-*`、`mid-*`、`fg-*` 等）刻意保留。
+  沒被使用的剪影（`bg-*`、`mid-*`、`fg-*` 等）刻意保留；其中 `bg-mid-gate` 現在是場地頁院門（`gate` 形體）的來源。
 - **朱印遮罩**（`src/assets/seal/seal-liuyi.png`）：`tools/seal/render-seal.py` 以崇羲篆體渲出 512×512 的 alpha 遮罩。字型檔（CC BY-ND 3.0 TW）只放在本機 `~/.cache/liu_yi-fonts/`，絕不入庫（`tests/unit/seal-asset.test.ts` 會掃）。
 - **兵器快照**（`src/qi/data/weapons/*.geo`）：改了 `src/scripts/three/weapons.ts` 的造型後執行 `npm run qi:snapshot-weapons` 重新產生並入庫。
 - **燙金獅子館徽**（`src/assets/images/crest-lion.png`）：開場區用的透明底金色版。`scripts/crest/render-crest.ts` 由 `logo_large.jpg`（黑底米白線條）轉出——亮度當不透明度、換成古金色帶；改了來源或色帶後執行 `npm run crest:build` 重建並入庫（`tests/unit/crest-asset.test.ts` 會驗成品沒過期）。首頁用 `<Image>` 輸出響應式 webp；預約段的光點館徽（`crest` 形體）也是由這張圖依亮度取樣（亮線多取、暗面少取）。

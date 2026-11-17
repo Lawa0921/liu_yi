@@ -179,7 +179,7 @@ for (const device of DEVICES) {
 }
 
 // 其他頁面的光點層（Task 26，使用者要求「現在所有的特殊效果基本都在首頁，其他頁面也應該要做」）：
-// 全站都有光點層（控制者裁定）：每個頁面型別各一頁的預算（先涵蓋課程總覽與課程內頁；收費、課表、場地等其餘頁面接上光點層時補列，並取代下面舊的「不載入 three」斷言）：
+// 舊斷言「收費、課表、場地完全不載入 three」的前提已不成立（控制者裁定：全站都有光點層），改成每個頁面型別各一頁的預算：
 //   - 首屏（載入到 html[data-qi-ready]、尚未捲動為止；退回靜態圖時到 data-qi-mode="static"）≤ 1.5 MB（硬門檻；> 1.3 MB 只記警示）。
 //   - three 與引擎 chunk、形體延後到首屏文字之後才載入（首次內容繪製早於它們的請求）；形體只載該頁用到的（≤ 2 個）。
 //   - 整頁：每 700 px 往下捲到底（每一步等 networkidle）累計 ≤ 5 MB。
@@ -189,6 +189,12 @@ const PAGE_TYPES = [
   { name: '課程內頁（拳）', path: './courses/bajiquan/' },
   { name: '課程內頁（兵器，有 3D 兵器架）', path: './courses/chinese-weapons/' },
   { name: '課程內頁（有照片）', path: './courses/kids-martial-arts/' },
+  { name: '師資總覽', path: './coaches/' },
+  { name: '教練頁', path: './coaches/chan/' },
+  { name: '場地', path: './facility/' },
+  { name: '收費', path: './pricing/' },
+  { name: '課表', path: './schedule/' },
+  { name: '404', path: './no-such-page/' },
 ];
 
 for (const device of DEVICES) {
@@ -248,24 +254,3 @@ for (const device of DEVICES) {
     });
   }
 }
-
-// 沒有 3D 的頁面（收費、課表、場地）：不載入 three，也不載入首頁引擎與形體（沿用 arsenal.spec 的舊斷言，換成整頁都不載）。
-test.describe('沒有 3D 的頁面不載入 three', () => {
-  test.use({ viewport: { width: 1440, height: 900 } });
-
-  for (const path of ['./pricing/', './schedule/', './facility/']) {
-    test(`${path} 完全不載入 three、引擎與形體`, async ({ page }) => {
-      const transfers = trackTransfers(page);
-      await page.goto(path);
-      await scrollThrough(page);
-      await settleRecording(page);
-      expect(transfers.filter((item) => /\/three\.module[^/]*\.js(\?|$)/.test(item.url)).map((item) => item.url), 'three').toEqual([]);
-      expect(transfers.filter((item) => /\/qi-stage[^/]*\.js(\?|$)/.test(item.url)).map((item) => item.url), '引擎').toEqual([]);
-      expect(transfers.filter((item) => /\.bin(\?|$)/.test(item.url)).map((item) => item.url), '形體').toEqual([]);
-      await expect(page.locator('html')).not.toHaveAttribute('data-three', /.+/);
-      await expect(page.locator('html')).not.toHaveAttribute('data-qi-ready', /.*/);
-      const scripts = transfers.filter((item) => item.type === 'script');
-      expect(Math.max(0, ...scripts.map((item) => item.bytes)), '最大的 script 不到 250 KB').toBeLessThan(250_000);
-    });
-  }
-});

@@ -1,10 +1,11 @@
 ---
 // 找不到頁面：窗櫺底紋上一個大大的「無」字。
+// 光點層（Task 26）：光點散開、慢慢聚成落地的人形（掌風照樣可以吹散）。
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { url } from '../lib/url';
 ---
 
-<BaseLayout title="找不到頁面" description="這個網址沒有內容。" noindex>
+<BaseLayout title="找不到頁面" description="這個網址沒有內容。" noindex qi="lost">
   <section class="lost">
     <span class="lattice lost__lattice" aria-hidden="true"></span>
     <p class="lost__glyph" aria-hidden="true">無</p>
@@ -81,5 +82,16 @@ import { url } from '../lib/url';
     margin: var(--space-5) 0 0;
     padding: 0;
     list-style: none;
+  }
+
+  /* 光點層在頁首上方的一條（窄螢幕；寬螢幕在右側欄，見 styles/qi-page.css）：「無」字縮小、整段扣掉那一條的高度，按鈕不被擠出首屏。 */
+  @media not all and (min-width: 80rem) and (min-aspect-ratio: 4/3) {
+    .lost {
+      min-height: calc(var(--stage-height) * 0.9 - var(--qi-band-h));
+    }
+
+    .lost__glyph {
+      font-size: clamp(7rem, 20vh, 14rem);
+    }
   }
 </style>

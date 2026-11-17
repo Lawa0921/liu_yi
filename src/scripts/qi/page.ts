@@ -22,11 +22,39 @@ const PREFETCH_DELAY_MS = 2500;
 /** 時間聚合：載入後先讓氣流飄這麼久（秒）才要求形體。 */
 const GATHER_DELAY = 0.4;
 
+/** 首次內容繪製（文字出現）之後 resolve；量不到（不支援、逾時 3 秒）也 resolve，引擎不會因此永遠不來。 */
+function firstContentfulPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    if (performance.getEntriesByName('first-contentful-paint').length > 0) {
+      resolve();
+      return;
+    }
+    let timer = 0;
+    const observer = new PerformanceObserver((list) => {
+      if (list.getEntriesByName('first-contentful-paint').length === 0) return;
+      observer.disconnect();
+      clearTimeout(timer);
+      resolve();
+    });
+    try {
+      observer.observe({ type: 'paint', buffered: true });
+    } catch {
+      resolve(); // 這個瀏覽器不報 paint 計時
+      return;
+    }
+    timer = window.setTimeout(() => {
+      observer.disconnect();
+      resolve();
+    }, 3000);
+  });
+}
+
 /**
- * 首屏的文字與靜態圖先出來：等 load 事件、再等瀏覽器閒下來，才載入 three、引擎與形體（每頁首屏預算 1.5 MB；`budget.spec` 量「首次內容繪製早於它們的請求」）。
- * 靜態圖與內容不依賴這一步，所以引擎晚一點到只是交叉淡化晚一點。
+ * 首屏的文字與靜態圖先出來：等首次內容繪製、load 事件、再等瀏覽器閒下來，才載入 three、引擎與形體
+ * （每頁首屏預算 1.5 MB；`budget.spec` 量「首次內容繪製早於它們的請求」）。靜態圖與內容不依賴這一步，所以引擎晚一點到只是交叉淡化晚一點。
  */
 async function afterFirstScreen(): Promise<void> {
+  await firstContentfulPaint();
   if (document.readyState !== 'complete') await new Promise<void>((resolve) => window.addEventListener('load', () => resolve(), { once: true }));
   await new Promise<void>((resolve) => {
     if ('requestIdleCallback' in window) window.requestIdleCallback(() => resolve(), { timeout: 1000 });
@@ -34,11 +62,19 @@ async function afterFirstScreen(): Promise<void> {
   });
 }
 
-function measureSlot(canvas: HTMLCanvasElement, target: HTMLElement): SlotBox | undefined {
+/** 頁尾把槽壓縮到至少這麼高（px）：再矮就縮成一點點了，寧可讓頁尾蓋住一小角。 */
+const MIN_SLOT_PX = 60;
+
+/**
+ * 槽在畫布上的矩形。`limit` 是槽的下緣不得超過的視窗座標（頁尾的上緣）：頁尾在 main 外面、有不透明的底，捲到底時蓋在固定的右側欄上，
+ * 光點只用頁尾之上的部分（槽被壓縮、光點隨頁尾升起而縮小上移），不被蓋住。
+ */
+function measureSlot(canvas: HTMLCanvasElement, target: HTMLElement, limit?: number): SlotBox | undefined {
   const box = target.getBoundingClientRect();
   if (!(box.width >= 1) || !(box.height >= 1)) return undefined; // display:none 或還沒有版面
   const origin = canvas.getBoundingClientRect();
-  return { x: box.left - origin.left, y: box.top - origin.top, w: box.width, h: box.height };
+  const height = limit === undefined ? box.height : Math.max(Math.min(box.height, limit - box.top), MIN_SLOT_PX);
+  return { x: box.left - origin.left, y: box.top - origin.top, w: box.width, h: height };
 }
 
 /**
@@ -104,8 +140,11 @@ export async function initQiPage(): Promise<void> {
 
   const rail = matchMedia(QI_RAIL_QUERY);
   const slotElement = backdrop.querySelector<HTMLElement>('[data-qi-slot]') ?? canvas;
+  // 頁尾的上緣（視窗座標）：只有槽在右側欄（寬螢幕的 rail 頁、課程總覽的右側欄槽）才受它限制；頁首上方的一條與整張畫布不受影響
+  const footer = document.querySelector<HTMLElement>('.site-footer');
+  const footerLimit = (): number | undefined => (footer && rail.matches && (spec.canvas === 'rail' || spec.slot === 'rail') ? footer.getBoundingClientRect().top : undefined);
 
-  if (!(await host.mount({ slot: { box: () => measureSlot(canvas, slotElement), world: spec.world } }))) return; // 掛不上：host 已退回靜態圖
+  if (!(await host.mount({ slot: { box: () => measureSlot(canvas, slotElement, footerLimit()), world: spec.world } }))) return; // 掛不上：host 已退回靜態圖
   const stage = host.stage;
 
   // 課程總覽的氣流沒有形體；其他頁面一開始就是各自的姿勢（場地、404 先在氣流裡，晚一點才聚）
@@ -137,6 +176,7 @@ export async function initQiPage(): Promise<void> {
     if (!host.alive()) return;
     const paused = offscreen || rack;
     stage.setActive(!paused);
+    if (!paused) stage.reframe(); // 暫停期間頁尾可能動過（tick 在暫停中不取景），恢復時對準現在的槽
     if (rack) backdrop.dataset.qiPaused = 'rack';
     else if (offscreen) backdrop.dataset.qiPaused = 'offscreen';
     else delete backdrop.dataset.qiPaused;
@@ -170,6 +210,7 @@ export async function initQiPage(): Promise<void> {
   const startedAt = performance.now();
   let formed = gather !== 'time'; // time：過一小段才要求形體（先讓氣流飄一下）
   let lastScatter = -1;
+  let lastSqueeze = -1;
   const tick = (): void => {
     let scatter = 0;
     if (gather === 'time') {
@@ -183,6 +224,13 @@ export async function initQiPage(): Promise<void> {
       scatter = gatherByScroll(window.scrollY, window.innerHeight, document.documentElement.scrollHeight - window.innerHeight);
     }
     stage.setScatter(scatter);
+    // 頁尾升進槽的範圍：每當頁尾的上緣移動（只算它在槽內的部分）就重新取景（只動相機，便宜）；暫停中（捲出視窗、兵器架）不做
+    const limit = footerLimit();
+    const squeeze = limit === undefined ? -1 : Math.round(Math.min(limit, slotElement.getBoundingClientRect().bottom));
+    if (squeeze !== lastSqueeze) {
+      lastSqueeze = squeeze;
+      if (!offscreen && !rack) stage.reframe();
+    }
     if (scatter !== lastScatter) {
       lastScatter = scatter;
       host.setAttr('qiScatter', scatter.toFixed(2));

@@ -1,5 +1,5 @@
 ---
-// 師資總覽。
+// 師資總覽。光點層（Task 26）：抱拳（salute）的光點人形；滑過或聚焦教練卡時光點脈動一下。
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import CoachCard from '../../components/CoachCard.astro';
 import Plaque from '../../components/Plaque.astro';
@@ -8,7 +8,7 @@ import { getPublishedCoaches } from '../../lib/content';
 const coaches = await getPublishedCoaches();
 ---
 
-<BaseLayout title="師資" description="六藝武術工作室的教練：詹前賢總教練、猴子館長、LISA、歐文。">
+<BaseLayout title="師資" description="六藝武術工作室的教練：詹前賢總教練、猴子館長、LISA、歐文。" qi="coaches">
   <section class="section section--flush-top" aria-labelledby="page-title">
     <div class="container">
       <div class="page-head">
