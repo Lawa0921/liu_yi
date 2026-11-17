@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import sharp from 'sharp';
 import type { QiDebug } from '../../src/qi/engine/qi-stage';
+import { CREST_FAILSAFE_MS } from '../../src/scripts/home/crest-sheen';
 import { figureBoxes, overlap, totalBytes, trackTransfers, type Box } from './helpers';
 
 // 首頁開場的燙金獅子館徽（Task 24；使用者要求「原本那個燙金金屬質感 logo 可以考慮整合」）：
@@ -51,7 +52,15 @@ interface OpenOptions {
 async function open(page: Page, options: OpenOptions = {}): Promise<void> {
   watch(page);
   if (options.intro !== 'fresh') await page.addInitScript(() => sessionStorage.setItem('liuyi:qi-intro', '1'));
-  if (options.clock) await page.clock.install({ time: T0 });
+  if (options.clock) {
+    await page.clock.install({ time: T0 });
+    // pauseAt(T1) 會一口氣跳過一小時、把到期的計時器全部觸發，包括館徽的逾時保險；時間軸測試要看的是「不靠逾時」的行為，
+    // 所以把那一個計時器吞掉（逾時保險自己有專門的測試，用真時鐘）。
+    await page.addInitScript((ms) => {
+      const original = window.setTimeout;
+      window.setTimeout = ((handler: TimerHandler, delay?: number, ...rest: unknown[]) => (delay === ms ? 0 : original(handler, delay, ...rest))) as typeof window.setTimeout;
+    }, CREST_FAILSAFE_MS);
+  }
   await page.goto(HOME);
   await expect(html(page)).toHaveAttribute('data-qi-ready', 'true', READY);
   if (options.clock) await page.clock.pauseAt(T1);
@@ -97,12 +106,15 @@ async function crestLuma(page: Page): Promise<number> {
   for (let i = 0; i < info.width * info.height; i++) sum += 0.2126 * data[i * 3]! + 0.7152 * data[i * 3 + 1]! + 0.0722 * data[i * 3 + 2]!;
   return sum / (info.width * info.height);
 }
-/** 館徽的 clip-path 是 inset(上 右 下 左)：回傳「上」的百分比（100 ＝ 整個擦掉、0 ＝ 完全露出；瀏覽器序列化成 inset(100% 0px 0px)、inset(0% 0px 0px)）。 */
+/** 館徽的 clip-path 是 inset(上 右 下 左)：回傳「上」的百分比（100 ＝ 整個擦掉、0 ＝ 完全露出，含沒有 clip-path；瀏覽器序列化成 inset(100% 0px 0px)、inset(0% 0px 0px)、none）。 */
 const clipTop = (page: Page) =>
   crestOf(page).evaluate((el) => {
+    if (getComputedStyle(el).clipPath === 'none') return 0;
     const match = /^inset\(\s*([\d.]+)(%|px)/.exec(getComputedStyle(el).clipPath);
     return match ? (match[2] === '%' ? Number(match[1]) : Number(match[1]) > 0 ? 100 : 0) : -1;
   });
+/** 館徽上正在跑的動畫名稱（含子元素）。 */
+const crestAnimations = (page: Page) => crestOf(page).evaluate((el) => el.getAnimations({ subtree: true }).map((a) => (a as CSSAnimation).animationName));
 const LUMA_VISIBLE = 40; // 實測：有館徽約 60（金色線條占約 25%）
 const LUMA_HIDDEN = 28; // 實測：沒有館徽約 20（黑底、顆粒與環境煙）
 
@@ -400,41 +412,109 @@ test.describe('進場：開場演出時在落地的衝擊波擦出', () => {
     expect(landedAt, '落地（2.7 s）那一格出現').toBeGreaterThanOrEqual(2.7);
     expect(landedAt).toBeLessThan(3.0);
     await expect(html(page)).toHaveAttribute('data-qi-intro', 'playing'); // 衝擊波在演、開場還沒結束（3.4 s）
-    expect(await crestOf(page).evaluate((el) => el.getAnimations().map((a) => (a as CSSAnimation).animationName))).toContain('crest-wipe');
+    expect(await crestAnimations(page), '落地這條路徑才有擦出與閃光').toEqual(expect.arrayContaining(['crest-wipe', 'crest-flash']));
 
     await settleAnimations(page); // 擦出 0.9 秒（真實時間）
     expect(await clipTop(page), '擦出完成').toBe(0);
     expect(await crestLuma(page), '截圖上看得到館徽').toBeGreaterThan(LUMA_VISIBLE);
+
+    await run(page, 1000); // 開場演完（done）：不能把 'in' 改成別的值而打斷擦出
+    await expect(html(page)).toHaveAttribute('data-qi-intro', 'done');
+    await expect(html(page)).toHaveAttribute('data-qi-crest', 'in');
   });
 
-  test('落地之前按 Esc 略過：館徽立刻擦出（不等落地）', async ({ page }) => {
+  test('落地之前按 Esc 略過：館徽直接顯示終態（不等落地、不跑擦出動畫）', async ({ page }) => {
     await open(page, { intro: 'fresh', clock: true });
     await expect(html(page)).toHaveAttribute('data-qi-intro', 'playing');
     await run(page, 500);
     await expect(html(page)).not.toHaveAttribute('data-qi-crest', /.*/);
     await page.keyboard.press('Escape');
     await expect(html(page)).toHaveAttribute('data-qi-intro', 'skipped');
-    await expect(html(page)).toHaveAttribute('data-qi-crest', 'in');
-    await settleAnimations(page);
-    expect(await crestLuma(page)).toBeGreaterThan(LUMA_VISIBLE);
+    await expect(html(page)).toHaveAttribute('data-qi-crest', 'shown');
+    expect(await crestAnimations(page), '沒有擦出與閃光').not.toEqual(expect.arrayContaining(['crest-wipe']));
+    expect(await crestAnimations(page)).not.toEqual(expect.arrayContaining(['crest-flash']));
+    expect(await clipTop(page), '一標上就是完整的').toBe(0);
+    expect(await crestLuma(page), '不用等任何動畫').toBeGreaterThan(LUMA_VISIBLE);
   });
 
-  test('落地之前捲走（RF2）：開場收尾、館徽擦出', async ({ page }) => {
+  test('落地之前捲走（RF2）：開場收尾、館徽直接顯示終態', async ({ page }) => {
     await open(page, { intro: 'fresh', clock: true });
     await expect(html(page)).toHaveAttribute('data-qi-intro', 'playing');
     await page.evaluate(() => window.scrollTo(0, 500));
     await run(page, 300);
     await expect(html(page)).toHaveAttribute('data-qi-intro', 'done');
-    await expect(html(page)).toHaveAttribute('data-qi-crest', 'in');
+    await expect(html(page)).toHaveAttribute('data-qi-crest', 'shown');
+    expect(await crestAnimations(page), '沒有擦出與閃光').not.toEqual(expect.arrayContaining(['crest-wipe']));
+    expect(await clipTop(page)).toBe(0);
   });
 
-  test('再訪（這個工作階段看過開場）：不演開場，一載入就擦出、之後是終態', async ({ page }) => {
+  test('再訪（這個工作階段看過開場）：不演開場，館徽一載入就是終態、沒有擦出動畫', async ({ page }) => {
     await open(page, { intro: 'seen' });
     await expect(html(page)).toHaveAttribute('data-qi-intro', 'skipped');
-    await expect(html(page)).toHaveAttribute('data-qi-crest', 'in');
-    await settleAnimations(page);
+    await expect(html(page)).toHaveAttribute('data-qi-crest', 'shown');
+    expect(await crestAnimations(page), '沒有擦出與閃光').not.toEqual(expect.arrayContaining(['crest-wipe']));
+    expect(await crestAnimations(page)).not.toEqual(expect.arrayContaining(['crest-flash']));
     expect(await clipTop(page)).toBe(0);
-    expect(await crestLuma(page)).toBeGreaterThan(LUMA_VISIBLE);
+    expect(await crestLuma(page), '不用等任何動畫').toBeGreaterThan(LUMA_VISIBLE);
+  });
+
+  test('再訪：首繪時就是完整可見——首頁腳本還沒載入（被扣住）也一樣，不靠任何腳本', async ({ page }) => {
+    watch(page);
+    await page.addInitScript(() => sessionStorage.setItem('liuyi:qi-intro', '1'));
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+      setTimeout(resolve, 30_000);
+    });
+    await page.route(/index\.astro_astro_type_script_index_0_lang\.[^/]+\.js/, async (route) => {
+      await gate;
+      await route.continue();
+    });
+    try {
+      await page.goto(HOME, { waitUntil: 'commit' });
+      await page.waitForSelector('.opening__crest-img', { state: 'attached' });
+      await expect(html(page), '首頁腳本確實還沒跑').not.toHaveAttribute('data-qi-ready', /.*/);
+      await expect(html(page), '首繪前的行內腳本就標好了').toHaveAttribute('data-qi-crest', 'shown');
+      await expect
+        .poll(() => page.evaluate(() => [...document.querySelectorAll<HTMLImageElement>('.opening__crest img')].every((img) => img.complete && img.naturalWidth > 0)))
+        .toBe(true);
+      expect(await crestAnimations(page)).not.toEqual(expect.arrayContaining(['crest-wipe']));
+      expect(await clipTop(page)).toBe(0);
+      expect(await crestLuma(page), '腳本沒載入時館徽就看得到').toBeGreaterThan(LUMA_VISIBLE);
+    } finally {
+      release();
+    }
+  });
+
+  test('引擎與形體載入卡住（.bin 永遠不回應）：館徽約 7 秒後以終態強制露出，8 秒內可見', async ({ page }) => {
+    watch(page);
+    await page.route(/\.bin(\?|$)/, () => {
+      // 不回應、不放行：請求一直掛著
+    });
+    const startedAt = Date.now();
+    await page.goto(HOME);
+    expect(await clipTop(page), '一開始（有 JS、引擎還沒好）是擦掉的').toBe(100);
+    await expect(html(page)).not.toHaveAttribute('data-qi-ready', /.*/);
+    await expect.poll(() => crestLuma(page), { timeout: 8000, intervals: [250], message: '8 秒內館徽要可見' }).toBeGreaterThan(LUMA_VISIBLE);
+    expect(Date.now() - startedAt, '不是更早就出現（確實是逾時保險）').toBeGreaterThan(CREST_FAILSAFE_MS - 1500);
+    await expect(html(page)).toHaveAttribute('data-qi-crest', 'shown');
+    expect(await crestAnimations(page), '強制露出沒有擦出動畫').not.toEqual(expect.arrayContaining(['crest-wipe']));
+    await expect(html(page)).not.toHaveAttribute('data-qi-ready', /.*/); // 引擎到最後都沒好
+  });
+
+  test('開場演到一半 WebGL context 遺失：退回靜態圖，館徽立刻露出終態（不擦出）', async ({ page }) => {
+    await open(page, { intro: 'fresh', clock: true });
+    await expect(html(page)).toHaveAttribute('data-qi-intro', 'playing');
+    await run(page, 1200);
+    expect(await clipTop(page), '還沒落地：擦掉').toBe(100);
+    await page.evaluate(() => {
+      document.querySelector<HTMLCanvasElement>('canvas[data-qi-canvas]')!.getContext('webgl2')!.getExtension('WEBGL_lose_context')!.loseContext();
+    });
+    await expect(html(page)).toHaveAttribute('data-qi-mode', 'static', { timeout: 1000 });
+    await expect(html(page)).toHaveAttribute('data-qi-reason', 'context-lost');
+    expect(await clipTop(page), '退回靜態圖：館徽露出').toBe(0);
+    expect(await crestAnimations(page), '沒有擦出與閃光').not.toEqual(expect.arrayContaining(['crest-wipe']));
+    expect(await crestLuma(page), '截圖上看得到館徽').toBeGreaterThan(LUMA_VISIBLE);
   });
 
   test('引擎掛不上（沒有 WebGL）：退回靜態圖，館徽不等任何事件、一直在', async ({ page }) => {
@@ -473,6 +553,12 @@ for (const device of [
     test('館徽的圖是 webp、只下載一張（掃光層與底層共用）、小於 ' + device.limit / 1024 + ' KB', async ({ page }) => {
       const transfers = trackTransfers(page);
       await open(page);
+      // 館徽的圖是 loading=lazy（不顯示的尺寸才不會下載），但引擎 ready 時它已經載好了：不讓首屏變慢
+      expect(
+        await page.evaluate(() => [...document.querySelectorAll<HTMLImageElement>('.opening__crest img')].map((img) => img.complete && img.naturalWidth > 0)),
+        '引擎 ready 時兩層圖都已載入',
+      ).toEqual([true, true]);
+      expect(await page.evaluate(() => [...document.querySelectorAll<HTMLImageElement>('.opening__crest img')].map((img) => img.loading)), '首頁腳本一開始就把顯示的館徽圖改成 eager（不等引擎吃重時才有空檔的 lazy）').toEqual(['eager', 'eager']);
       await page.waitForLoadState('networkidle');
       const crest = transfers.filter((item) => /crest-lion[^/]*\.webp(\?|$)/.test(item.url));
       expect(crest.map((item) => item.url), '館徽的圖').toHaveLength(1);
@@ -480,6 +566,26 @@ for (const device of [
       test.info().annotations.push({ type: 'crest-bytes', description: `${totalBytes(crest)} B（${crest[0]!.url.split('/').pop()}）` });
       const loaded = await page.evaluate(() => [...document.querySelectorAll<HTMLImageElement>('.opening__crest img')].map((img) => img.currentSrc));
       expect(new Set(loaded).size, '兩層挑到同一個候選').toBe(1);
+    });
+  });
+}
+
+// 館徽不顯示的尺寸（display:none）：圖是 loading=lazy，不顯示就不下載——不為看不到的東西付傳輸量
+for (const size of [
+  { name: '小筆電 900×600', width: 900, height: 600 },
+  { name: '橫放手機 844×390', width: 844, height: 390 },
+  { name: '舊手機 320×568', width: 320, height: 568 },
+]) {
+  test.describe(`傳輸量：館徽不顯示的尺寸 ${size.name}`, () => {
+    test.use({ viewport: { width: size.width, height: size.height } });
+
+    test('沒有占位、不下載館徽的圖', async ({ page }) => {
+      const transfers = trackTransfers(page);
+      await open(page);
+      await page.waitForLoadState('networkidle');
+      expect(await crestBox(page), '館徽沒有占位').toBeNull();
+      expect(await page.evaluate(() => [...document.querySelectorAll<HTMLImageElement>('.opening__crest img')].map((img) => img.loading)), '沒有占位的維持 lazy').toEqual(['lazy', 'lazy']);
+      expect(transfers.filter((item) => /crest-lion/.test(item.url)).map((item) => item.url), '沒有下載館徽的圖').toEqual([]);
     });
   });
 }

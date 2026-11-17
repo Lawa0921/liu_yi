@@ -8,8 +8,8 @@
 //   - 退回靜態圖（Task 20，`fallback.ts`）：減少動態、沒有 WebGL2（`<head>` 的探測已加 `html.qi-static`）時根本不載入引擎；
 //     引擎掛不上、第一個姿勢載不到、WebGL context 中途遺失時，停掉迴圈、釋放舞台再退回。退回後這個檔案的處理器一律不再動作。
 //   - 離開頁面（`pagehide`、非 bfcache）釋放引擎與 GL context；bfcache 返回（`pageshow` persisted）重設時間戳後繼續。
-//   - 開場的燙金館徽（Task 24）：金屬掃光跟指標走（`crest-sheen.ts`，與引擎無關）；擦出的時機用 `html[data-qi-crest="in"]` 表示——
-//     不演開場就一載入標上，演開場則在落地的衝擊波（`playIntro` 的 `onLand`）、或開場提早收尾（略過、捲走）時標上；退回靜態圖由 CSS 直接露出。
+//   - 開場的燙金館徽（Task 24）：金屬掃光跟指標走（`crest-sheen.ts`，與引擎無關）；露出的時機用 `html[data-qi-crest]` 表示——
+//     `in`（落地的衝擊波，`playIntro` 的 `onLand`）才有擦出動畫；`shown`（再訪、略過、Esc、捲走、逾時保險）直接顯示終態；退回靜態圖由 CSS 直接露出。
 //   - 這個檔案會被打進首頁的腳本：程式字串與錯誤訊息只用英文（字型守門會掃 JS 裡的中文字）；也不得 import `config/copy.ts`。
 
 import { CENTER_BAND_MARGIN } from '../card-carousel';
@@ -25,7 +25,7 @@ import { resolveShapeUrl } from '../../qi/shapes/urls';
 import type { QiDebug, QiStage } from '../../qi/engine/qi-stage';
 import { currentAudience, observeAudience } from './audience-sync';
 import { readBeatRects } from './beats';
-import { initCrestSheen } from './crest-sheen';
+import { CREST_FAILSAFE_MS, initCrestSheen, loadCrestNow } from './crest-sheen';
 import { textInkRight, textInkTop } from './text-extent';
 import { enterStatic, onEnterStatic } from './fallback';
 import { introSeen, markIntroSeen } from './intro-gate';
@@ -69,6 +69,7 @@ export async function initHome(): Promise<void> {
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   // 開場館徽的金屬掃光（Task 24）：跟指標走，與引擎無關（沒有 WebGL 的靜態圖模式照樣有）；減少動態時什麼都不掛。
   initCrestSheen(reducedMotion);
+  loadCrestNow(); // 館徽的圖是 lazy（不顯示的尺寸不下載）；顯示的尺寸一開始就載，不等引擎吃重時才有空檔的延後載入
 
   // window.__qi 與 html 屬性：先有殼，引擎掛上後才 ready。
   const qi: QiGlobal = { ready: false, frames: 0, tier, mode: 'webgl' };
@@ -128,11 +129,20 @@ export async function initHome(): Promise<void> {
   teardowns.push(() => window.removeEventListener('qi:tier', onTier));
   setAttr('qiScatter', '0.00');
   if (!willPlayIntro) setAttr('qiIntro', 'skipped');
-  // 開場館徽（Task 24）：有 JS 且引擎沒退回時，館徽預設是擦掉的（home.css），要等這個屬性才擦出來。
-  // 不演開場（再訪、帶 #hash）就一載入擦出；演開場則等落地的衝擊波（`onLand`）、或開場提早收尾（`setIntro`）。
+  // 開場館徽（Task 24）：有 JS 且引擎沒退回時，館徽預設是擦掉的（home.css），要等這個屬性才露出——
+  //   'in'    ＝ 落地的衝擊波（`onLand`）：由下往上擦出、閃一下（只有這一條路徑有動畫）；
+  //   'shown' ＝ 直接顯示終態、沒有動畫：不演開場（再訪；首繪前的行內腳本就標了，帶 #hash 進站在這裡標）、開場提早收尾（略過、Esc、捲走）、
+  //             演完但沒落地過，以及引擎或形體載入卡住時的逾時保險。
+  // 先到先得：已經標過就不改——落地擦出到一半不能被改成 'shown' 打斷，逾時之後遲來的落地也不能讓已露出的館徽再擦一次。
   // 退回靜態圖時 CSS 直接讓它一直在，不需要這個屬性。
-  const revealCrest = (): void => setAttr('qiCrest', 'in');
-  if (!willPlayIntro) revealCrest();
+  let crestTimer: ReturnType<typeof setTimeout> | undefined;
+  const revealCrest = (mode: 'in' | 'shown'): void => {
+    clearTimeout(crestTimer);
+    if (root.dataset.qiCrest !== undefined) return;
+    setAttr('qiCrest', mode);
+  };
+  if (!willPlayIntro) revealCrest('shown');
+  else crestTimer = setTimeout(() => revealCrest('shown'), CREST_FAILSAFE_MS); // 引擎或形體卡住時，館徽不能永遠不見
 
   // ── 形體載入與預取（引擎一載入完成就用得到）──────────────────────
   const loader = createShapeLoader({ fetch: fetchBytes, resolveUrl: resolveShapeUrl });
@@ -257,7 +267,7 @@ export async function initHome(): Promise<void> {
     setAttr('qiIntro', next);
     if (skipButton) skipButton.hidden = next !== 'playing';
     if (next !== 'playing') {
-      revealCrest(); // 演完、略過、捲走：館徽（還沒擦出來的話）現在擦出
+      revealCrest('shown'); // 演完、略過、捲走：館徽（還沒露出的話）直接顯示終態，不跑擦出動畫
       prefetchAround(locate().beat?.id ?? first);
     }
   };
@@ -430,7 +440,7 @@ export async function initHome(): Promise<void> {
     setIntro('playing');
     stage.playIntro({
       onLand: () => {
-        if (alive) revealCrest(); // 落地的衝擊波：館徽由下往上擦出
+        if (alive) revealCrest('in'); // 落地的衝擊波：館徽由下往上擦出
       },
       onEnd: () => {
         if (intro === 'playing') setIntro('done');

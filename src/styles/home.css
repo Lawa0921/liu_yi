@@ -276,8 +276,9 @@ html[data-qi-ready] .opening__poster {
     animation: none;
   }
 
-  /* 進場：開場演出時在落地的瞬間（html[data-qi-crest]，init-home.ts 標）由下往上擦出、並閃一下；略過、再訪不演時一載入就擦出。
-   * 這之前（有 JS、引擎沒退回）是擦掉的；退回靜態圖、沒有 JS、減少動態都沒有這條，館徽一直在。 */
+  /* 進場：只有開場演出時落地的瞬間（html[data-qi-crest="in"]，init-home.ts 標）才由下往上擦出、並閃一下；
+   * 其餘情況（html[data-qi-crest="shown"]：再訪、略過、Esc、捲走、逾時保險）直接顯示終態，沒有動畫。
+   * 屬性還沒標之前（有 JS、引擎沒退回）是擦掉的；退回靜態圖、沒有 JS、減少動態都沒有這條，館徽一直在。 */
   html.js:not(.qi-static):not([data-qi-crest]) .opening__crest {
     clip-path: inset(100% 0 0 0);
   }

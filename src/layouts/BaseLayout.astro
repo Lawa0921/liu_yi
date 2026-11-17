@@ -66,7 +66,9 @@ const favicon = await getImage({ src: logoEmblem, width: 96, height: 96, fit: 'c
 
     {/* 首次繪製前執行：標記有 JS，並還原上次選的「大人｜小孩」，避免卡片閃一下。
         首頁另外在這裡判定要不要退回靜態圖（html.qi-static）：偏好減少動態，或取不到 WebGL2。靜態圖要不要顯示只由 CSS 決定，
-        所以必須在首繪前定案，不能等光點引擎的腳本載入（決定 D20）。其他頁面不探測（建立 WebGL context 有成本）。 */}
+        所以必須在首繪前定案，不能等光點引擎的腳本載入（決定 D20）。其他頁面不探測（建立 WebGL context 有成本）。
+        同一處也標開場館徽：這個工作階段已看過開場（再訪）就不會演，館徽一開始就直接顯示終態（html[data-qi-crest="shown"]，不擦出；home.css），
+        不等腳本；鍵要與 scripts/home/intro-gate.ts 的 INTRO_STORAGE_KEY 一致（tests/unit/home-crest.test.ts 守住）。 */}
     <script is:inline data-probe-engine={home ? '' : undefined}>
       (function () {
         var root = document.documentElement;
@@ -97,6 +99,9 @@ const favicon = await getImage({ src: logoEmblem, width: 96, height: 96, fit: 'c
             still = true;
           }
           if (still) root.classList.add('qi-static');
+          try {
+            if (window.sessionStorage.getItem('liuyi:qi-intro') === '1') root.dataset.qiCrest = 'shown';
+          } catch (e) {}
         }
       })();
     </script>

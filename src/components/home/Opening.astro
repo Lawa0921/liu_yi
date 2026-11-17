@@ -29,7 +29,9 @@ const crestImage = {
     '(max-aspect-ratio: 4/5) and (max-height: 720px) clamp(4rem, 19vw, 5rem), (max-aspect-ratio: 4/5) clamp(4.5rem, 24.5vw, 7.5rem), clamp(4.5rem, 14vh, 10rem)',
   format: 'webp' as const,
   quality: 70,
-  loading: 'eager' as const,
+  // lazy：館徽 display:none 的尺寸（太矮的橫向、太窄的直向）就不下載。顯示的尺寸由首頁腳本一開始就改成 eager（crest-sheen.ts 的 loadCrestNow），
+  // 不等瀏覽器的延後載入——引擎吃重時那個機制會晚到，首屏的館徽就會比引擎 ready 還晚（home-crest.spec 守住）。
+  loading: 'lazy' as const,
   decoding: 'async' as const,
 };
 ---
