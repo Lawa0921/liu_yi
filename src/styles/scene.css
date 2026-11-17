@@ -1,0 +1,333 @@
+/*
+ * 子頁頁首的剪影立體場景（Task 27）。標記在 src/components/Scene.astro，配對表在 src/lib/scene/config.ts，視差在 src/scripts/scene.ts。
+ *
+ * 由後到前（z 的順序就是 DOM 的順序）：
+ *   天空與霧（.scene__sky）→ 遠景屋脊（far，最淡、最慢）→ 地平線的霧（.scene__mist）→ 中景器物（mid）→ 地面（.scene__floor）
+ *   → 人物（subject，邊緣有逆光）→ 飄塵（.scene__dust）→ 前景（fg，最暗、最快、貼著邊緣框住畫面）→ 暗角（.scene__vignette）。
+ * 深度感：越遠越淡（黑色剪影在亮霧上的不透明度：遠 0.34、中 0.7、人物與前景 1）、越遠越慢（捲動視差與滑鼠微傾，scripts/scene.ts，
+ * 只動 transform）。遠景加大氣透視（霧蓋在遠景上），前景加輕微暗角。
+ *
+ * 大小：場景高 --scene-h；--u 是「原圖 1 px 對到的長度」（--scene-h ÷ 1850：站著的成人剪影約高 1180 px，約占場景高的 64%），
+ * 每張圖用 --nw／--nh（原圖像素，Scene.astro 內嵌）乘 --u，所以不同素材之間的比例一致（小孩比大人矮、蹲姿比站姿矮）。
+ *
+ * 文字不被擋：場景在內容上方、不與任何文字重疊（版面上是 <main> 的第一個區塊）。沒有 JS 時是靜態的一幕；減少動態時不飄塵、不做視差。
+ */
+
+.scene {
+  --scene-h: clamp(16rem, 50svh, 33rem);
+  --u: calc(var(--scene-h) / 1850);
+  /* 地面線離場景底部的距離 */
+  --floor: 17%;
+  --mid-x: 30%;
+  --subject-x: 58%;
+  /* 霧與天空的顏色（暖灰，取自米白 --paper-300）：越靠近地平線越亮，剪影才有東西可以襯 */
+  --haze: 201 189 163;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  pointer-events: none;
+  height: var(--scene-h);
+  margin-bottom: var(--space-3);
+  /* 場景獨立繪製：捲動時只重繪自己 */
+  contain: layout paint;
+  /* 下緣淡出到底色，與頁面內容接起來 */
+  -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 86%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 0, #000 86%, transparent 100%);
+}
+
+.scene[data-scene-mirrored] {
+  --mid-x: 67%;
+  --subject-x: 36%;
+}
+
+@media (max-width: 47.99rem) {
+  .scene {
+    --scene-h: clamp(14rem, 45svh, 24rem);
+    --mid-x: 30%;
+    --subject-x: 66%;
+  }
+
+  .scene[data-scene-mirrored] {
+    --mid-x: 70%;
+    --subject-x: 34%;
+  }
+}
+
+.scene__sky,
+.scene__mist,
+.scene__floor,
+.scene__vignette,
+.scene__dust {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* 天空：上緣是底色，往地平線漸亮的暖灰霧，人物背後再亮一塊（逆光的背景） */
+.scene__sky {
+  background:
+    radial-gradient(ellipse 46% 62% at var(--subject-x) 66%, rgb(var(--haze) / 0.34), transparent 72%),
+    linear-gradient(to bottom, var(--color-bg) 0%, rgb(var(--haze) / 0.1) 38%, rgb(var(--haze) / 0.3) 70%, rgb(var(--haze) / 0.12) 100%);
+}
+
+/* 地平線的霧：蓋在遠景底部（大氣透視：越遠越淡越近背景色），在中景後面 */
+.scene__mist {
+  background: linear-gradient(to top, transparent 0, transparent var(--floor), rgb(var(--haze) / 0.3) calc(var(--floor) + 8%), transparent 62%);
+}
+
+/* 地面：地平線以下是暗暖灰，往下漸深回到底色；人物的腳站在這裡，前景的石階（近黑）也襯得出來 */
+.scene__floor {
+  background: linear-gradient(
+    to bottom,
+    transparent calc(100% - var(--floor) - 3%),
+    rgb(var(--haze) / 0.1) calc(100% - var(--floor) + 1%),
+    rgb(var(--haze) / 0.045) calc(100% - var(--floor) / 2),
+    var(--color-bg) 100%
+  );
+}
+
+.scene__vignette {
+  background: radial-gradient(ellipse 80% 90% at 50% 52%, transparent 52%, rgb(0 0 0 / 0.55) 100%);
+}
+
+/* ── 層（視差的位移掛在這一層 div 上；圖本身只管位置與大小）─────────── */
+
+.scene__layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.scene__img {
+  position: absolute;
+  display: block;
+  max-width: none;
+  height: auto;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* 遠景：整排屋脊橫跨畫面，最淡 */
+.scene__layer--far .scene__img {
+  left: 50%;
+  bottom: calc(var(--floor) + 5%);
+  width: max(112%, 62rem);
+  opacity: 0.34;
+  transform: translateX(-50%) scaleX(var(--flip, 1));
+}
+
+/* 中景：器物，比人物淡一階 */
+.scene__layer--mid .scene__img {
+  left: var(--mid-x);
+  bottom: calc(var(--floor) + 1%);
+  height: calc(var(--nh) * var(--u) * var(--k, 1.2));
+  width: auto;
+  opacity: 0.7;
+  transform: translateX(-50%) scaleX(var(--flip, 1));
+}
+
+.scene__img[data-asset='bg-mid-gate'] {
+  --k: 1.55;
+}
+.scene__img[data-asset='bg-mid-rack'] {
+  --k: 1.1;
+}
+.scene__img[data-asset='mid-banner'] {
+  --k: 1.15;
+}
+.scene__img[data-asset='mid-drum'] {
+  --k: 0.85;
+}
+.scene__img[data-asset='mid-dummy'] {
+  --k: 0.85;
+}
+.scene__img[data-asset='mid-stonelock'] {
+  --k: 1;
+}
+
+/* 人物：近黑，邊緣一圈細的逆光（讓黑色剪影在暗處也看得出輪廓） */
+.scene__layer--subject .scene__img {
+  left: var(--subject-x);
+  bottom: calc(var(--floor) - 1.5%);
+  height: calc(var(--nh) * var(--u));
+  width: auto;
+  transform: translateX(-50%) scaleX(var(--flip, 1));
+  filter: drop-shadow(0 0 1px rgb(236 214 160 / 0.6)) drop-shadow(0 0 10px rgb(var(--haze) / 0.12));
+}
+
+/* 場地的主體是石鎖（不是人形） */
+.scene__layer--subject .scene__img[data-asset^='mid-'] {
+  height: calc(var(--nh) * var(--u) * 1.3);
+}
+
+@media (max-width: 47.99rem) {
+  .scene__layer--subject .scene__img[data-asset^='mid-'] {
+    height: calc(var(--nh) * var(--u) * 0.95);
+  }
+}
+
+/* 課程總覽的換人：預設只有一張可見，其餘透明；滑過或聚焦課程卡時換 .is-active（交叉淡化） */
+.scene[data-scene-swap] .scene__layer--subject .scene__img {
+  opacity: 0;
+  transition: opacity 0.5s var(--ease-out);
+}
+
+.scene__layer--subject .scene__img.is-active,
+.scene[data-scene-swap] .scene__layer--subject .scene__img.is-active {
+  opacity: 1;
+}
+
+/* ── 前景：最暗、最快，貼著邊緣框住畫面（不進文字區）─────────────── */
+
+.scene__layer--fg .scene__img {
+  opacity: 1;
+  transform: scaleX(var(--flip, 1));
+  /* 近黑的前景貼在暗處也要看得出輪廓：邊緣一圈很淡的逆光 */
+  filter: drop-shadow(0 0 1px rgb(236 214 160 / 0.3));
+}
+
+/* 簷角掛在上緣的一角：不翻轉在右、翻轉在左（人物在 58% 處，簷角寬 30%，不壓到人物） */
+.scene__img[data-asset='fg-eave'] {
+  top: -2%;
+  right: -2%;
+  width: min(30%, 28rem);
+}
+
+.scene__img[data-asset='fg-eave'][data-flip='-1'] {
+  right: auto;
+  left: -2%;
+}
+
+.scene__img[data-asset='fg-pillars'] {
+  left: 0;
+  top: -3%;
+  width: 100%;
+  transform-origin: center;
+}
+
+/* 窗櫺：貼著左緣的一角，內側漸隱（近景失焦的味道） */
+.scene__img[data-asset='fg-lattice'] {
+  left: -5%;
+  bottom: -12%;
+  width: min(30%, 26rem);
+  -webkit-mask-image: linear-gradient(to right, #000 45%, transparent 100%);
+  mask-image: linear-gradient(to right, #000 45%, transparent 100%);
+}
+
+.scene__img[data-asset='fg-lattice'][data-flip='-1'] {
+  left: auto;
+  right: -5%;
+}
+
+/* 石階：貼著下緣的一側 */
+.scene__img[data-asset='fg-steps'] {
+  left: -3%;
+  bottom: -4%;
+  width: min(56%, 52rem);
+}
+
+.scene__img[data-asset='fg-steps'][data-flip='-1'] {
+  left: auto;
+  right: -3%;
+}
+
+.scene__img[data-asset='fg-rack-close'] {
+  left: -3%;
+  bottom: -8%;
+  width: clamp(14rem, 46%, 42rem);
+  height: auto;
+}
+
+.scene__img[data-asset='fg-rack-close'][data-flip='-1'] {
+  left: auto;
+  right: -3%;
+}
+
+/* ── 飄塵（少量 CSS 微光；只動 transform 與 opacity，減少動態時不顯示）─── */
+
+.scene__dust i {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: rgb(236 214 160 / 0.55);
+  opacity: 0;
+}
+
+.scene__dust i:nth-child(1) { left: 12%; top: 58%; }
+.scene__dust i:nth-child(2) { left: 22%; top: 36%; width: 2px; height: 2px; }
+.scene__dust i:nth-child(3) { left: 31%; top: 68%; }
+.scene__dust i:nth-child(4) { left: 44%; top: 42%; width: 2px; height: 2px; }
+.scene__dust i:nth-child(5) { left: 53%; top: 62%; }
+.scene__dust i:nth-child(6) { left: 61%; top: 30%; width: 4px; height: 4px; }
+.scene__dust i:nth-child(7) { left: 72%; top: 54%; width: 2px; height: 2px; }
+.scene__dust i:nth-child(8) { left: 81%; top: 40%; }
+.scene__dust i:nth-child(9) { left: 88%; top: 66%; width: 2px; height: 2px; }
+.scene__dust i:nth-child(10) { left: 94%; top: 34%; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .scene__dust i {
+    animation: scene-dust 9s ease-in-out infinite;
+  }
+
+  .scene__dust i:nth-child(2n) {
+    animation-duration: 12s;
+    animation-delay: -4s;
+  }
+
+  .scene__dust i:nth-child(3n) {
+    animation-duration: 15s;
+    animation-delay: -7s;
+  }
+}
+
+@keyframes scene-dust {
+  0%,
+  100% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0);
+  }
+  40% {
+    opacity: 0.85;
+  }
+  70% {
+    opacity: 0.4;
+    transform: translate3d(14px, -22px, 0);
+  }
+}
+
+/* 減少動態：不飄塵（上面的動畫只在 no-preference 才掛），塵點也不要停在畫面上 */
+@media (prefers-reduced-motion: reduce) {
+  .scene__dust {
+    display: none;
+  }
+
+  .scene[data-scene-swap] .scene__layer--subject .scene__img {
+    transition: none;
+  }
+}
+
+/* ── 有場景的頁面：頁首的版面往上收（場景已占掉首屏的上半，標題要在首屏內）──────── */
+
+main[data-has-scene] .page-head {
+  padding-top: var(--space-5);
+}
+
+main[data-has-scene] .course-head {
+  min-height: 0;
+  padding-top: var(--space-5);
+}
+
+main[data-has-scene] .coach {
+  padding-top: var(--space-4);
+}
+
+main[data-has-scene] .lost {
+  min-height: 0;
+  padding-block: var(--space-5) var(--space-7);
+}
+
+main[data-has-scene] .lost__glyph {
+  font-size: clamp(5rem, 15vh, 9.5rem);
+}

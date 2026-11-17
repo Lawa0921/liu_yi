@@ -6,12 +6,19 @@ import CourseCard from '../../components/CourseCard.astro';
 import Plaque from '../../components/Plaque.astro';
 import { getPublishedCourses } from '../../lib/content';
 import { otherCourses } from '../../lib/courses';
+import { PAGE_SCENES, sceneForCourse } from '../../lib/scene/config';
 
 const courses = await getPublishedCourses();
 const others = otherCourses(courses);
+// 頁首的剪影場景（Task 27）：預設是站樁的人物；滑過或聚焦課程卡時換成該課的剪影（卡片的 data-scene-card），所以把每門課的人物都放進場景。
+const scene = {
+  kind: 'courses',
+  spec: PAGE_SCENES.courses,
+  swap: courses.map((course) => sceneForCourse({ id: course.id, ...course.data }).subject.asset),
+};
 ---
 
-<BaseLayout title="課程" description="六藝武術工作室的課程：大人與小孩各有兵器、拳術、格鬥三門課，另有巴西柔術與核心瑜珈。">
+<BaseLayout title="課程" description="六藝武術工作室的課程：大人與小孩各有兵器、拳術、格鬥三門課，另有巴西柔術與核心瑜珈。" scene={scene}>
   <section class="section section--flush-top" aria-labelledby="page-title">
     <div class="container">
       <div class="page-head">

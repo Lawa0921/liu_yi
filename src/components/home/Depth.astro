@@ -1,0 +1,38 @@
+---
+// 首頁的景深層（Task 27，使用者要求「前中後遠景的效果沒有出現」）：光點拳師照舊，後面加遠景屋脊與中景（院門、兵器架…，依段落換），前面加框在畫面邊緣的前景簷角。
+//
+//   - 後面那一組（`.depth`）固定在視窗、在光點畫布底下（z-index: -1）：天空與霧、遠景屋脊（最淡最慢）、中景器物。中景有五種，依目前的段落交叉淡化
+//     （`MID_BY_BEAT`：開場與拳是院門、格鬥是石鎖、兵器三段是兵器架、其他課程是鼓、師資與收費是旗、預約回到院門），腳本 `scripts/home/depth.ts` 設 `data-depth-mid`。
+//   - 前面那一組（`.depth-fg`）固定在視窗角落，在光點畫布之上、文字之下（不會遮住文字；角落的位置也不壓到光點主體，e2e 量）。
+//   - 兩組都隨捲動進度位移（遠景最小、前景最大、方向相反；`lib/scene/parallax.ts` 的 `homeShift`）；減少動態時不位移。
+//   - 全程 aria-hidden、不接收指標事件、不進無障礙樹。沒有 JS 時是靜態的（預設中景是院門）。
+// 注意：開場的靜態海報（hero）是不透明的底，海報還在時（引擎到達之前）蓋住這一層，引擎接手、海報淡出後景深層才露出——所以首屏與退回靜態圖時看到的是原本的畫面。
+import '../../styles/depth.css';
+import { sceneImage } from '../../lib/scene/assets';
+import { HOME_DEPTH } from '../../lib/scene/config';
+
+const far = sceneImage(HOME_DEPTH.far.asset);
+const mids = Object.entries(HOME_DEPTH.mids).map(([key, layer]) => ({ key, ...sceneImage(layer.asset) }));
+const fg = HOME_DEPTH.fg.map((layer) => ({ ...sceneImage(layer.asset), flip: layer.flip ? -1 : 1 }));
+---
+
+<div class="depth" data-depth data-depth-mid="gate" aria-hidden="true">
+  <div class="depth__sky"></div>
+  <div class="depth__layer" data-depth-layer="far">
+    <img class="depth__img" data-asset={far.asset} src={far.src} width={far.width} height={far.height} alt="" decoding="async" style={`--nw:${far.width};--nh:${far.height}`} />
+  </div>
+  <div class="depth__mist"></div>
+  <div class="depth__layer" data-depth-layer="mid">
+    {mids.map((mid) => (
+      <img class="depth__img" data-mid={mid.key} data-asset={mid.asset} src={mid.src} width={mid.width} height={mid.height} alt="" decoding="async" style={`--nw:${mid.width};--nh:${mid.height}`} />
+    ))}
+  </div>
+  <div class="depth__floor"></div>
+</div>
+<div class="depth-fg" data-depth aria-hidden="true">
+  <div class="depth__layer" data-depth-layer="fg">
+    {fg.map((layer) => (
+      <img class="depth__img" data-asset={layer.asset} src={layer.src} width={layer.width} height={layer.height} alt="" decoding="async" data-flip={layer.flip} style={`--nw:${layer.width};--nh:${layer.height};--flip:${layer.flip}`} />
+    ))}
+  </div>
+</div>

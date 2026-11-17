@@ -7,6 +7,8 @@ import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
 import LineDialog from '../components/LineDialog.astro';
 import PosterDialog from '../components/PosterDialog.astro';
+import Scene from '../components/Scene.astro';
+import type { SceneSpec } from '../lib/scene/config';
 import Frame from '../components/Frame.astro';
 import { AUDIENCE_STORAGE_KEY } from '../lib/audience';
 import { SITE } from '../lib/site';
@@ -24,9 +26,14 @@ interface Props {
   noindex?: boolean;
   /** 只有首頁傳：<main> 標上 data-home，首頁專用的樣式與腳本以它為界。 */
   home?: boolean;
+  /**
+   * 子頁頁首的剪影立體場景（Task 27）：傳了就在 <main> 的最前面輸出 `Scene`（內容的 DOM 順序不變）。`kind` 是頁面種類（`data-scene`），
+   * `spec` 是配對表給這一頁的四層（`lib/scene/config.ts`），`swap` 是課程總覽滑過課程卡時要換上的人物素材。首頁不傳（有自己的景深層）。
+   */
+  scene?: { kind: string; spec: SceneSpec; swap?: string[] };
 }
 
-const { title, description = SITE.description, ogImage = logoLarge, ogType = 'website', noindex = false, home = false } = Astro.props;
+const { title, description = SITE.description, ogImage = logoLarge, ogType = 'website', noindex = false, home = false, scene } = Astro.props;
 
 const fullTitle = title ? `${title}｜${SITE.name}` : `${SITE.name}｜${SITE.tagline}`;
 const canonical = new URL(Astro.url.pathname, Astro.site).href;
@@ -127,7 +134,8 @@ const favicon = await getImage({ src: logoEmblem, width: 96, height: 96, fit: 'c
   <body>
     <a class="skip-link" href="#main">跳到主要內容</a>
     <Header />
-    <main id="main" data-home={home ? '' : undefined}>
+    <main id="main" data-home={home ? '' : undefined} data-has-scene={scene ? '' : undefined}>
+      {scene && <Scene {...scene} />}
       <slot />
     </main>
     <Footer />

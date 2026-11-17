@@ -1,0 +1,172 @@
+/*
+ * 首頁的景深層（Task 27）的版面。標記在 src/components/home/Depth.astro，位移與換中景在 src/scripts/home/depth.ts，配對在 src/lib/scene/config.ts。
+ *
+ * 後面那一組（.depth）：固定在視窗（與光點畫布同一個矩形，高度用 lvh：網址列伸縮時不跟著變）、z-index: -1，在光點畫布底下。
+ *   由後到前：天空與霧 → 遠景屋脊（最淡）→ 地平線的霧 → 中景（五種器物疊在同一處，依段落交叉淡化）→ 地面。
+ *   「地平線」（--horizon，離矩形底部的距離）對到光點人形的腳底（橫向版面約 20%，直向版面人形在上方約 42%），人物站在院子裡的感覺才對。
+ * 前面那一組（.depth-fg）：固定在同一個矩形，z-index: 0（在光點畫布之後、在 [data-beat] 的文字之下），簷角掛在右上角，
+ *   位置避開光點主體（e2e 量過）、也不在任何文字底下。
+ * 大小：每張圖用原圖像素（--nw／--nh，Depth.astro 內嵌）乘 100cqh / 1850（矩形高），比例與子頁的場景一致。
+ */
+
+.depth,
+.depth-fg {
+  position: fixed;
+  inset: var(--frame-top) var(--frame-inset) auto;
+  width: calc(100% - 2 * var(--frame-inset));
+  height: calc(100% - var(--frame-top) - var(--frame-bottom));
+  overflow: hidden;
+  pointer-events: none;
+  container-type: size;
+}
+
+@supports (height: 100lvh) {
+  .depth,
+  .depth-fg {
+    height: calc(100lvh - var(--frame-top) - var(--frame-bottom));
+  }
+}
+
+.depth {
+  z-index: -1;
+  --horizon: 20%;
+  --figure-x: 63%;
+  --haze: 201 189 163;
+}
+
+.depth-fg {
+  z-index: 0;
+}
+
+@media (max-aspect-ratio: 4/5) {
+  .depth {
+    --horizon: 42%;
+    --figure-x: 50%;
+  }
+}
+
+.depth__sky,
+.depth__mist,
+.depth__floor {
+  position: absolute;
+  inset: 0;
+}
+
+/* 天空：上緣的暮色、地平線的亮霧、人形背後一塊柔光（比子頁淡很多：光點才是主角） */
+.depth__sky {
+  background:
+    radial-gradient(ellipse 34% 52% at var(--figure-x) calc(100% - var(--horizon) - 18%), rgb(var(--haze) / 0.12), transparent 70%),
+    linear-gradient(
+      to bottom,
+      rgb(var(--haze) / 0.085) 0%,
+      rgb(var(--haze) / 0.035) 45%,
+      rgb(var(--haze) / 0.12) calc(100% - var(--horizon)),
+      transparent 100%
+    );
+}
+
+.depth__mist {
+  background: linear-gradient(
+    to top,
+    transparent calc(var(--horizon) - 2%),
+    rgb(var(--haze) / 0.12) calc(var(--horizon) + 5%),
+    transparent calc(var(--horizon) + 30%)
+  );
+}
+
+.depth__floor {
+  background: linear-gradient(to bottom, transparent calc(100% - var(--horizon)), rgb(0 0 0 / 0.4) 100%);
+}
+
+.depth__layer {
+  position: absolute;
+  inset: 0;
+  will-change: transform;
+}
+
+.depth__img {
+  position: absolute;
+  display: block;
+  max-width: none;
+  height: auto;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* 遠景：整排屋脊橫跨畫面，最淡 */
+.depth__layer[data-depth-layer='far'] .depth__img {
+  left: 50%;
+  bottom: calc(var(--horizon) + 1%);
+  width: max(104%, 58rem);
+  opacity: 0.3;
+  transform: translateX(-50%);
+}
+
+/* 中景：五種器物疊在人形後面，只有目前段落的那一種看得見（交叉淡化） */
+.depth__layer[data-depth-layer='mid'] .depth__img {
+  left: var(--figure-x);
+  bottom: calc(var(--horizon) - 0.5%);
+  height: calc(var(--nh) * 100cqh / 1850 * var(--k, 1.2));
+  width: auto;
+  opacity: 0;
+  transform: translateX(-50%);
+  transition: opacity 0.9s var(--ease-out);
+}
+
+.depth__img[data-mid='gate'] {
+  --k: 1.7;
+}
+.depth__img[data-mid='rack'] {
+  --k: 1.35;
+}
+.depth__img[data-mid='drum'] {
+  --k: 1.1;
+}
+.depth__img[data-mid='banner'] {
+  --k: 1.35;
+}
+.depth__img[data-mid='stonelock'] {
+  --k: 1.2;
+}
+
+.depth[data-depth-mid='gate'] .depth__img[data-mid='gate'],
+.depth[data-depth-mid='rack'] .depth__img[data-mid='rack'],
+.depth[data-depth-mid='drum'] .depth__img[data-mid='drum'],
+.depth[data-depth-mid='banner'] .depth__img[data-mid='banner'],
+.depth[data-depth-mid='stonelock'] .depth__img[data-mid='stonelock'] {
+  opacity: 0.5;
+}
+
+/* 前景：簷角掛在右上角；邊緣一圈很淡的逆光，近黑的簷角在暗處也看得出輪廓 */
+.depth-fg .depth__img {
+  filter: drop-shadow(0 0 1px rgb(236 214 160 / 0.32));
+}
+
+.depth-fg .depth__img[data-asset='fg-eave'] {
+  top: -4%;
+  right: -2%;
+  width: min(22cqw, 22rem);
+  transform: scaleX(var(--flip, 1));
+}
+
+@media (max-aspect-ratio: 4/5) {
+  /* 直向：頁首右上有大人／小孩切換鈕，簷角往下縮小、避開它（也不進人形所在的中央） */
+  .depth-fg .depth__img[data-asset='fg-eave'] {
+    top: 11%;
+    width: min(26cqw, 14rem);
+  }
+
+  .depth__layer[data-depth-layer='far'] .depth__img {
+    width: max(150%, 40rem);
+  }
+
+  .depth__layer[data-depth-layer='mid'] .depth__img {
+    --k: 0.8;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .depth__layer[data-depth-layer='mid'] .depth__img {
+    transition: none;
+  }
+}

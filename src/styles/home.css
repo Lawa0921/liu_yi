@@ -44,6 +44,11 @@
   z-index: 0;
   display: block;
   pointer-events: none;
+  /*
+   * 景深層（Task 27，styles/depth.css）的遠景與中景在畫布後面：光點是加色的光（黑底上加亮），所以畫布用 screen 疊在景深層上——
+   * 黑的地方透出後面的屋脊與院門，亮的地方還是光點本來的顏色。畫布本身是不透明的黑底，不必動引擎的著色器。
+   */
+  mix-blend-mode: screen;
 }
 
 @supports (height: 100lvh) {

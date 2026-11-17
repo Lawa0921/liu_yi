@@ -75,16 +75,31 @@ npm run build:harness && npx playwright test --project=engine --workers=2  # dis
   網址可帶 `?qi-crest-failsafe=<ms|off>` 注入開場館徽的逾時保險（測試用；預設 7 秒，閘門收起後才起算，開場一開始就解除）。
 - 課程、收費、課表與 LINE 預約一律是 DOM 文字，不只存在畫布裡。
 
+- **景深層**（Task 27）：光點拳師後面有遠景屋脊與中景（院門、兵器架、鼓、旗、石鎖，依段落交叉淡化，`MID_BY_BEAT`），前面有框在右上角的簷角；
+  標記在 `components/home/Depth.astro`、樣式 `styles/depth.css`、接線 `scripts/home/depth.ts`，配對在 `lib/scene/config.ts`。光點畫布用 `mix-blend-mode: screen` 疊在景深層上（黑的地方透出後面的層，不必動引擎的著色器），
+  前景在畫布之上、文字之下（不遮字；簷角的位置避開光點主體，`tests/e2e/home-depth.spec.ts` 量）。遠景、中景、前景隨整頁捲動進度位移（遠景最小、前景最大、方向相反，只動 transform）；減少動態時不位移。
+  開場的靜態海報是不透明的底，引擎接手、海報淡出之後景深層才露出。
+
 ### 素材產線
 
 - **形體檔與靜態圖是建置產物**（`src/assets/generated/qi/`，已忽略）：`integrations/qi-assets.ts` 在建置時由入庫的剪影、兵器快照、朱印遮罩與館徽圖產生（竹簡是程序化的幾何，沒有輸入檔，所以不含任何字），輸入雜湊不變就跳過；CI 不需要 Python、OpenAI 金鑰或字型原檔。
 - **剪影**（`src/assets/silhouettes/`）：本機工具 `tools/silhouettes/{gen.py,postprocess.py,prompts.json}` 以 OpenAI Images 生成、後處理並做機械品管（金鑰只在執行時從 `%APPDATA%/agent-sprite-forge/config.json` 讀取，不得寫進 repo 或輸出）。
   提示詞、raw 雜湊、請求數與 QA 結果記在 `provenance.json`；品管閘門是 `scripts/qi/silhouette-qa.ts`（`tests/unit/silhouette-assets.test.ts` 驗已入庫的圖）。raw PNG 不入庫。
-  沒被首頁使用的剪影（`bg-*`、`mid-*`、`fg-*` 等）刻意保留。
+  `bg-*`、`mid-*`、`fg-*` 與 `fig-*` 現在是子頁剪影場景與首頁景深層的素材（`lib/scene/config.ts`）。
 - **朱印遮罩**（`src/assets/seal/seal-liuyi.png`）：`tools/seal/render-seal.py` 以崇羲篆體渲出 512×512 的 alpha 遮罩。字型檔（CC BY-ND 3.0 TW）只放在本機 `~/.cache/liu_yi-fonts/`，絕不入庫（`tests/unit/seal-asset.test.ts` 會掃）。
 - **兵器快照**（`src/qi/data/weapons/*.geo`）：改了 `src/scripts/three/weapons.ts` 的造型後執行 `npm run qi:snapshot-weapons` 重新產生並入庫。
 - **燙金獅子館徽**（`src/assets/images/crest-lion.png`）：開場區用的透明底金色版。`scripts/crest/render-crest.ts` 由 `logo_large.jpg`（黑底米白線條）轉出——亮度當不透明度、換成古金色帶；改了來源或色帶後執行 `npm run crest:build` 重建並入庫（`tests/unit/crest-asset.test.ts` 會驗成品沒過期）。首頁用 `<Image>` 輸出響應式 webp；預約段的光點館徽（`crest` 形體）也是由這張圖依亮度取樣（亮線多取、暗面少取）。
 - 本機 Python 工具一律用 `uv run --no-project --python 3.11 --with … python <腳本>` 執行，用法寫在各腳本檔頭。
+
+## 其他頁面：剪影立體場景（Task 27）
+
+- 子頁（課程總覽、課程內頁、師資、教練、場地、收費、課表、404）頁首是一幕由遠到近四層的剪影，高約 50svh（手機 45svh），在內容上方、不與任何文字重疊：
+  遠景屋脊（最淡、最慢）→ 中景器物 → 人物（課程內頁用該課的 `fig-*`／`kid-*`、師資與 404 是抱拳、場地是空場）→ 前景框（簷角、柱框、窗櫺、石階、近處的兵器架）。
+  元件 `components/Scene.astro`（由 `BaseLayout` 的 `scene` 屬性輸出）、樣式 `styles/scene.css`、視差接線 `scripts/scene.ts`；每頁的組合在 `lib/scene/config.ts`（`sceneSignature` 互不相同，單元測試守住）。
+- **深度感**：越遠越淡（黑色剪影在亮霧上的不透明度）、越遠越慢（捲動視差：位移 = 捲動量 ×（1 − 速度），遠景 0.78、中景 0.9、人物 1、前景 1.32；桌機滑鼠微傾最多 14 px，近景與遠景方向相反；手機只做捲動視差）、
+  遠景加大氣透視（霧）、前景加暗角、少量 CSS 飄塵。計算在 `lib/scene/parallax.ts`（純函式，單元測試）；全程只動 transform／opacity，passive 監聽，不用 WebGL、不載入 three 與光點引擎（`budget.spec` 量每種頁面的首屏）。
+- 課程總覽：滑過或聚焦課程卡（`data-scene-card`），人物換成該課的剪影（交叉淡化）；離開回到預設。
+- 退回：沒有 JS 時是靜態的一幕、文字完整；減少動態時不做視差、不飄塵、換人沒有轉場。
 
 ## 字型
 

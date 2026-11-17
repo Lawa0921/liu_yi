@@ -135,8 +135,9 @@ const clipTop = (page: Page) =>
   });
 /** 館徽上正在跑的動畫名稱（含子元素）。 */
 const crestAnimations = (page: Page) => crestOf(page).evaluate((el) => el.getAnimations({ subtree: true }).map((a) => (a as CSSAnimation).animationName));
-const LUMA_VISIBLE = 40; // 實測：有館徽約 60（金色線條占約 25%）
-const LUMA_HIDDEN = 28; // 實測：沒有館徽約 20（黑底、顆粒與環境煙）
+// Task 27：光點後面有景深層（遠景屋脊、天空的暖灰霧，styles/depth.css），館徽區域的底不再是純黑，量到的亮度整體約 +16。
+const LUMA_VISIBLE = 58; // 實測：有館徽約 77（金色線條占約 25%）
+const LUMA_HIDDEN = 48; // 實測：沒有館徽約 37（景深層的霧、顆粒與環境煙）
 
 const sheenX = (page: Page) => crestOf(page).evaluate((el) => (el as HTMLElement).style.getPropertyValue('--sheen-x'));
 const sheenY = (page: Page) => crestOf(page).evaluate((el) => (el as HTMLElement).style.getPropertyValue('--sheen-y'));

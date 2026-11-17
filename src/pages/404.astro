@@ -1,10 +1,11 @@
 ---
 // 找不到頁面：窗櫺底紋上一個大大的「無」字。
 import BaseLayout from '../layouts/BaseLayout.astro';
+import { PAGE_SCENES } from '../lib/scene/config';
 import { url } from '../lib/url';
 ---
 
-<BaseLayout title="找不到頁面" description="這個網址沒有內容。" noindex>
+<BaseLayout title="找不到頁面" description="這個網址沒有內容。" noindex scene={{ kind: 'lost', spec: PAGE_SCENES.lost }}>
   <section class="lost">
     <span class="lattice lost__lattice" aria-hidden="true"></span>
     <p class="lost__glyph" aria-hidden="true">無</p>

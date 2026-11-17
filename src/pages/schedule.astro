@@ -4,10 +4,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import PosterFigure from '../components/PosterFigure.astro';
 import Plaque from '../components/Plaque.astro';
 import schedule from '../assets/images/schedule.png';
+import { PAGE_SCENES } from '../lib/scene/config';
 import { BOOKING_ANCHOR } from '../lib/site';
 ---
 
-<BaseLayout title="課表" description="六藝武術工作室的常態班課表。" ogImage={schedule}>
+<BaseLayout title="課表" description="六藝武術工作室的常態班課表。" ogImage={schedule} scene={{ kind: 'schedule', spec: PAGE_SCENES.schedule }}>
   <section class="section section--flush-top" aria-labelledby="page-title">
     <div class="container">
       <div class="page-head">
