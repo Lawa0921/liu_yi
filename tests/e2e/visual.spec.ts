@@ -32,11 +32,15 @@ interface Device {
   name: string;
   slug: 'desktop' | 'mobile';
   viewport: { width: number; height: number };
+  /** 截圖檔名用的標記（預設用 slug）：同一個 slug 有兩種尺寸時區分檔名。 */
+  tag?: string;
 }
 const DEVICES: Device[] = [
   { name: '桌機 1440×900', slug: 'desktop', viewport: { width: 1440, height: 900 } },
   { name: '手機 390×844', slug: 'mobile', viewport: { width: 390, height: 844 } },
 ];
+/** 控制者裁定（Task 23 修正 R1）：手機直向的 others 另外在這個較矮的尺寸也要完整在畫布內、不壓文字。 */
+const SMALL_PHONE: Device = { name: '手機 360×740', slug: 'mobile', viewport: { width: 360, height: 740 }, tag: 'mobile-360' };
 
 type W = { __qi: { ready: boolean; mode: string; debug: QiDebug } };
 interface Box {
@@ -394,10 +398,19 @@ function metricsOf(m: Measured, device: Device, texts: Box[], label: string): Me
   return { heightRatio, cx, cy, bottom: figure.bottom, margins, overlapRatio, note: `${label} 外框 ${JSON.stringify(figure)}、canvas ${JSON.stringify(rect)}` };
 }
 
-/** 計畫表：人形亮點外框高占 canvas 高 45%–90%。 */
-function expectHeight(metrics: Metrics): void {
-  expect(metrics.heightRatio, `高占 canvas 高 45%–90%：${metrics.note}`).toBeGreaterThanOrEqual(0.45);
-  expect(metrics.heightRatio, `高占 canvas 高 45%–90%：${metrics.note}`).toBeLessThanOrEqual(0.9);
+/**
+ * 人形亮點外框高占 canvas 高的下限，依架勢分（依控制者裁定，取代計畫表的單一 45%–90%）：
+ *   - 站姿（land、salute）：45%–90%；
+ *   - 蹲低架勢（dingzhou、kao、kid-*）與 others（四個小人形）：25%–90%。
+ * 手機直向套用同一組門檻。
+ */
+const HEIGHT_MIN = { stand: 0.45, crouch: 0.25 } as const;
+type Stance = keyof typeof HEIGHT_MIN;
+
+function expectHeight(metrics: Metrics, stance: Stance): void {
+  const min = HEIGHT_MIN[stance];
+  expect(metrics.heightRatio, `高占 canvas 高 ${min * 100}%–90%（${stance === 'stand' ? '站姿' : '蹲低架勢／others'}）：${metrics.note}`).toBeGreaterThanOrEqual(min);
+  expect(metrics.heightRatio, `高占 canvas 高 ${min * 100}%–90%：${metrics.note}`).toBeLessThanOrEqual(0.9);
 }
 
 /** 計畫表：完整在 canvas 內（四邊留 ≥ 8 px）、桌機中心 x ∈ [0.50W, 0.80W]、手機底 < 0.70H 且中心 y 在上 60%、亮點外框與 DOM 文字矩形的重疊 ≤ 文字面積的 5%。 */
@@ -482,6 +495,8 @@ interface HumanCase {
   pose: string;
   beat: BeatId;
   label: string;
+  /** 站姿 45%–90%、蹲低架勢（與 others）25%–90%（控制者裁定）。 */
+  stance: Stance;
   /** 開場演完才量（新工作階段，等開場落地）。 */
   intro?: boolean;
   /** 先在 fist 段按「小孩」。 */
@@ -489,43 +504,24 @@ interface HumanCase {
 }
 
 const HUMAN_CASES: HumanCase[] = [
-  { pose: 'land', beat: 'opening', label: '開場落地後（land）', intro: true },
-  { pose: 'dingzhou', beat: 'fist', label: 'dingzhou' },
-  { pose: 'kao', beat: 'combat-b', label: 'kao' },
-  { pose: 'kid-wushu', beat: 'fist', label: 'kid-wushu（切小孩）', kid: true },
-  { pose: 'salute', beat: 'coaches', label: 'salute' },
-  { pose: 'others', beat: 'others', label: 'others' },
+  { pose: 'land', beat: 'opening', label: '開場落地後（land）', stance: 'stand', intro: true },
+  { pose: 'dingzhou', beat: 'fist', label: 'dingzhou', stance: 'crouch' },
+  { pose: 'kao', beat: 'combat-b', label: 'kao', stance: 'crouch' },
+  { pose: 'kid-wushu', beat: 'fist', label: 'kid-wushu（切小孩）', stance: 'crouch', kid: true },
+  { pose: 'salute', beat: 'coaches', label: 'salute', stance: 'stand' },
+  { pose: 'others', beat: 'others', label: 'others', stance: 'crouch' },
 ];
 
 /**
- * 已知與計畫表「人形外框高占 canvas 高 45%–90%」不符的組合（`姿勢@裝置`）：以 `test.fixme` 掛起、不放寬門檻，交控制者裁定。
- * 這些組合的其餘標準（完整在 canvas 內、位置、不壓文字）照常把關；實測值也寫在各測試的註記裡（min tier 的亮點外框）。
- * 原因有兩類：
- *   - 桌機：D12 以「頭部大小對齊」排比例（scaleOverride 是使用者看過的值），蹲低的架勢外框本來就比立姿的 land 矮。
- *   - 手機：直向取景（`engine/framing.ts`）的可視寬固定是 2.75 世界單位，人形高 ≈ 0.727 × 畫布寬，390 寬的 land 只占 canvas 高約 37%；
- *     dingzhou／kao 的外框寬高比 > 1，高 45% 就會比 390 寬的畫布還寬（需 425–498 px），與「完整在 canvas 內」互相矛盾。
- *     要達標得把直向取景拉近約 20%，並同步改海報算式（home.css）、兵器窄版長度與 others 的排版。
+ * 依控制者裁定的門檻（站姿 45%、蹲低架勢與 others 25%）重測後，仍達不到的三個組合（`姿勢@裝置`，min tier 的實測值寫在理由裡）：
+ * 不再放寬門檻，以 `test.fixme` 掛起，交控制者處理（改取景或再裁定）。其餘標準（完整在 canvas 內、位置、不壓文字）照常把關。
+ * 原因都是手機直向取景（`engine/framing.ts`）：可視寬固定 2.75 世界單位，人形高 ≈ 0.727 × 畫布寬（390 寬約 283 px）。
+ * 要過線得把直向取景拉近約 20%（係數 2.75 → 約 2.25），並同步改海報算式（home.css）、兵器窄版長度與鏡頭下移量。
  */
 const HEIGHT_FIXME: Record<string, string> = {
-  'dingzhou@desktop': '量到約 43%，差約 2 個百分點；D12 的 scaleOverride 1.25 是使用者看過的值，要 45% 得改它或整體取景',
-  'kao@desktop': '量到約 35%：弓步外框高只有立姿 land 的六成，要 45% 頭就得放大約 28%，與 D12 的頭部對齊衝突',
-  'kid-wushu@desktop': '量到約 43%：兒童剪影本來就比成人矮，頭部對齊後外框高不到 45%',
-  'others@desktop': '量到約 23%：others 是四個縮成 0.38 倍的小人形橫排（設計 §7、config/shapes.ts），不是單一人形',
-  'land@mobile': '量到約 37%：直向取景下人形高 ≈ 0.727 × 畫布寬（390 寬 → 約 283 px），要 45% 得把直向取景拉近約 20%',
-  'dingzhou@mobile': '量到約 27%：外框寬高比 > 1，高 45% 需約 425 px 寬，比 390 寬的畫布還寬，與「完整在 canvas 內」矛盾',
-  'kao@mobile': '量到約 22%：外框寬高比約 1.4，高 45% 需約 498 px 寬，比 390 寬的畫布還寬，與「完整在 canvas 內」矛盾',
-  'kid-wushu@mobile': '量到約 27%：直向取景下兒童剪影高度受畫布寬限制，要 45% 得把直向取景拉近約 25%',
-  'salute@mobile': '量到約 37%：同 land，直向取景下人形高 ≈ 0.727 × 畫布寬',
-};
-
-/**
- * 整個組合都掛起的（有真實缺陷，要的是版面決定，不是調一個數字）。
- * others@mobile：四個小人形合計寬約 3.26 世界單位，比直向可視寬 2.75 還寬，最左與最右的人形被畫布裁掉（四邊留 0 px）；
- * 而且這一段的文字區塊從 y≈388 起（人形腳底在 y≈498），人形壓到「其他課程」標題與副標，重疊約 30%。
- * 修法需要直向專用的縮放或排版（引擎端新增版面邏輯，超出「只調參數」）。
- */
-const CASE_FIXME: Record<string, string> = {
-  'others@mobile': '四個小人形比直向可視寬還寬、兩端被畫布裁掉（四邊留 0 px），且壓到「其他課程」標題與副標（重疊約 30%）',
+  'land@mobile': '實測 37.6%，站姿下限 45%',
+  'salute@mobile': '實測 37.4%，站姿下限 45%',
+  'kao@mobile': '實測 22.3%，蹲低架勢下限 25%',
 };
 
 /** 開頁、擺到指定姿勢、截圖，回傳這個姿勢的量測值。 */
@@ -548,7 +544,7 @@ async function measureHuman(page: Page, device: Device, c: HumanCase): Promise<M
   } else {
     await settlePose(page, c.beat, c.pose);
   }
-  const measured = await shoot(page, `${c.pose}-${device.slug}`);
+  const measured = await shoot(page, `${c.pose}-${device.tag ?? device.slug}`);
   return metricsOf(measured, device, await textRects(page, beatText(c.beat)), c.pose);
 }
 
@@ -557,25 +553,15 @@ for (const device of DEVICES) {
     test.use({ viewport: device.viewport });
 
     for (const c of HUMAN_CASES) {
-      const key = `${c.pose}@${device.slug}`;
-      const caseFixme = CASE_FIXME[key];
-      const heightFixme = HEIGHT_FIXME[key];
-      if (caseFixme) {
-        test.fixme(`${c.label}：人形標準（${caseFixme}）`, async ({ page }) => {
-          const metrics = await measureHuman(page, device, c);
-          expectPlacement(metrics, device);
-          expectHeight(metrics);
-        });
-        continue;
-      }
+      const heightFixme = HEIGHT_FIXME[`${c.pose}@${device.slug}`];
       test(`${c.label}：${heightFixme ? '位置與不壓文字（高占比見 fixme）' : '人形標準'}`, async ({ page }) => {
         const metrics = await measureHuman(page, device, c);
         expectPlacement(metrics, device);
-        if (!heightFixme) expectHeight(metrics);
+        if (!heightFixme) expectHeight(metrics, c.stance);
       });
       if (heightFixme) {
-        test.fixme(`${c.label}：人形外框高占 canvas 高 45%–90%（${heightFixme}）`, async ({ page }) => {
-          expectHeight(await measureHuman(page, device, c));
+        test.fixme(`${c.label}：人形外框高占 canvas 高 ${HEIGHT_MIN[c.stance] * 100}%–90%（${heightFixme}）`, async ({ page }) => {
+          expectHeight(await measureHuman(page, device, c), c.stance);
         });
       }
     }
@@ -685,6 +671,18 @@ for (const device of DEVICES) {
     });
   });
 }
+
+// 控制者裁定（R1）：手機直向的 others 在 390×844 與 360×740 都要四個人形完整落在畫布內（四邊留白 ≥ 8 px）、與文字矩形重疊 ≤ 5%。
+test.describe(`引擎截圖：${SMALL_PHONE.name}`, () => {
+  test.use({ viewport: SMALL_PHONE.viewport });
+
+  const c = HUMAN_CASES.find((item) => item.pose === 'others')!;
+  test(`${c.label}：人形標準`, async ({ page }) => {
+    const metrics = await measureHuman(page, SMALL_PHONE, c);
+    expectPlacement(metrics, SMALL_PHONE);
+    expectHeight(metrics, c.stance);
+  });
+});
 
 // ── 7. 減少動態的靜態圖 ───────────────────────────────────────
 

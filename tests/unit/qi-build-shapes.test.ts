@@ -9,6 +9,7 @@ import { buildAllShapes } from '../../scripts/qi/build-shapes';
 import { hashInputs } from '../../scripts/qi/hash';
 import { FIGURES } from '../../src/qi/config/figures';
 import { SEAL_CENTER_Y, SEAL_WORLD_SIZE, SHAPES, WEAPON_NAMES } from '../../src/qi/config/shapes';
+import { arrangedSize, figureIndexOf, measureFigures } from '../../src/qi/shapes/arrange';
 import { decodeShape, KIND, SHAPE_COUNT, type Shape } from '../../src/qi/shapes/format';
 import { decodeSnapshot, encodeSnapshot } from '../../src/qi/shapes/weapon-snapshot';
 
@@ -189,6 +190,24 @@ describe('buildAllShapes：第一次建置', () => {
 });
 
 describe('others（合成形體）', () => {
+  it('執行時排列（shapes/arrange.ts）：依配方中線分組量到四個人形，各自的外框互不相交，2×2 比橫排窄得多（直向畫布塞得下）', () => {
+    const recipe = SHAPES.others!;
+    if (recipe.kind !== 'compose') throw new Error('others 必須是 compose');
+    const s = decode(OUT, 'others');
+    const centers = recipe.parts.map((p) => p.x);
+    const boxes = measureFigures(s, centers);
+    expect(boxes).toHaveLength(4);
+    for (let k = 0; k < 3; k++) expect(boxes[k + 1]!.minX - boxes[k]!.maxX, `第 ${k} 與 ${k + 1} 個之間`).toBeGreaterThan(0.1);
+    for (const [k, box] of boxes.entries()) {
+      expect(box.minY, `第 ${k} 個的腳底`).toBeCloseTo(0, 1);
+      expect(figureIndexOf((box.minX + box.maxX) / 2, centers), `第 ${k} 個的中線落在自己的分組`).toBe(k);
+    }
+    const row = arrangedSize(boxes, { rows: [[0, 1, 2, 3]], scale: 1, gap: 0.25, rowGap: 0 });
+    const grid = arrangedSize(boxes, { rows: [[0, 1], [2, 3]], scale: 1, gap: 0.15, rowGap: 0.15 });
+    expect(grid.width).toBeLessThan(row.width * 0.6);
+    expect(grid.width).toBeLessThan(2.75); // 直向可視寬（framing.ts）
+  });
+
   it('總寬 ÷ 總高 ≥ 2.5，且高度是小人形（約 land 的 0.38 倍）', () => {
     const s = decode(OUT, 'others');
     expect(width(s) / height(s)).toBeGreaterThanOrEqual(2.5);

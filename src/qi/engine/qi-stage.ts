@@ -24,6 +24,7 @@
 import { DataTexture, FloatType, RGBAFormat, Vector3, WebGLRenderer } from 'three';
 import { BURSTS, type Burst, type PoseId } from '../config/poses';
 import { SEAL_CENTER_Y, SEAL_WORLD_SIZE, SHAPES } from '../config/shapes';
+import { arrangeFigures, measureFigures } from '../shapes/arrange';
 import { ambientField, expandTargets, flowTargets, weaponLayout, type AmbientField } from '../shapes/expand';
 import type { Shape } from '../shapes/format';
 import type { ShapeLoader } from '../shapes/loader';
@@ -32,6 +33,7 @@ import { burstSpeed, EXHALE, inhaleDamp, inhaleStreak, SNAP_DAMP_GAIN, streakLen
 import { forcesFor } from './forces';
 import { weaponLeftFor, weaponReachFor } from './framing';
 import { introState, type IntroState } from './intro';
+import { othersFit } from './others-layout';
 import { createPointer, type Pointer } from './pointer';
 import { createSim, zeroTexture, type Sim } from './sim';
 import { createStage, type Stage } from './stage';
@@ -75,6 +77,12 @@ export interface QiStageOptions {
    * 沒有文字（harness、直向、沒有那一段）回 `undefined`＝不限制。換到兵器姿勢、`resize`、`relayout()` 時都會再問一次。
    */
   textRight?: (pose: PoseId) => number | undefined;
+  /**
+   * 直向版面裡，這個姿勢那一段**實際文字**的上緣（從畫布上緣起算的 CSS 像素；那一段捲到視窗中央時的位置）。
+   * 合成形體（others 的四個小人形）在直向排成 2×2、縮進畫布寬度內並擺在這條線之上（`others-layout.ts`）。
+   * 沒有文字（harness、橫向、沒有那一段）回 `undefined`＝腳底落在其他姿勢的腳底線上。換姿勢、`resize`、`relayout()` 時都會再問一次。
+   */
+  textTop?: (pose: PoseId) => number | undefined;
 }
 
 export interface QiStage {
@@ -165,7 +173,7 @@ export interface QiDebug {
 interface Target {
   texture: DataTexture;
   data: Float32Array;
-  /** 兵器的擺位條件（`weaponKey`）；其他姿勢是空字串。條件變了（視窗、文字）這個目標就過期，要重展開。 */
+  /** 擺位條件（`layoutKey`：兵器的左右界、合成形體的排列）；其他姿勢是空字串。條件變了（視窗、文字）這個目標就過期，要重展開。 */
   fit: string;
 }
 
@@ -248,6 +256,16 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
   };
   const isWeapon = (id: PoseId): boolean => SHAPES[id]?.kind === 'weapon';
   const weaponKey = (id: PoseId): string => (isWeapon(id) ? `${weaponReach()?.toFixed(4) ?? 'narrow'}|${weaponReachLeft(id)?.toFixed(4) ?? '-'}` : '');
+  /**
+   * 合成形體（others）的排列條件：橫向固定一種；直向依畫布大小與文字上緣（`textTop`）。
+   * 呼叫端量不到文字時是 undefined（`othersFit` 當作沒有）。
+   */
+  const isCompose = (id: PoseId): boolean => SHAPES[id]?.kind === 'compose';
+  const composeTextTop = (id: PoseId): number | undefined => (portrait ? o.textTop?.(id) : undefined);
+  const composeKey = (id: PoseId): string => (isCompose(id) ? (portrait ? `portrait|${cssWidth.toFixed(1)}x${cssHeight.toFixed(1)}|${composeTextTop(id)?.toFixed(1) ?? '-'}` : 'landscape') : '');
+  /** 擺位條件的鍵：兵器與合成形體會隨視窗與文字改變，其他姿勢是空字串。 */
+  const layoutKey = (id: PoseId): string => weaponKey(id) || composeKey(id);
+  const isLaidOut = (id: PoseId): boolean => isWeapon(id) || isCompose(id);
 
   // ── 一個 tier 的資源（setTier 時整組換掉）──────────────────────────
   let side = 0;
@@ -320,7 +338,7 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
   };
 
   const makeTarget = (id: PoseId): Target => {
-    const fit = weaponKey(id);
+    const fit = layoutKey(id);
     const cached = targets.get(id);
     if (cached && cached.fit === fit) return cached;
     cached?.texture.dispose(); // 兵器擺位的條件變了：舊的過期
@@ -331,7 +349,15 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
       const shape = shapes.get(id);
       if (!shape) throw new Error(`Shape ${id} is not loaded`);
       const recipe = SHAPES[id];
-      data = expandTargets(shape, side, ambient, recipe?.kind === 'weapon' ? weaponLayout(recipe.name, !portrait, weaponReach(), weaponReachLeft(id)) : undefined);
+      if (recipe?.kind === 'compose') {
+        // 四個小人形：橫向一排放大一點，直向 2×2 縮進畫布寬度內並擺在文字上方（others-layout.ts）
+        const centers = recipe.parts.map((part) => part.x);
+        const boxes = measureFigures(shape, centers);
+        const placed = othersFit({ boxes, portrait, cssWidth, cssHeight, textTop: composeTextTop(id) });
+        data = expandTargets(arrangeFigures(shape, centers, boxes, placed.arrangement, placed.offset), side, ambient);
+      } else {
+        data = expandTargets(shape, side, ambient, recipe?.kind === 'weapon' ? weaponLayout(recipe.name, !portrait, weaponReach(), weaponReachLeft(id)) : undefined);
+      }
     }
     const texture = new DataTexture(data, side, side, RGBAFormat, FloatType);
     texture.needsUpdate = true;
@@ -341,16 +367,16 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
   };
 
   /**
-   * 兵器擺位的條件變了（視窗、文字）：過期的兵器目標丟掉；現在正擺著的就重展開並換過去（姿勢不變、不給衝量）。
+   * 擺位的條件變了（視窗、文字）：過期的兵器與合成形體目標丟掉；現在正擺著的就重展開並換過去（姿勢不變、不給衝量）。
    * 回傳有沒有動到目前畫面上的姿勢。
    */
   const refreshWeapons = (): boolean => {
     for (const [id, t] of [...targets]) {
-      if (!isWeapon(id) || t.fit === weaponKey(id)) continue;
+      if (!isLaidOut(id) || t.fit === layoutKey(id)) continue;
       t.texture.dispose();
       targets.delete(id);
     }
-    if (pose && isWeapon(pose) && !targets.has(pose) && shapes.has(pose)) {
+    if (pose && isLaidOut(pose) && !targets.has(pose) && shapes.has(pose)) {
       apply(pose, makeTarget(pose), false);
       return true;
     }

@@ -23,7 +23,7 @@ import { resolveShapeUrl } from '../../qi/shapes/urls';
 import type { QiDebug, QiStage } from '../../qi/engine/qi-stage';
 import { currentAudience, observeAudience } from './audience-sync';
 import { readBeatRects } from './beats';
-import { textInkRight } from './text-extent';
+import { textInkRight, textInkTop } from './text-extent';
 import { enterStatic, onEnterStatic } from './fallback';
 import { introSeen, markIntroSeen } from './intro-gate';
 
@@ -164,6 +164,17 @@ export async function initHome(): Promise<void> {
         const section = beat ? main.querySelector(`[data-beat="${beat}"]`) : null;
         const right = section ? textInkRight(section) : undefined;
         return right === undefined ? undefined : right - canvas.getBoundingClientRect().left;
+      },
+      // 直向的合成形體（others）要擺在文字之上：該姿勢那一段實際文字的上緣（從畫布上緣起算）。
+      // 文字的位置會隨捲動變，而姿勢是那一段捲到視窗中央時才成形，所以量「這一段在視窗正中央時」文字上緣在哪裡：
+      // 段內的位移（文字上緣 − 段的上緣）加上「段置中時的段上緣」。
+      textTop: (pose) => {
+        const beat = BEATS.find((id) => poseFor(id, currentAudience()) === pose);
+        const section = beat ? main.querySelector<HTMLElement>(`[data-beat="${beat}"]`) : null;
+        const top = section ? textInkTop(section) : undefined;
+        if (!section || top === undefined) return undefined;
+        const box = section.getBoundingClientRect();
+        return (window.innerHeight - box.height) / 2 + (top - box.top) - canvas.getBoundingClientRect().top;
       },
       onContextLost: () => enterStatic('context-lost'), // RF5：靜態圖接手，DOM 內容不變
       onFailure: (error) => {
