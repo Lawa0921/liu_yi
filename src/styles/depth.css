@@ -11,7 +11,9 @@
  *   而開場的靜態海報、靜態圖（減少動態、沒有 WebGL、沒有 JS）的底是近黑的不透明色，lighten 不會被它們蓋住——
  *   每個狀態（引擎到達之前、引擎在跑、退回靜態圖）都看得到同一組景深。（先前放在畫布底下，不透明的海報一蓋就整層消失，審查指出。）
  * 前面那一組（.depth-fg）：近黑的簷角（橫向右上、直向左上）與窗櫺（橫向左下，只在左下角沒有字的段落；直向不放），一般混合、同樣 z-index: 2（要蓋在海報與光點前面）。
- *   位置避開所有文字與光點主體（e2e 量過：每一段、三種視窗尺寸）；不接收指標事件。
+ *   前景在文字之上，所以不能壓住文字：靜止在每一段時位置避開所有文字與光點主體，捲動途中文字從前景底下經過時，
+ *   腳本（scripts/home/depth.ts，純函式在 lib/scene/fg-dodge.ts）把與文字相交的那一張前景淡出（data-fg-hide）、走過去再淡入；
+ *   e2e（home-depth.spec）每段停下來量一次，並且從頂捲到底每 40 px 量一次，文字被前景蓋住的比例都 ≤ 5%。不接收指標事件；沒有 JS 時前景不顯示。
  * 大小：每張圖用原圖像素（--nw／--nh，Depth.astro 內嵌）乘 100cqh / 1850（矩形高），比例與子頁的場景一致。
  */
 
@@ -145,9 +147,18 @@
   opacity: 0.85;
 }
 
-/* 前景：近黑，邊緣一圈很淡的逆光，暗處也看得出輪廓。橫向：簷角掛在右上角、窗櫺貼在左下角，框住左右。 */
+/*
+ * 前景：近黑，邊緣一圈很淡的逆光，暗處也看得出輪廓。橫向：簷角掛在右上角、窗櫺貼在左下角，框住左右。
+ * 預設透明：腳本第一次量過文字之後才標 data-fg-ready 才顯示（沒有 JS 就不顯示）；有文字經過的那一張標 data-fg-hide，淡出。
+ */
 .depth-fg .depth__img {
   filter: drop-shadow(0 0 1px rgb(236 214 160 / 0.32));
+  opacity: 0;
+  transition: opacity 0.3s var(--ease-out);
+}
+
+.depth-fg[data-fg-ready] .depth__img:not([data-fg-hide]) {
+  opacity: 1;
 }
 
 .depth-fg .depth__img[data-asset='fg-eave'] {
@@ -165,20 +176,18 @@
   left: -3%;
   bottom: -1%;
   width: min(20cqw, 20rem);
-  opacity: 0;
-  transition: opacity 0.6s var(--ease-out);
   -webkit-mask-image: linear-gradient(to right, #000 55%, transparent 100%);
   mask-image: linear-gradient(to right, #000 55%, transparent 100%);
 }
 
-.depth-fg[data-depth-left='on'] .depth__img[data-asset='fg-lattice'] {
-  opacity: 1;
+.depth-fg[data-fg-ready]:not([data-depth-left='on']) .depth__img[data-asset='fg-lattice'] {
+  opacity: 0;
 }
 
 @media (max-aspect-ratio: 4/5) {
   /*
    * 直向：右上有大人／小孩切換鈕，下半是整寬的文字，光點的兵器（刀、劍、槍）又會伸到上方與兩側，所以前景只放左上角、縮到不碰任何一段的光點外框：
-   * 簷角翻到左上，窗櫺不放。手機只有這一張前景（e2e 量亮度差與看得見的面積，並逐段確認不壓字、不壓光點）。
+   * 簷角翻到左上，窗櫺不放。手機只有這一張前景（e2e 量亮度差與看得見的面積，每一段停下來都不壓字、不壓光點，捲動途中文字經過時淡出）。
    */
   .depth-fg .depth__img[data-asset='fg-eave'] {
     top: -1%;
@@ -203,7 +212,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .depth__layer[data-depth-layer='mid'] .depth__img,
-  .depth-fg .depth__img[data-asset='fg-lattice'] {
+  .depth-fg .depth__img {
     transition: none;
   }
 }

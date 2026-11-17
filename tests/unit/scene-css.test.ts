@@ -86,9 +86,15 @@ describe('首頁景深層（Depth）', () => {
     }
   });
 
-  it('左下窗櫺預設透明，只有 .depth-fg[data-depth-left=on]（腳本依 HOME_FG_LEFT_BEATS 設）才顯示；腳本有設這個屬性', () => {
-    expect(depthCss).toMatch(/\[data-asset='fg-lattice'\]\s*\{[^}]*opacity\s*:\s*0/);
-    expect(depthCss).toContain(".depth-fg[data-depth-left='on'] .depth__img[data-asset='fg-lattice']");
+  it('前景預設透明：腳本第一次量過文字才標 data-fg-ready 才顯示（沒有 JS 不顯示）；有文字經過的那一張標 data-fg-hide 就淡出；轉場是 opacity', () => {
+    expect(depthCss).toMatch(/\.depth-fg \.depth__img\s*\{[^}]*opacity\s*:\s*0[^}]*transition\s*:\s*opacity/);
+    expect(depthCss).toContain(".depth-fg[data-fg-ready] .depth__img:not([data-fg-hide])");
+    const script = read('src/scripts/home/depth.ts');
+    for (const attribute of ['data-fg-hide', 'data-fg-ready', 'fgSync']) expect(script, attribute).toContain(attribute);
+  });
+
+  it('左下窗櫺只有 .depth-fg[data-depth-left=on]（腳本依 HOME_FG_LEFT_BEATS 設）才顯示；腳本有設這個屬性', () => {
+    expect(depthCss).toContain(".depth-fg[data-fg-ready]:not([data-depth-left='on']) .depth__img[data-asset='fg-lattice']");
     expect(read('src/scripts/home/depth.ts')).toContain('depthLeft');
   });
 

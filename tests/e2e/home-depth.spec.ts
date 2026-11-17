@@ -483,3 +483,79 @@ for (const size of [
     });
   });
 }
+
+// ── 連續捲動：捲動途中前景也不得壓住文字（複審 Critical）──────────────────────
+//
+// 前景是固定在視窗角落的，在 [data-beat] 的文字之上（z-index 2，為了蓋在不透明的海報與靜態圖前面）。
+// 每段停在正中央時不壓字（上面的測試），但捲動途中文字會從前景底下經過：複審員在建置結果上每 40 px 捲一次，
+// 桌機 206 個位置有 51 個、手機 218 個位置有 21 個，窗櫺或簷角蓋住文字矩形超過 5%（最高 62%，「看這門課」幾乎看不見）。
+// 解法是前景在文字經過時淡出（`scripts/home/depth.ts`），這裡從頂捲到底、每 ≤ 40 px 量一次：
+// 任何文字矩形被「看得見的前景」的不透明外框蓋住的比例都要 ≤ 5%。
+// 前景淡出是 CSS 轉場（走文件時間軸，不受假時鐘控制）：這支測試把轉場關掉，量的是目標狀態；轉場只是修飾。
+
+const SCROLL_STEP = 40;
+const MAX_COVERED = 0.05;
+
+/** 捲到 y，等頁面真的到了那裡、前景的腳本也處理過這一格（depth.ts 在 .depth-fg 上記 data-fg-sync）。 */
+async function scrollAndSync(page: Page, y: number): Promise<void> {
+  await page.evaluate((target) => window.scrollTo(0, target), y);
+  await expect
+    .poll(
+      async () => {
+        await page.clock.runFor(50);
+        return page.evaluate((target) => {
+          if (Math.abs(window.scrollY - target) >= 2) return 'scrolling';
+          const sync = document.querySelector('.depth-fg')?.getAttribute('data-fg-sync');
+          if (sync === null || sync === undefined) return 'no-script';
+          return Math.abs(Number(sync) - window.scrollY) < 2 ? 'ok' : 'waiting';
+        }, y);
+      },
+      { timeout: 15_000, message: `捲到 ${y}` },
+    )
+    .toBe('ok');
+}
+
+const coveredShare = (fg: Box, text: Box): number => {
+  const w = Math.min(fg.right, text.right) - Math.max(fg.left, text.left);
+  const h = Math.min(fg.bottom, text.bottom) - Math.max(fg.top, text.top);
+  if (w <= 0 || h <= 0) return 0;
+  return (w * h) / Math.max(1, (text.right - text.left) * (text.bottom - text.top));
+};
+
+for (const size of [
+  { width: 1440, height: 900 },
+  { width: 390, height: 844 },
+]) {
+  test.describe(`連續捲動不壓字：${size.width}×${size.height}`, () => {
+    test.use({ viewport: size });
+    test.describe.configure({ timeout: 420_000 });
+
+    test(`從頂捲到底、每 ${SCROLL_STEP} px 量一次：任何文字矩形被前景蓋住的比例 ≤ 5%（並且前景確實有露出來，不是整段都關掉）`, async ({ page }) => {
+      await open(page);
+      await page.addStyleTag({ content: '.depth-fg .depth__img { transition: none !important }' });
+      const total = await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight);
+      expect(total, '頁面比視窗高很多').toBeGreaterThan(size.height * 3);
+
+      let positions = 0;
+      let withFg = 0;
+      const worst: { y: number; share: number; asset: string; text: Box }[] = [];
+      for (let y = 0; y <= total + SCROLL_STEP; y += SCROLL_STEP) {
+        await scrollAndSync(page, Math.min(y, total));
+        positions++;
+        const fgs = await fgBoxes(page);
+        if (fgs.length > 0) withFg++;
+        const texts = await textBoxes(page);
+        for (const { asset, box } of fgs) {
+          for (const text of texts) {
+            const share = coveredShare(box, text);
+            if (share > MAX_COVERED) worst.push({ y, share, asset, text });
+          }
+        }
+      }
+      test.info().annotations.push({ type: 'scroll-positions', description: `${positions} 個位置，${withFg} 個位置有前景露出，${worst.length} 個違規` });
+      expect(worst.slice(0, 6).map((w) => `scrollY=${w.y}：${w.asset} 蓋住文字 ${(w.share * 100).toFixed(0)}% ${JSON.stringify(w.text)}`), `${worst.length}／${positions} 個位置有文字被前景蓋住超過 5%`).toEqual([]);
+      expect(positions, '每 40 px 一格').toBeGreaterThan(total / (SCROLL_STEP + 1));
+      expect(withFg / positions, '前景在大多數位置仍露出（淡出只在文字經過時）').toBeGreaterThan(0.5);
+    });
+  });
+}
