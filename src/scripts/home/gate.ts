@@ -2,6 +2,7 @@
 //
 //   - 要不要顯示由 <head> 的行內腳本在首繪前決定（BaseLayout 標 `html[data-gate="open"]`；判斷式見 `intro-gate.ts` 的 `shouldShowGate`）。
 //     沒有這個屬性就沒有閘門（`initGate` 回一個「已收起」的 Gate）。
+//   - 「入館」按鈕在腳本接手（對話框標 `data-ready`）之前不可見、不可點。
 //   - 閘門開著：`html[data-gate]` 讓 home.css 鎖住捲動（`overflow: hidden` 於 html）、顯示閘門、把引擎的畫布抬到閘門的背板之上（光點飄在閘門上）；
 //     這裡再把 body 底下閘門以外的內容設 `inert`（背景不可聚焦、不進無障礙樹）、焦點放在「入館」按鈕。
 //   - 進入（點按鈕、Enter、空白鍵）：記「這個工作階段進過館」、`data-gate="leaving"`（CSS 淡出，`GATE_FADE_MS`），淡出結束才真正收起：
@@ -127,6 +128,7 @@ export function initGate(session: Pick<Storage, 'setItem'> | null): Gate {
   };
   document.addEventListener('keydown', onKey);
   button.addEventListener('click', enter);
+  dialog.dataset.ready = ''; // 接線完成：按鈕這時才看得到、點得到（home.css；先於 focus，隱藏的元素聚焦不了）
   button.focus({ preventScroll: true });
 
   return {

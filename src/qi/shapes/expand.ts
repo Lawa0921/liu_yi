@@ -52,7 +52,14 @@ const AMBIENT_SEED = 7;
 /** 煙的位置用另一條亂數序列（與 mask 的挑選分開），種子由 `seed` 衍生。 */
 const AMBIENT_PLACE_SALT = 0x9e3779b9;
 /** 重複點的抖動幅度（每軸 ±，世界單位；D10）。 */
-const JITTER = 0.006;
+export const JITTER = 0.006;
+/**
+ * 光點館徽（`KIND.CREST`）的重複點抖動：細線條的館徽（鬃毛、捲紋、浪紋）一條線只有一兩個點寬，
+ * 被 0.006 的抖動（加上著色器的顆粒）散開就糊成一片（Task 25 審查）。降到 0.002：重疊的點仍散成一層，但線條保持清楚。
+ * 其他形體不變。
+ */
+export const CREST_JITTER = 0.002;
+const CREST_W = kindToW(KIND.CREST);
 const JITTER_SEED = 0x6a17;
 
 /** 試作的兵器擺放（D13）：寬螢幕與窄螢幕各自的全長（世界單位）與傾角（弧度，鋒尖朝右上）。 */
@@ -238,9 +245,10 @@ export function expandTargets(shape: Shape, size: number, ambient: AmbientField,
     let y = base[k * 3 + 1]!;
     let z = base[k * 3 + 2]!;
     if (j >= count) {
-      x += (jitter() * 2 - 1) * JITTER;
-      y += (jitter() * 2 - 1) * JITTER;
-      z += (jitter() * 2 - 1) * JITTER;
+      const spread = w[k] === CREST_W ? CREST_JITTER : JITTER; // 每個點依自己的種類；亂數的取用數不變
+      x += (jitter() * 2 - 1) * spread;
+      y += (jitter() * 2 - 1) * spread;
+      z += (jitter() * 2 - 1) * spread;
     }
     out[i * 4] = x;
     out[i * 4 + 1] = y;

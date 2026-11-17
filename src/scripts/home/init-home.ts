@@ -171,6 +171,8 @@ export async function initHome(): Promise<void> {
   let gateWaiting = willPlayIntro && gate.isHolding();
   /** 引擎停在氣流（閘門的背景）：開場要從氣流直接吸氣，不接續 land 的聚合態。 */
   let ambient = false;
+  /** 引擎的開場計時真的起算了（`onStart`）。沒起算＝還在等 land、lift 載入（pending）。 */
+  let introEngineStarted = false;
 
   // ── 形體載入與預取（引擎一載入完成就用得到）──────────────────────
   const loader = createShapeLoader({ fetch: fetchBytes, resolveUrl: resolveShapeUrl });
@@ -307,6 +309,12 @@ export async function initHome(): Promise<void> {
     if (!alive || intro !== 'playing' || gateWaiting) return; // 閘門還擋著：開場還沒開始，沒有東西可略過
     setIntro(reason);
     stage.playIntro({ skip: true });
+    if (!introEngineStarted) {
+      // 開場還在等形體（pending）就被略過、Esc 或捲走：引擎還停在氣流（閘門的背景）。引擎端的 skip 只收尾、不會自己換姿勢（`setPose('land')` 在
+      // 開場 pending 時被擋下，`requested` 又已經是 land，不會重試），所以這裡重新要求目前這一段的姿勢；形體一到就聚成人形。
+      // 不給衝量：略過本來就是「不播任何特效」。
+      requestPose(poseFor(locate().beat?.id ?? first, currentAudience()), false);
+    }
   };
 
   // ── 光點館徽（Task 21 的朱印，Task 25 改成館徽）──────────────────────
@@ -471,9 +479,13 @@ export async function initHome(): Promise<void> {
     gateWaiting = false;
     markIntroSeen(session);
     setIntro('playing');
+    introEngineStarted = false;
     stage.playIntro({
       fromAmbient: ambient,
-      onStart: disarmCrestFailsafe,
+      onStart: () => {
+        introEngineStarted = true;
+        disarmCrestFailsafe();
+      },
       onLand: () => {
         if (alive) revealCrest('in'); // 落地的衝擊波：館徽由下往上擦出
       },

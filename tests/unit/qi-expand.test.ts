@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ambientField, expandTargets, flowTargets, weaponLayout, type AmbientField } from '../../src/qi/shapes/expand';
+import { ambientField, CREST_JITTER, expandTargets, flowTargets, JITTER, weaponLayout, type AmbientField } from '../../src/qi/shapes/expand';
 import { KIND, kindToW, SHAPE_COUNT, type Shape } from '../../src/qi/shapes/format';
 import { rng } from '../../src/qi/shapes/rng';
 
@@ -623,5 +623,83 @@ describe('flowTargets（收費段的氣流：全部點緩流，範圍比環境�
     const ambient = ambientField(112 * 112);
     expect(() => flowTargets(0, ambient)).toThrow(RangeError);
     expect(() => flowTargets(144, ambient)).toThrow(RangeError);
+  });
+});
+
+describe('光點館徽（KIND.CREST）的重複點抖動：細線條不能被抖散（Task 25 審查）', () => {
+  /** 全部是 CREST 的假形體。 */
+  function crestShape(seed: number): Shape {
+    const base = synthShape(seed);
+    return { ...base, kinds: new Uint8Array(base.count).fill(KIND.CREST) };
+  }
+
+  it('常數：CREST 的抖動 0.002，只有人形與其他形體的 0.006 的三分之一', () => {
+    expect(CREST_JITTER).toBe(0.002);
+    expect(JITTER).toBe(0.006);
+  });
+
+  it('size = 256：CREST 的重複點（第 N + k 個）離原點每軸 ≤ 0.002（仍有抖動，只是小得多）；第一輪不抖；w 為 9', () => {
+    const shape = crestShape(11);
+    const ambient = ambientField(256 * 256);
+    const out = expandTargets(shape, 256, ambient);
+    const slots = solidSlots(ambient);
+    expect(slots.length).toBeGreaterThan(SHAPE_COUNT * 3);
+    let jittered = 0;
+    let maxAxis = 0;
+    slots.forEach((slot, j) => {
+      const source = j % SHAPE_COUNT;
+      expect(out[slot * 4 + 3]).toBe(9);
+      if (j < SHAPE_COUNT) {
+        expect(out[slot * 4]).toBe(shape.positions[source * 3]);
+        return;
+      }
+      for (let a = 0; a < 3; a++) {
+        const d = Math.abs(out[slot * 4 + a]! - shape.positions[source * 3 + a]!);
+        expect(d).toBeLessThanOrEqual(0.002 + 1e-6);
+        maxAxis = Math.max(maxAxis, d);
+      }
+      if (dist3(out, slot * 4, shape.positions, source * 3) > 0) jittered++;
+    });
+    expect(jittered).toBeGreaterThan((slots.length - SHAPE_COUNT) * 0.99);
+    expect(maxAxis, '仍有抖動（讓重疊的點散成一層），幅度是 0.002 的量級').toBeGreaterThan(0.0015);
+  });
+
+  it('非 CREST 不變：人形、兵器、朱印、竹簡的重複點仍用 0.006（幅度明顯大於 CREST 的上限）', () => {
+    for (const kind of [10, 99, KIND.STEEL, KIND.AURA, KIND.SEAL, KIND.BAMBOO]) {
+      const base = synthShape(12);
+      const shape: Shape = { ...base, kinds: new Uint8Array(base.count).fill(kind) };
+      const ambient = ambientField(192 * 192);
+      const out = expandTargets(shape, 192, ambient);
+      let maxAxis = 0;
+      solidSlots(ambient).forEach((slot, j) => {
+        if (j < SHAPE_COUNT) return;
+        const source = j % SHAPE_COUNT;
+        for (let a = 0; a < 3; a++) maxAxis = Math.max(maxAxis, Math.abs(out[slot * 4 + a]! - shape.positions[source * 3 + a]!));
+      });
+      expect(maxAxis, `kind ${kind}`).toBeGreaterThan(0.005);
+      expect(maxAxis, `kind ${kind}`).toBeLessThanOrEqual(0.006 + 1e-6);
+    }
+  });
+
+  it('混合形體（人形加 CREST）：每個點依自己的種類決定抖動幅度', () => {
+    const base = synthShape(13, SHAPE_COUNT, 'figure');
+    const kinds = new Uint8Array(base.count);
+    for (let i = 0; i < base.count; i++) kinds[i] = i % 2 === 0 ? KIND.CREST : 40;
+    const shape: Shape = { ...base, kinds };
+    const ambient = ambientField(192 * 192);
+    const out = expandTargets(shape, 192, ambient);
+    let crestMax = 0;
+    let figureMax = 0;
+    solidSlots(ambient).forEach((slot, j) => {
+      if (j < SHAPE_COUNT) return;
+      const source = j % SHAPE_COUNT;
+      for (let a = 0; a < 3; a++) {
+        const d = Math.abs(out[slot * 4 + a]! - shape.positions[source * 3 + a]!);
+        if (kinds[source] === KIND.CREST) crestMax = Math.max(crestMax, d);
+        else figureMax = Math.max(figureMax, d);
+      }
+    });
+    expect(crestMax).toBeLessThanOrEqual(0.002 + 1e-6);
+    expect(figureMax).toBeGreaterThan(0.005);
   });
 });

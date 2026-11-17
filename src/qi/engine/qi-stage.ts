@@ -436,7 +436,10 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
     shockAt = time;
   };
 
-  /** 開場結束（演完、被略過、或演出中換了姿勢）：取消還在等形體的開場；停在 `lift` 的話回到 `land`（不給衝量）。 */
+  /**
+   * 開場結束（演完、被略過、或演出中換了姿勢）：取消還在等形體的開場；計時已起算而停在 `lift`（或從氣流起演、還沒換成 `lift`）的話回到 `land`（不給衝量）。
+   * 開場還在等形體（pending）時被取消，姿勢不會動（`land` 可能根本還沒載到）：呼叫端要自己重新要求姿勢（首頁的 `endIntro`）。
+   */
   const endIntro = (): void => {
     const wasActive = introT >= 0 || introPending;
     introToken++;
@@ -445,7 +448,8 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
     introOnStart = null; // 還沒開始計時（pending）就被取消：不補呼叫
     if (introT >= 0) {
       introT = -1;
-      if (pose === 'lift' && shapes.has('land')) apply('land', makeTarget('land'), false);
+      // 停在吸氣的 lift，或從氣流起演、第一格還沒換成 lift（姿勢還是 flow）：都收回 land
+      if ((pose === 'lift' || pose === 'flow') && shapes.has('land')) apply('land', makeTarget('land'), false);
     }
     if (wasActive) notifyIntroEnd();
   };

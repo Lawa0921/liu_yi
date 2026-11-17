@@ -137,10 +137,11 @@ async function scrollThrough(page: Page): Promise<number> {
 }
 
 for (const device of DEVICES) {
-  test.describe(`整頁傳輸量：${device.name}`, () => {
-    test.use({ viewport: device.viewport });
+  // 第一次訪客：先蓋著入館閘門（閘門的館徽圖也算進整頁）；按「入館」之後才捲得動，所以用不預先標記進館的 rawTest
+  rawTest.describe(`整頁傳輸量：${device.name}`, () => {
+    rawTest.use({ viewport: device.viewport });
 
-    test('每 700 px 捲到底，切到小孩再捲一次：累計 ≤ 5 MB', async ({ page }) => {
+    rawTest('第一次訪客：按「入館」後每 700 px 捲到底，切到小孩再捲一次：累計 ≤ 5 MB', async ({ page }) => {
       const transfers = trackTransfers(page);
       await page.goto('./');
       await page.waitForFunction(
@@ -148,6 +149,9 @@ for (const device of DEVICES) {
         undefined,
         READY,
       );
+      await expect(page.locator('html'), '前提：第一次進站，閘門擋著').toHaveAttribute('data-gate', 'open');
+      await page.locator('[data-gate-enter]').click();
+      await expect(page.locator('html')).not.toHaveAttribute('data-gate', /.*/);
 
       const adultSteps = await scrollThrough(page);
       await settleRecording(page);

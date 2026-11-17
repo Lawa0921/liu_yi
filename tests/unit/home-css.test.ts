@@ -187,6 +187,13 @@ describe('home.css 的入館閘門規則（Task 25）', () => {
     expect(css).toMatch(/html\[data-gate\]\s+\.gate\s*>\s*\.gate__enter\s*\{[^}]*pointer-events\s*:\s*auto/);
   });
 
+  it('「入館」按鈕在腳本接手（.gate[data-ready]）之前 visibility:hidden，不是一顆點了沒反應的按鈕；腳本先標 data-ready 再聚焦', () => {
+    const rule = /html\[data-gate\]\s+\.gate:not\(\[data-ready\]\)\s+\.gate__enter\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(rule).toMatch(/visibility\s*:\s*hidden/);
+    const script = readFileSync(new URL('../../src/scripts/home/gate.ts', import.meta.url), 'utf8');
+    expect(script).toMatch(/dialog\.dataset\.ready = '';[\s\S]*button\.focus\(/);
+  });
+
   it('閘門的館徽沿用開場館徽的掃光：同一組選擇器，沒有 background-clip:text、混色模式、外發光', () => {
     const crestRules = css
       .split('}')

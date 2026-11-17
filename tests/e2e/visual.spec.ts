@@ -379,6 +379,32 @@ async function denseBox(png: Buffer, threshold: number, minCount: number): Promi
   return { left: across.from, right: across.to + 1, top: down.from, bottom: down.to + 1 };
 }
 
+/**
+ * 文字區域底下，canvas 上亮度 > 100 的像素比例：該段文字矩形（裁在 canvas 內）逐像素數。
+ * `rect` 是 canvas 在視窗中的位置；回傳有幾個文字矩形與 canvas 相交、共幾個像素、其中亮度 > 100 的占比。
+ */
+async function textBrightness(page: Page, rect: CanvasShot['rect'], texts: Box[]): Promise<{ inCanvas: Box[]; inText: number; underText: number }> {
+  const canvasBox: Box = { left: rect.left, right: rect.left + rect.width, top: rect.top, bottom: rect.top + rect.height };
+  const inCanvas = texts.filter((t) => overlapArea(t, canvasBox) > 0);
+  let inText = 0;
+  let inTextBright = 0;
+  const { data, info } = await sharp((await captureCanvas(page)).png).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  for (const t of inCanvas) {
+    const x0 = Math.max(0, Math.floor(t.left - rect.left));
+    const x1 = Math.min(info.width, Math.ceil(t.right - rect.left));
+    const y0 = Math.max(0, Math.floor(t.top - rect.top));
+    const y1 = Math.min(info.height, Math.ceil(t.bottom - rect.top));
+    for (let y = y0; y < y1; y++) {
+      for (let x = x0; x < x1; x++) {
+        inText++;
+        const o = (y * info.width + x) * 3;
+        if (luma(data[o]!, data[o + 1]!, data[o + 2]!) > 100) inTextBright++;
+      }
+    }
+  }
+  return { inCanvas, inText, underText: inText > 0 ? inTextBright / inText : 0 };
+}
+
 /** 兩個矩形的重疊面積（不重疊是 0）。 */
 function overlapArea(a: Box, b: Box): number {
   const w = Math.min(a.right, b.right) - Math.max(a.left, b.left);
@@ -652,25 +678,7 @@ for (const device of DEVICES) {
       // 外框比例：竹簡是橫的長方形（寬 ÷ 高 1.2–1.9，兩端略捲所以略窄於攤平時的 1.6）
       const aspect = (figure.right - figure.left) / (figure.bottom - figure.top);
       // 文字區域：該段文字矩形（裁在 canvas 內）底下，canvas 上亮度 > 100 的像素比例（竹簡淡到不影響收費導引文字的對比）
-      const canvasBox: Box = { left: rect.left, right: rect.left + rect.width, top: rect.top, bottom: rect.top + rect.height };
-      const inCanvas = texts.filter((t) => overlapArea(t, canvasBox) > 0);
-      let inText = 0;
-      let inTextBright = 0;
-      const { data, info } = await sharp((await captureCanvas(page)).png).removeAlpha().raw().toBuffer({ resolveWithObject: true });
-      for (const t of inCanvas) {
-        const x0 = Math.max(0, Math.floor(t.left - rect.left));
-        const x1 = Math.min(info.width, Math.ceil(t.right - rect.left));
-        const y0 = Math.max(0, Math.floor(t.top - rect.top));
-        const y1 = Math.min(info.height, Math.ceil(t.bottom - rect.top));
-        for (let y = y0; y < y1; y++) {
-          for (let x = x0; x < x1; x++) {
-            inText++;
-            const o = (y * info.width + x) * 3;
-            if (luma(data[o]!, data[o + 1]!, data[o + 2]!) > 100) inTextBright++;
-          }
-        }
-      }
-      const underText = inText > 0 ? inTextBright / inText : 0;
+      const { inCanvas, inText, underText } = await textBrightness(page, rect, texts);
       test.info().annotations.push({
         type: 'scroll',
         description: `外框寬高比 ${aspect.toFixed(2)}；canvas 亮度 > 100 的像素占 ${pct(analysis.bright)}（有內容的像素占 ${pct(analysis.covered)}）；文字矩形（${inCanvas.length} 個、${inText} px）底下占 ${pct(underText)}；紅 ${analysis.red} 像素`,
@@ -680,6 +688,25 @@ for (const device of DEVICES) {
       expect(inText, '量得到文字區域').toBeGreaterThan(0);
       expect(analysis.covered, '竹簡有畫出來（不是空畫面造成的假通過）').toBeGreaterThan(0.005);
       expect(underText, '文字區域底下亮度 > 100 的像素 ≤ 4%（文字清晰）').toBeLessThanOrEqual(0.04);
+    });
+
+    test('scroll（真實 tier）：文字區域亮度 > 100 的像素 ≤ 4%（桌機 high、手機 low 的實際亮度；量值記成 annotation）', async ({ page }) => {
+      test.setTimeout(240_000);
+      await open(page, device, 'seen', true);
+      await settlePose(page, 'pricing', 'scroll');
+      save(shotName(`scroll-real-${device.slug}`), await page.screenshot());
+      const { png, rect } = await captureCanvas(page);
+      save(shotName(`scroll-real-${device.slug}-canvas`), png);
+      const analysis = await analyze(png, 35);
+      const texts = await textRects(page, beatText('pricing'));
+      const { inCanvas, inText, underText } = await textBrightness(page, rect, texts);
+      test.info().annotations.push({
+        type: 'scroll-real-tier',
+        description: `tier ${TIER_OF[device.slug]}；canvas 亮度 > 100 的像素占 ${pct(analysis.bright)}（有內容的像素占 ${pct(analysis.covered)}）；文字矩形（${inCanvas.length} 個、${inText} px）底下亮度 > 100 的占 ${pct(underText)}`,
+      });
+      expect(inText, '量得到文字區域').toBeGreaterThan(0);
+      expect(analysis.covered, '竹簡有畫出來（不是空畫面造成的假通過）').toBeGreaterThan(0.005);
+      expect(underText, '真實 tier：文字區域底下亮度 > 100 的像素 ≤ 4%').toBeLessThanOrEqual(0.04);
     });
 
     test('crest（預約的光點館徽）：館徽矩形中心與亮點外框中心距離 ≤ 8% W、亮點外框在矩形內、是金色（不是朱紅）、預約按鈕不與館徽重疊', async ({ page }) => {

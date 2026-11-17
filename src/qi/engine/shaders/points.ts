@@ -24,6 +24,11 @@ import { HASH } from './noise';
  * 那種細而均勻的顆粒。只是畫出來的位置，不影響模擬與目標。
  */
 export const GRAIN = 0.02;
+/**
+ * 光點館徽（kind > 8.5，`KIND.CREST`）的顆粒：0＝不抖。館徽是細線條，GRAIN 的 ±0.01 會把線條抖散成一片糊（Task 25 審查；形體檔的重複點另有 `expand.ts` 的 `CREST_JITTER`）。
+ * 其他種類不變。
+ */
+export const CREST_GRAIN = 0;
 /** 地面倒影的亮度（試作 0.16；半解析度時代的倒影只剩約 3 成，這裡對回試作的觀感）。 */
 export const REFLECTION = 0.2;
 /**
@@ -80,8 +85,9 @@ ${HASH}
 void main(){
   vec4 p=texture2D(tPos,ref);
   vec3 vel=texture2D(tVel,ref).xyz;
-  vec3 pos=p.xyz+(hash32(ref*613.7+seed)-0.5)*${GRAIN.toFixed(4)};
   float kind=p.w;
+  float grain=kind>8.5?${CREST_GRAIN.toFixed(4)}:${GRAIN.toFixed(4)};
+  vec3 pos=p.xyz+(hash32(ref*613.7+seed)-0.5)*grain;
   if(uMirror>0.5){pos.y=-pos.y;vel.y=-vel.y;}
   vec4 mv=modelViewMatrix*vec4(pos,1.0);
   gl_Position=projectionMatrix*mv;

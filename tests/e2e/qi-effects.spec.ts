@@ -372,6 +372,26 @@ test.describe('開場結束通知 onEnd（桌機，tier=min）', () => {
     expect((await uniforms(page)).uIntroT, '預設 playIntro 從 0 起算').toBe(0);
   });
 
+  test('fromAmbient 計時一起算、第一格還沒畫就 skip（姿勢還是 flow）：收回 land，不停在氣流（Task 25 審查）', async ({ page }) => {
+    await open(page);
+    await setPose(page, 'land', false);
+    await setPose(page, 'lift', false);
+    await setPose(page, 'flow', false);
+    await run(page, 1000);
+    const state = await page.evaluate(async () => {
+      const stage = stageOf();
+      stage.playIntro({ fromAmbient: true });
+      for (let i = 0; i < 20; i++) await Promise.resolve(); // 形體都載好：計時起算（還沒有任何一格 rAF）
+      const before = { introT: stage.debug!.uniforms().uIntroT, pose: stage.debug!.pose() };
+      stage.playIntro({ skip: true });
+      return { before, after: { introT: stage.debug!.uniforms().uIntroT, pose: stage.debug!.pose() } };
+    });
+    expect(state.before, '前提：計時已起算（1.0）、姿勢還是 flow').toEqual({ introT: 1, pose: 'flow' });
+    expect(state.after, 'skip：計時歸零、姿勢收回 land').toEqual({ introT: -1, pose: 'land' });
+    await run(page, 3000);
+    expect(await meanError(page), '光點聚成 land').toBeLessThan(0.05);
+  });
+
   test('onStart：等 lift 載入的 pending 期間不呼叫；被別的姿勢取消的開場永遠不呼叫（之後 lift 載好也不補）', async ({ page }) => {
     await open(page);
     await setPose(page, 'land', false); // lift 還沒載過：playIntro 要等它

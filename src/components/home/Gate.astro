@@ -8,6 +8,7 @@
 //     標成 html[data-gate="open"]；判斷式與 `scripts/home/intro-gate.ts` 的 `shouldShowGate` 是同一條（單元測試用 vm 跑行內腳本對照）。
 //   - 沒有 JS：沒有人標屬性，閘門不渲染，爬蟲與無 JS 的訪客看到完整首頁。這一塊放在 <body> 的最後（頁尾與對話框之後），
 //     不改變內容的 DOM 順序，h1 仍是站名。
+//   - 「入館」按鈕在首頁腳本接手之前是 visibility:hidden（home.css；腳本標 data-ready 才顯示），不會有一顆點了沒反應的按鈕。
 //   - 無障礙：role="dialog"、aria-modal="true"、aria-label="入館"；腳本（scripts/home/gate.ts）把焦點放在按鈕、背景設 inert，進入後焦點回到 main。
 // 館徽圖與開場區是同一張來源（館徽 960×920 的透明底金色版），同樣的候選寬度，所以裝置挑到的候選通常與開場區那一張相同（DPR ≥ 2 的裝置完全共用）；
 // 館徽純裝飾（外層 aria-hidden、圖 alt=""）。圖是 lazy：閘門沒顯示（再訪等）就不下載，首頁腳本在閘門開著時一開始就改成 eager。

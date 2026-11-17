@@ -410,6 +410,11 @@ html[data-gate='leaving'] .gate > .gate__enter {
   text-indent: 0.5em;
 }
 
+/* 「入館」按鈕在首頁腳本接手（scripts/home/gate.ts 標 data-ready）之前不可見、不可點：腳本沒到時按鈕不會是一顆點了沒反應的死按鈕。 */
+html[data-gate] .gate:not([data-ready]) .gate__enter {
+  visibility: hidden;
+}
+
 /* 閘門還擋著時，站名組先不演進場（淡出開始才演）：閘門後面的首屏不會在看不見的時候就演完。 */
 html[data-gate='open'] .opening__lockup > * {
   animation: none;

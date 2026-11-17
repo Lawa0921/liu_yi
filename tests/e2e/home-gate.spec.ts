@@ -482,6 +482,35 @@ test.describe('閘門的退出路徑', () => {
     await expect(html(page)).not.toHaveAttribute('data-gate', /.*/);
   });
 
+  test('首頁腳本被扣住時「入館」按鈕不可見、點不到；腳本接手後才出現並取得焦點（不會有一顆點了沒反應的按鈕）', async ({ page }) => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+      setTimeout(resolve, 8000); // 保險：比 <head> 的 10 秒保險早放行
+    });
+    await page.route(/index\.astro_astro_type_script_index_0_lang\.[^/]+\.js/, async (route) => {
+      await held;
+      await route.continue();
+    });
+    watch(page);
+    try {
+      await page.goto(HOME, { waitUntil: 'commit' });
+      await page.waitForSelector('[data-gate-enter]', { state: 'attached' });
+      await expect(html(page), '行內腳本已標好閘門').toHaveAttribute('data-gate', 'open');
+      await expect(page.locator('[data-gate-dialog]')).not.toHaveAttribute('data-ready', /.*/);
+      await expect(enterButton(page), '腳本還沒到：按鈕不可見').toBeHidden();
+      expect(await enterButton(page).evaluate((el) => getComputedStyle(el).visibility)).toBe('hidden');
+      await expect(page.locator('.gate__crest-img'), '館徽與背板照常在').toBeAttached();
+    } finally {
+      release();
+    }
+    await expect(page.locator('[data-gate-dialog]')).toHaveAttribute('data-ready', '', READY);
+    await expect(enterButton(page), '腳本接手後按鈕出現').toBeVisible();
+    await expect(enterButton(page)).toBeFocused();
+    await enterButton(page).click();
+    await expect(html(page)).not.toHaveAttribute('data-gate', /.*/);
+  });
+
   test('首頁腳本有載入：閘門由腳本接手（window.__qiGate），保險計時到了也不會把還沒按的閘門拿掉', async ({ page }) => {
     await open(page, { clock: true });
     expect(await page.evaluate(() => (window as unknown as { __qiGate?: boolean }).__qiGate)).toBe(true);
@@ -500,6 +529,52 @@ async function expectGateGone(page: Page): Promise<void> {
 }
 
 // ── 館徽的逾時保險與閘門 ────────────────────────────────────────────
+
+// ── 入館後、形體還沒載完就略過 ──────────────────────────────────────
+// 閘門後面引擎停在氣流（flow）；按「入館」後開場在等 land、lift（pending）。這時略過（或 Esc），引擎必須回到 land，
+// 形體放行之後光點聚成拳師——不能永遠停在氣流（開場區只剩飄煙）。
+test.describe('入館後略過（形體還沒載完）', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  for (const how of ['skip-button', 'escape'] as const) {
+    test(`${how === 'skip-button' ? '點「略過」鈕' : '按 Esc'}：形體放行後引擎回到 land、光點聚成拳師（不是停在氣流）`, async ({ page }) => {
+      watch(page);
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+        setTimeout(resolve, 60_000); // 保險：測試出錯也不要把請求一直扣著
+      });
+      await page.route(/\.bin(\?|$)/, async (route) => {
+        await held;
+        await route.continue();
+      });
+      const pose = () => page.evaluate(() => (window as unknown as W).__qi.debug.pose());
+      try {
+        await page.goto(HOME);
+        await expect(html(page)).toHaveAttribute('data-qi-ready', 'true', READY);
+        await expect(html(page), '前提：閘門後面停在氣流').toHaveAttribute('data-qi-pose', 'flow');
+        await enterButton(page).click();
+        await expect(html(page)).not.toHaveAttribute('data-gate', /.*/);
+        await expect(html(page)).toHaveAttribute('data-qi-intro', 'playing');
+        expect(await introT(page), '前提：開場在等形體（pending），計時還沒起算').toBe(-1);
+
+        if (how === 'skip-button') await page.locator('[data-skip-intro]').click();
+        else await page.keyboard.press('Escape');
+        await expect(html(page)).toHaveAttribute('data-qi-intro', 'skipped');
+        expect(await pose(), '形體還沒到：引擎仍在氣流').toBe('flow');
+
+        release();
+        await expect.poll(pose, { timeout: 30_000, message: '形體放行後回到 land' }).toBe('land');
+        await expect(html(page)).toHaveAttribute('data-qi-pose', 'land', READY);
+        await expect
+          .poll(() => page.evaluate(() => (window as unknown as W).__qi.debug.meanError()), { timeout: 30_000, message: '光點聚成拳師' })
+          .toBeLessThan(0.05);
+      } finally {
+        release();
+      }
+    });
+  }
+});
 
 test.describe('館徽的逾時保險與閘門', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
