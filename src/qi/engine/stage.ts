@@ -27,7 +27,7 @@ import {
 import { rng } from '../shapes/rng';
 import { halfFloatTargets } from './caps';
 import { cameraShake, shockwave, shockwaveSecond } from './effects';
-import { framingFor } from './framing';
+import { framingFor, type Framing } from './framing';
 import { createGlow, type Glow } from './glow';
 import { GROUND, groundVertex } from './shaders/ground';
 import { coverageOf, POINT_PX, pointsFragment, pointsVertex } from './shaders/points';
@@ -87,7 +87,12 @@ export interface Stage {
    * CSS 像素的畫布尺寸。`portrait`（`viewport.ts` 的 `isPortrait`，依視窗）決定取景用直向或橫向（`framing.ts`）；
    * 不給就依畫布本身的寬高比（沒有外框的 harness 頁，畫布就是視窗）。
    */
-  setSize(width: number, height: number, portrait?: boolean): void;
+  setSize(width: number, height: number, portrait?: boolean, framing?: Framing | null): void;
+  /**
+   * 槽取景（Task 26）：用頁面指定的取景取代 `framingFor`（`null` ＝ 回到預設取景）。只動相機（便宜，頁首的槽隨捲動移動時每格都可以呼叫），
+   * 不碰光點與姿勢。
+   */
+  setFraming(framing: Framing | null): void;
   /** `time` 秒、`dt` 秒；`animate` 為 false 時鏡頭不動（減少動態）。 */
   update(time: number, dt: number, input: StageInput, animate?: boolean): void;
   /** 衝擊波、白閃、鏡頭震與拖尾上限（見 `StageEffects`）；每格在 `update` 之前呼叫。 */
@@ -124,6 +129,7 @@ export function createStage(renderer: WebGLRenderer, canvas: HTMLCanvasElement):
   let cssWidth = 1;
   let cssHeight = 1;
   let portrait = false;
+  let framingOverride: Framing | null = null; // 槽取景（非首頁的頁面）：有的話取代 framingFor
   let pointCount = 0; // 這個 tier 的光點數（`build` 設）；覆蓋密度要用
 
   const shared = {
@@ -164,7 +170,7 @@ export function createStage(renderer: WebGLRenderer, canvas: HTMLCanvasElement):
   const fit = (): void => {
     const aspect = cssWidth / cssHeight;
     camera.aspect = aspect;
-    const { visibleH, lookX, lookY } = framingFor(aspect, portrait);
+    const { visibleH, lookX, lookY } = framingOverride ?? framingFor(aspect, portrait);
     look.set(lookX, lookY, 0);
     // 兵器在螢幕上的大小隨取景變（手機直向小）：覆蓋密度（密集點的亮度倍率）要跟著
     shared.uCoverage.value = coverageOf(pointCount, shared.uPx.value, cssHeight / visibleH);
@@ -297,11 +303,16 @@ export function createStage(renderer: WebGLRenderer, canvas: HTMLCanvasElement):
       for (const p of points) p.visible = visible;
       if (groundPoints) groundPoints.visible = visible;
     },
-    setSize(width, height, portraitView) {
+    setSize(width, height, portraitView, framing) {
       cssWidth = Math.max(1, width);
       cssHeight = Math.max(1, height);
       portrait = portraitView ?? isPortrait(cssWidth, cssHeight);
+      if (framing !== undefined) framingOverride = framing;
       applySize();
+    },
+    setFraming(framing) {
+      framingOverride = framing;
+      fit();
     },
     update(time, dt, input, animate = true) {
       if (animate) {

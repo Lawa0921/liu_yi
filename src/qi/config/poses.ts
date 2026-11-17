@@ -7,6 +7,7 @@
  *     Task 25 起不再屬於任何 beat（收費課表段改成 `scroll`），只在入館閘門期間當背景：閘門後的光點在這裡飄，按下「入館」才吸氣聚成拳師。
  *   - `lift`：只屬於開場時間軸（吸氣聚成抬腳），不對應任何 beat。
  *   - `seal`：朱印（Task 25 起預約段改成光點館徽 `crest`，朱印縮成按鈕旁的小型靜態印章）；形體檔保留但沒有任何 beat 載入它。
+ *   - `gate`：院門門樓（Task 26，場地頁）。只屬於頁面光點層（`config/pages.ts`），首頁沒有任何 beat 用它。
  *
  * 純資料與查表，不碰 three／DOM。
  */
@@ -41,6 +42,7 @@ export type PoseId =
   | 'seal'
   | 'scroll'
   | 'crest'
+  | 'gate'
   | 'kid-wushu'
   | 'kid-defense-a'
   | 'kid-defense-b'
@@ -126,6 +128,8 @@ export const BURSTS: Record<PoseId, Burst> = {
   // Task 25：收費段的竹簡「攤開」（左右分開，力道輕——光點退成背景的氣）；預約段的光點館徽向內收（同朱印）
   scroll: { dir: [1, 0.05, 0], power: 1.6, mode: 1 },
   crest: { dir: [0, -1, 0], power: 2.0, mode: 3 },
+  // Task 26：院門從地面升起（場地頁；力道輕，門樓是安靜的背景）
+  gate: { dir: [0, 1, 0], power: 1.4, mode: 2 },
   // 小孩的四式沿用 chengchui 的左右分開
   'kid-wushu': { dir: [1, 0.1, 0], power: 3.0, mode: 1 },
   'kid-defense-a': { dir: [1, 0.1, 0], power: 3.0, mode: 1 },

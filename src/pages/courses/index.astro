@@ -1,5 +1,6 @@
 ---
 // 課程總覽：大人／小孩切換 × 三分類，下方「其他課程」。
+// 光點層（Task 26）：背景是飄著的氣（整張畫布，低亮度）；滑過或聚焦某張課程卡，光點在右側欄聚成該課的姿勢（卡片的 data-qi-pose），離開回到氣流。
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import AudienceCards from '../../components/AudienceCards.astro';
 import CourseCard from '../../components/CourseCard.astro';
@@ -11,7 +12,7 @@ const courses = await getPublishedCourses();
 const others = otherCourses(courses);
 ---
 
-<BaseLayout title="課程" description="六藝武術工作室的課程：大人與小孩各有兵器、拳術、格鬥三門課，另有巴西柔術與核心瑜珈。">
+<BaseLayout title="課程" description="六藝武術工作室的課程：大人與小孩各有兵器、拳術、格鬥三門課，另有巴西柔術與核心瑜珈。" qi="courses">
   <section class="section section--flush-top" aria-labelledby="page-title">
     <div class="container">
       <div class="page-head">

@@ -12,7 +12,7 @@ import {
 
 const AUDIENCES: Audience[] = ['adult', 'kid'];
 
-/** 十八個姿勢（依型別宣告順序）：計畫的十六個，加上 Task 25 的 scroll（竹簡）與 crest（光點館徽）。 */
+/** 十九個姿勢（依型別宣告順序）：計畫的十六個，加上 Task 25 的 scroll（竹簡）與 crest（光點館徽），Task 26 的 gate（場地頁的院門）。 */
 const ALL_POSES: PoseId[] = [
   'lift',
   'land',
@@ -28,6 +28,7 @@ const ALL_POSES: PoseId[] = [
   'seal',
   'scroll',
   'crest',
+  'gate',
   'kid-wushu',
   'kid-defense-a',
   'kid-defense-b',
@@ -132,7 +133,7 @@ describe('poseFor', () => {
 });
 
 describe('BURSTS', () => {
-  it('涵蓋全部 18 個 PoseId，且沒有多餘的鍵', () => {
+  it('涵蓋全部 19 個 PoseId，且沒有多餘的鍵', () => {
     expect(Object.keys(BURSTS).sort()).toEqual([...ALL_POSES].sort());
   });
 

@@ -7,7 +7,7 @@ import { INTRO_STORAGE_KEY, shouldShowGate } from '../../src/scripts/home/intro-
 // <head> 的行內腳本（BaseLayout）在首繪前決定要不要顯示入館閘門（html[data-gate="open"]）。腳本不能 import，
 // 所以判斷式寫了兩份：這裡把那段腳本原封不動丟進 vm、用假的 window／document 跑，結果必須與純函式 `shouldShowGate` 完全一致。
 const layout = readFileSync(new URL('../../src/layouts/BaseLayout.astro', import.meta.url), 'utf8');
-const script = /<script is:inline data-probe-engine=\{home \? '' : undefined\}>([\s\S]*?)<\/script>/.exec(layout)?.[1] ?? '';
+const script = /<script is:inline data-probe-engine=\{home \|\| qi \? '' : undefined\} data-probe-gate=\{home \? '' : undefined\}>([\s\S]*?)<\/script>/.exec(layout)?.[1] ?? '';
 
 interface Scenario {
   reducedMotion: boolean;
@@ -15,8 +15,11 @@ interface Scenario {
   visited: boolean;
   hash: string;
   referrer: string;
-  /** 首頁才探測（`data-probe-engine`）；其他頁沒有。 */
-  home?: boolean;
+  /**
+   * 哪一種頁面：'home'（預設）＝首頁，有 `data-probe-engine` 與 `data-probe-gate`；'qi'＝其他有光點層的頁面（Task 26），只有 `data-probe-engine`（探測 WebGL2，不做閘門）；
+   * 'none'＝沒有光點的頁面，什麼都沒有。
+   */
+  page?: 'home' | 'qi' | 'none';
   /** sessionStorage 讀取丟例外（隱私模式）。 */
   blockedStorage?: boolean;
   base?: string;
@@ -42,7 +45,14 @@ function runHead(s: Scenario): { gate: string | undefined; qiStatic: boolean; cr
   };
   const document = {
     documentElement: { dataset, classList: { add: (name: string) => classes.add(name) } },
-    currentScript: s.home === false ? { hasAttribute: () => false } : { hasAttribute: (name: string) => name === 'data-probe-engine' },
+    currentScript: {
+      hasAttribute: (name: string) => {
+        const page = s.page ?? 'home';
+        if (name === 'data-probe-engine') return page !== 'none';
+        if (name === 'data-probe-gate') return page === 'home';
+        return false;
+      },
+    },
     referrer: s.referrer,
     createElement: () => ({
       getContext: (type: string) => (type === 'webgl2' && s.webgl2 ? { getExtension: () => ({ loseContext: () => undefined }) } : null),
@@ -107,10 +117,32 @@ describe('<head> 行內腳本的閘門判斷與 shouldShowGate 一致', () => {
     expect(result.crest).toBeUndefined();
   });
 
-  it('不是首頁（沒有 data-probe-engine）：不探測、不顯示閘門', () => {
-    const result = runHead({ reducedMotion: false, webgl2: true, visited: false, hash: '', referrer: '', home: false });
+  it('沒有光點的頁面（沒有 data-probe-engine）：不探測、不顯示閘門', () => {
+    const result = runHead({ reducedMotion: false, webgl2: false, visited: false, hash: '', referrer: '', page: 'none' });
     expect(result.gate).toBeUndefined();
     expect(result.qiStatic).toBe(false);
+  });
+
+  // Task 26：其他頁面也有光點層，head 要在首繪前判定 html.qi-static（靜態圖要不要顯示只由 CSS 決定），但閘門與館徽只屬於首頁。
+  describe('有光點層的其他頁面（只有 data-probe-engine，沒有 data-probe-gate）', () => {
+    it('減少動態或沒有 WebGL2：標 html.qi-static；有 WebGL2 且沒減少動態：不標', () => {
+      expect(runHead({ reducedMotion: true, webgl2: true, visited: false, hash: '', referrer: '', page: 'qi' }).qiStatic).toBe(true);
+      expect(runHead({ reducedMotion: false, webgl2: false, visited: false, hash: '', referrer: '', page: 'qi' }).qiStatic).toBe(true);
+      expect(runHead({ reducedMotion: false, webgl2: true, visited: false, hash: '', referrer: '', page: 'qi' }).qiStatic).toBe(false);
+    });
+
+    it('永遠不顯示閘門、不標館徽、不排保險計時器（那是首頁的事），不論有沒有進過館、帶不帶錨點、從哪裡來', () => {
+      for (const visited of [false, true]) {
+        for (const hash of ['', '#booking']) {
+          for (const referrer of ['', `${ORIGIN}/liu_yi/courses/`]) {
+            const result = runHead({ reducedMotion: false, webgl2: true, visited, hash, referrer, page: 'qi' });
+            expect(result.gate, `${visited}/${hash}/${referrer}`).toBeUndefined();
+            expect(result.crest, `${visited}/${hash}/${referrer}`).toBeUndefined();
+            expect(result.timers).toEqual([]);
+          }
+        }
+      }
+    });
   });
 
   it('進過館的訪客：館徽直接是終態（data-qi-crest="shown"），沒有閘門', () => {

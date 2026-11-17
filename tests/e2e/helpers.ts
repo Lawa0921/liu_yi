@@ -155,3 +155,61 @@ export async function figureBoxes(page: Page): Promise<{ poster: Box; engine: Bo
 
   return { poster, engine };
 }
+
+// ── 非首頁的頁面光點層（Task 26）──────────────────────────────────────
+
+/** 符合選擇器、有大小的元素的視窗座標外框（display:none 的不算）。 */
+export function boxOf(page: Page, selector: string): Promise<Box[]> {
+  return page.evaluate((sel) => {
+    return [...document.querySelectorAll<HTMLElement>(sel)]
+      .map((el) => el.getBoundingClientRect())
+      .filter((r) => r.width > 0 && r.height > 0)
+      .map((r) => ({ left: r.left, right: r.right, top: r.top, bottom: r.bottom }));
+  }, selector);
+}
+
+/** `a` 與 `b` 的交集面積占 `b` 面積的比例（0–1）；不相交是 0。 */
+export function overlapOfBox(a: Box, b: Box): number {
+  const x = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+  const y = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+  if (x <= 0 || y <= 0) return 0;
+  const area = (b.right - b.left) * (b.bottom - b.top);
+  return area > 0 ? (x * y) / area : 0;
+}
+
+/** 圖片裡亮度 > `threshold` 的像素外框（視窗座標；只剩光點與輪廓，光暈與環境煙不算）；整張圖都不夠亮回 null。 */
+export function brightBox(page: Page, selector: string, threshold = 100): Promise<Box | null> {
+  return page.evaluate(
+    async ([sel, limit]) => {
+      const img = document.querySelector<HTMLImageElement>(sel as string);
+      if (!img) return null;
+      await img.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const context = canvas.getContext('2d')!;
+      context.drawImage(img, 0, 0);
+      const { data, width, height } = context.getImageData(0, 0, canvas.width, canvas.height);
+      let x0 = width;
+      let x1 = -1;
+      let y0 = height;
+      let y1 = -1;
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const o = (y * width + x) * 4;
+          if (0.2126 * data[o]! + 0.7152 * data[o + 1]! + 0.0722 * data[o + 2]! <= (limit as number)) continue;
+          if (x < x0) x0 = x;
+          if (x > x1) x1 = x;
+          if (y < y0) y0 = y;
+          if (y > y1) y1 = y;
+        }
+      }
+      if (x1 < 0) return null;
+      const rect = img.getBoundingClientRect();
+      const sx = rect.width / width;
+      const sy = rect.height / height;
+      return { left: rect.left + x0 * sx, right: rect.left + (x1 + 1) * sx, top: rect.top + y0 * sy, bottom: rect.top + (y1 + 1) * sy };
+    },
+    [selector, threshold] as const,
+  );
+}

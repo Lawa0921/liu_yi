@@ -2,6 +2,7 @@
 // 單一課程：名稱與一句話簡介、照片（有才顯示，可用按鈕切換）、內文、子項區塊、影片（有才顯示）、授課教練、相關連結。
 // 內文可能只有兩三句（等業主補文案），版型不能靠內文撐高度：
 // 首屏右側有照片就放照片；沒有照片就放字牌（分類單字＋紋樣），不放任何替代圖。
+// 光點層（Task 26）：寬螢幕在內容右側欄、其他在頁首上方，聚成該課的招式（`poseForCourse`）；兵器課的 3D 兵器架照舊（光點層在架子進入視窗時淡出並暫停）。
 import { Image } from 'astro:assets';
 import { render } from 'astro:content';
 import BaseLayout from '../../layouts/BaseLayout.astro';
@@ -13,6 +14,7 @@ import Bafang from '../../components/ornament/Bafang.astro';
 import Leitai from '../../components/ornament/Leitai.astro';
 import { coachesOfCourse, getPublishedCoaches, getPublishedCourses, type Course } from '../../lib/content';
 import { AUDIENCE_LABEL, CATEGORY_GLYPH, CATEGORY_LABEL } from '../../lib/courses';
+import { poseForCourse } from '../../qi/config/pages';
 import { BOOKING_ANCHOR, BOOKING_LABEL } from '../../lib/site';
 import { url } from '../../lib/url';
 
@@ -36,7 +38,7 @@ const glyph = category === 'other' ? undefined : CATEGORY_GLYPH[category];
 const WEAPON_KIND: Record<string, 'jian' | 'miaodao' | 'spear'> = { 中國劍: 'jian', 苗刀: 'miaodao', 大槍: 'spear' };
 ---
 
-<BaseLayout title={title} description={`${title}：${summary}`} ogImage={photos[0]?.src} ogType="article">
+<BaseLayout title={title} description={`${title}：${summary}`} ogImage={photos[0]?.src} ogType="article" qi="course" qiPose={poseForCourse({ category, audience })}>
   <article class="course">
     <header class="course-head">
       <div class="course-head__text">

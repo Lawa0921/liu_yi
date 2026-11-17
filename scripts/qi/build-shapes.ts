@@ -18,7 +18,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import sharp from 'sharp';
 import { FIGURES, figureScale } from '../../src/qi/config/figures';
-import { SEAL_CENTER_Y, SEAL_WORLD_SIZE, SHAPES, type ShapeRecipe } from '../../src/qi/config/shapes';
+import { GATE_SCALE, GATE_SILHOUETTE, SEAL_CENTER_Y, SEAL_WORLD_SIZE, SHAPES, type ShapeRecipe } from '../../src/qi/config/shapes';
 import { sampleCrest } from '../../src/qi/shapes/sample-crest';
 import { sampleScroll } from '../../src/qi/shapes/sample-scroll';
 import { encodeShape, KIND, SHAPE_COUNT, SHAPE_FORMAT_VERSION, shapeFileBytes, type Shape } from '../../src/qi/shapes/format';
@@ -35,6 +35,8 @@ const SEAL_MASK = 'src/assets/seal/seal-liuyi.png';
 const CREST_IMAGE = 'src/assets/images/crest-lion.png';
 /** 朱印的深度：z 在 ±這個值內（人形約 ±0.3，印是薄薄一片）。 */
 const SEAL_HALF_DEPTH = 0.02;
+/** 院門的取樣來源（Task 26）：既有的剪影，不經 `FIGURES`（它不是人形）。 */
+const GATE_IMAGE = `src/assets/silhouettes/${GATE_SILHOUETTE}.png`;
 const MANIFEST = 'shapes.json';
 
 /** 配方引用的人形：剪影檔與比例。查 `FIGURES` 與算 `figureScale`（頭部對齊或 scaleOverride）只在這裡做一次。 */
@@ -62,6 +64,8 @@ function recipeInputs(recipe: ShapeRecipe): string[] {
       return []; // 程序化：沒有輸入檔，所以不可能帶字
     case 'crest':
       return [CREST_IMAGE];
+    case 'gate':
+      return [GATE_IMAGE];
     case 'compose':
       return recipe.parts.map((part) => resolveFigure(part.figure).file);
   }
@@ -187,6 +191,8 @@ async function buildShape(root: string, id: string, recipe: ShapeRecipe): Promis
       return sampleScroll({ count, seed: seedOf(id) });
     case 'crest':
       return sampleCrest(await loadMask(root, CREST_IMAGE), { count, seed: seedOf(id) });
+    case 'gate':
+      return sampleFigure(await loadMask(root, GATE_IMAGE), GATE_SCALE, { count, seed: seedOf(id) });
     case 'compose': {
       const figures = await Promise.all(
         recipe.parts.map(async (part) => {

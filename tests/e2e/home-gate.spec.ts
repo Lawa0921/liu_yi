@@ -530,6 +530,31 @@ async function expectGateGone(page: Page): Promise<void> {
 
 // ── 館徽的逾時保險與閘門 ────────────────────────────────────────────
 
+// ── 開場用的形體（lift）載不到 ──────────────────────────────────────
+// 前次審查轉來（Task 26）：閘門後面的光點停在氣流（flow），按下「入館」後開場要等 land、lift 都載到才演；lift 載不到時開場被取消，
+// 但引擎的 `setPose('land')` 在開場 pending 時被擋下、首頁的 `requested` 又已經是 land，不會重試——光點就永遠停在氣流。
+test.describe('入館後開場形體載入失敗', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test('lift.bin 載不到：開場取消後引擎回到目前段落的姿勢（land），光點聚成拳師，不停在氣流', async ({ page }) => {
+    watch(page);
+    await page.route(/lift[^/]*\.bin(\?|$)/, (route) => route.abort());
+    await page.goto(HOME);
+    await expect(html(page)).toHaveAttribute('data-qi-ready', 'true', READY);
+    await expect(html(page), '前提：閘門後面停在氣流').toHaveAttribute('data-qi-pose', 'flow');
+    await enterButton(page).click();
+    await expect(html(page)).not.toHaveAttribute('data-gate', /.*/);
+    await expect(html(page), 'lift 載不到：開場取消，收尾為 done').toHaveAttribute('data-qi-intro', 'done', READY);
+    await expect(html(page), '引擎回到 land').toHaveAttribute('data-qi-pose', 'land', READY);
+    expect(await page.evaluate(() => (window as unknown as W).__qi.debug.pose())).toBe('land');
+    await expect
+      .poll(() => page.evaluate(() => (window as unknown as W).__qi.debug.meanError()), { timeout: 30_000, message: '光點聚成拳師' })
+      .toBeLessThan(0.05);
+    // 瀏覽器自己印的請求失敗訊息不算頁面的錯誤
+    seen.delete(page);
+  });
+});
+
 // ── 入館後、形體還沒載完就略過 ──────────────────────────────────────
 // 閘門後面引擎停在氣流（flow）；按「入館」後開場在等 land、lift（pending）。這時略過（或 Esc），引擎必須回到 land，
 // 形體放行之後光點聚成拳師——不能永遠停在氣流（開場區只剩飄煙）。

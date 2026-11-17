@@ -35,6 +35,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
+import { STILL_FIT_HEIGHT, STILL_FIT_WIDTH } from '../../src/qi/config/still-fit';
 import { decodeShape, KIND, type Shape } from '../../src/qi/shapes/format';
 import { rng } from '../../src/qi/shapes/rng';
 import { hashInputs, sha256 } from './hash';
@@ -118,9 +119,9 @@ function toneMap(r: number, g: number, b: number, out: Float32Array, o: number):
 }
 
 // ── 調參 ────────────────────────────────────────────────────────────────────
-/** 取景：形體外框占影像的比例上限（高、寬各自）。 */
-const FIT_HEIGHT = 0.8;
-const FIT_WIDTH = 0.88;
+/** 取景：形體外框占影像的比例上限（高、寬各自）；頁面光點層要換算靜態圖的大小，所以規則放在 `config/still-fit.ts`。 */
+const FIT_HEIGHT = STILL_FIT_HEIGHT;
+const FIT_WIDTH = STILL_FIT_WIDTH;
 /**
  * 光點的高斯半徑 ＝ 此係數 × √（形體在影像上實際占住的像素面積）：點數固定，形體占的面積越大，點越要大才蓋得住，
  * 單位面積的光量才一致。「占住」＝外框切成 OCCUPANCY_GRID² 格後有點落入的格數，所以橫排的 others（外框大、人形小）

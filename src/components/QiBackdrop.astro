@@ -1,0 +1,41 @@
+---
+// 非首頁的頁面光點層（Task 26）：光點畫布與引擎到達之前的靜態圖。由 BaseLayout 在 <main> 的最前面輸出（頁面傳 `qi`），不改內容的 DOM 順序。
+// 純裝飾：整個容器 aria-hidden，畫布不可聚焦、不接收指標事件（掌風的指標事件掛在 window）、在內容底下。
+// 每種頁面放什麼形體、放在哪裡：src/qi/config/pages.ts；版面：src/styles/qi-page.css；腳本：src/scripts/qi/page.ts。
+//
+//   - 靜態圖：這一頁預設姿勢的聚合態（建置時渲好的 WebP，與首頁的各姿勢同一批）。引擎接手後交叉淡化（html[data-qi-ready]）；
+//     減少動態、沒有 WebGL、沒有 JS 時它就是畫面。課程總覽的氣流（flow）沒有形體，所以沒有靜態圖（那個頁面的光點只是背景）。
+//   - 大小對到引擎的取景：--qi-ww／--qi-wh 是槽要放得下的世界大小（與引擎同一個 `PAGES[kind].world`），--qi-k 是這張圖
+//     「每世界單位占圖高的倍率」，--qi-dy 是圖要往下移幾個世界單位才與引擎對齊（`lib/still-fit.ts`，建置時讀形體檔的外框算）。
+//   - 課程總覽另有一塊右側欄的槽（[data-qi-slot]）：氣流是整張畫布的背景，滑過課程卡時光點在槽裡聚成姿勢。
+import '../styles/qi-page.css';
+import { stillInfo } from '../lib/stills';
+import { stillOffsetOf, stillScaleOf } from '../lib/still-fit';
+import { PAGES, type PageKind } from '../qi/config/pages';
+import type { PoseId } from '../qi/config/poses';
+
+interface Props {
+  page: PageKind;
+  /** 這一頁的姿勢（靜態圖與引擎的形體）；不傳就用 `PAGES[page].pose`。課程頁依課程的分類與對象給（`poseForCourse`）。 */
+  pose?: PoseId;
+}
+
+const { page, pose } = Astro.props;
+const spec = PAGES[page];
+const initial = pose ?? spec.pose;
+const still = initial === 'flow' ? undefined : stillInfo(initial);
+const k = still ? stillScaleOf(initial, still.width / still.height) : 0;
+const dy = still ? stillOffsetOf(initial, spec.world.cy) : 0;
+---
+
+<div class="qi-backdrop" data-qi-backdrop data-qi-page={page} data-qi-initial-pose={initial} aria-hidden="true" style={`--qi-ww:${spec.world.w};--qi-wh:${spec.world.h}`}>
+  {still && <img class="qi-still" src={still.src} width={still.width} height={still.height} alt="" decoding="async" style={`--qi-k:${k.toFixed(4)};--qi-dy:${dy.toFixed(4)}`} />}
+  <canvas class="qi-canvas" data-qi-canvas></canvas>
+  {spec.slot === 'rail' && <div class="qi-slot" data-qi-slot></div>}
+</div>
+
+<script>
+  import { initQiPage } from '../scripts/qi/page';
+
+  void initQiPage();
+</script>

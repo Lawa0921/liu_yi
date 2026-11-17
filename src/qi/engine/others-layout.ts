@@ -51,6 +51,42 @@ export interface OthersFit {
   offset: Offset;
 }
 
+export interface OthersFitWindowInput {
+  boxes: readonly FigureBox[];
+  /** 槽在世界座標裡的半寬、半高與中心高度（`engine/slot.ts` 的 `SlotFrame`）。 */
+  halfWidth: number;
+  halfHeight: number;
+  cy: number;
+}
+
+/**
+ * 槽取景（Task 26，非首頁的頁面）：把四個小人形放進視窗。一排與 2×2 各算放得下的最大倍率（上限 `OTHERS_MAX_SCALE`），取倍率大的那一種：
+ * 窄而高的視窗（右側欄）自然是 2×2，寬而矮的視窗（頁首的一條）是一排。排好之後以視窗中心（x = 0、高度 cy）上下置中。
+ * 首頁不走這條（`othersFit` 依畫布與文字位置）。
+ */
+export function othersFitWindow(input: OthersFitWindowInput): OthersFit {
+  const { boxes, cy } = input;
+  const roomWidth = 2 * input.halfWidth;
+  const roomHeight = 2 * input.halfHeight;
+  const widths = boxes.map((box) => box.maxX - box.minX);
+  const heights = boxes.map((box) => box.maxY - box.minY);
+
+  const candidates: { rows: readonly (readonly number[])[]; gap: number; rowGap: number }[] = [
+    { rows: [[0, 1, 2, 3]], gap: OTHERS_LANDSCAPE.gap, rowGap: 0 },
+    { rows: [[0, 1], [2, 3]], gap: PORTRAIT_GAP, rowGap: PORTRAIT_ROW_GAP },
+  ];
+  let best: { arrangement: Arrangement; scale: number } | null = null;
+  for (const { rows, gap, rowGap } of candidates) {
+    const rowWidth = rows.map((row) => row.reduce((sum, k) => sum + widths[k]!, 0));
+    const byWidth = Math.min(...rows.map((row, r) => (roomWidth - (row.length - 1) * gap) / rowWidth[r]!));
+    const byHeight = (roomHeight - (rows.length - 1) * rowGap) / rows.map((row) => Math.max(...row.map((k) => heights[k]!))).reduce((sum, h) => sum + h, 0);
+    const scale = Math.min(OTHERS_MAX_SCALE, Math.max(0.05, Math.min(byWidth, byHeight)));
+    if (!best || scale > best.scale) best = { arrangement: { rows, scale, gap, rowGap }, scale };
+  }
+  const arrangement = best!.arrangement;
+  return { arrangement, offset: { x: 0, y: cy - arrangedSize(boxes, arrangement).height / 2 } };
+}
+
 export function othersFit(input: OthersFitInput): OthersFit {
   const { boxes, portrait, cssWidth, cssHeight } = input;
   if (!portrait) {
