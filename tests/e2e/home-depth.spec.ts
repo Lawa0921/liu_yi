@@ -271,11 +271,18 @@ async function measureDepth(page: Page): Promise<Contrast> {
     const imgs = [...document.querySelectorAll<HTMLImageElement>('.depth img, .depth-fg img')].filter((img) => img.getAttribute('src') && getComputedStyle(img).display !== 'none');
     await Promise.all(imgs.map((img) => img.decode().catch(() => undefined)));
   });
-  // 前景的淡入（data-fg-ready 之後 0.3 s）走完才截：負載高時引擎就緒得早，截到一半淡入的簷角，亮度差會掉到門檻邊上（完整 e2e 曾量到 11.97）。
-  // 轉場走文件時間軸、不受假時鐘控制；從 Node 端輪詢（假時鐘會接管頁面裡的計時器與 rAF）。
+  // 頁面上所有有限長度的動畫與轉場都跑完才截（複審：開場海報的淡化 0.6 s、opening-in 0.9–1.05 s、beat-text-in 0.7 s 還在跑時截到的第一張，
+  // 和後面幾張的底不一樣，亮度差會掉到門檻邊上，曾量到 11.95–11.97；前景本身早就是 1）。已結束但帶 fill 的動畫會留在 getAnimations() 裡，
+  // 所以排除 finished；無限循環的（例如飄塵）永遠不會結束，也排除。動畫走文件時間軸、不受假時鐘控制；從 Node 端輪詢（假時鐘會接管頁面裡的計時器與 rAF）。
   await expect
-    .poll(() => page.evaluate(() => [...document.querySelectorAll<HTMLImageElement>('.depth-fg img')].every((img) => img.getAnimations().length === 0)), { timeout: 10_000 })
-    .toBe(true);
+    .poll(
+      () =>
+        page.evaluate(() =>
+          document.getAnimations().filter((animation) => animation.playState !== 'finished' && animation.effect?.getTiming().iterations !== Infinity).length,
+        ),
+      { timeout: 10_000, message: '有限長度的動畫都跑完' },
+    )
+    .toBe(0);
   await page.addStyleTag({ content: '.home-canvas { visibility: hidden !important }' });
   const all = await shotWith(page, '');
   return {
@@ -991,3 +998,49 @@ for (const scenario of [
     });
   });
 }
+
+// 重新整理、瀏覽器還原捲動位置（複審 Minor）：還原發生在腳本量第一次之前後都有可能，載入當下文字還在升起動畫裡（beat-text-in、opening-in），
+// 量到的是動畫中途的位置；動畫結束不會觸發任何事件，前景就停在「文字壓上來」的隱藏狀態（桌機 scrollY 4500 的窗櫺），直到下一次捲動。
+// 這裡在各個位置重新整理，等動畫跑完、最後一個 scroll 事件之後 RECOVER_MS，附近沒有文字的前景都要看得見。
+test.describe('重新整理還原捲動位置之後，前景照樣出現：桌機 1440×900', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+  test.describe.configure({ timeout: 240_000 });
+
+  test('在 15 個位置重新整理（瀏覽器還原捲動位置；含複審員量到的 4500），附近沒有文字的前景都看得見', async ({ page }) => {
+    await page.addInitScript(() => {
+      sessionStorage.setItem('liuyi:qi-intro', '1');
+      const w = window as unknown as { __lastScroll: number };
+      w.__lastScroll = performance.now();
+      window.addEventListener('scroll', () => void (w.__lastScroll = performance.now()), { passive: true });
+    });
+    await page.route(/\/_astro\/[^/]*(qi|home|init)[^/]*\.js(\?.*)?$/, (route) => route.abort()); // 只剩海報：畫格穩定
+    await page.goto(HOME);
+    await page.waitForFunction(() => document.querySelector('.depth-fg')?.hasAttribute('data-fg-ready') === true, undefined, { timeout: 15_000 });
+    const max = await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight);
+    const stops: Stop[] = [];
+    const stale: string[] = [];
+    const targets = [1500, 3000, 4500, 6000, 7500, ...Array.from({ length: 10 }, (_, i) => Math.round(max * (0.1 + (0.85 * i) / 10)))].filter((y) => y < max);
+    for (const target of targets) {
+      await page.evaluate((y) => window.scrollTo({ top: y, behavior: 'instant' }), target);
+      await page.waitForTimeout(1000);
+      await page.reload();
+      await page.waitForFunction(() => document.querySelector('.depth-fg')?.hasAttribute('data-fg-ready') === true, undefined, { timeout: 15_000 });
+      // 升起動畫（最長約 1.05 s）都跑完
+      await expect
+        .poll(() => page.evaluate(() => document.getAnimations().filter((a) => a.playState !== 'finished' && a.effect?.getTiming().iterations !== Infinity).length), { timeout: 10_000 })
+        .toBe(0);
+      const rest = await restState(page);
+      expect(Math.abs(rest.y - target), `重新整理後還原到 ${target} 附近（版面高度在載入過程中會微調，差個十幾 px）`).toBeLessThan(150);
+      stops.push({ label: `重新整理於 ${target}`, fgs: rest.fgs });
+      // 停住的狀態要是「最新的」：叫腳本照現在的版面再算一次（resize），任何一張前景的隱藏與否都不能變（文字離前景 6–12 px 的情況上面的幾何判斷不驗，這裡驗）
+      const hidden = () => page.evaluate(() => [...document.querySelectorAll<HTMLImageElement>('.depth-fg img')].map((img) => `${img.dataset.asset}:${img.hasAttribute('data-fg-hide') ? 'hide' : 'show'}`));
+      const settled = await hidden();
+      await page.evaluate(() => window.dispatchEvent(new Event('resize')));
+      await page.waitForFunction(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true)))));
+      const fresh = await hidden();
+      if (settled.join() !== fresh.join()) stale.push(`重新整理於 ${target}：停住時 ${settled.join(' ')}，重算後 ${fresh.join(' ')}`);
+    }
+    expectRecovered(stops, 6);
+    expect(stale, '載入時量的是升起動畫中途的文字位置，動畫結束後沒有重算').toEqual([]);
+  });
+});

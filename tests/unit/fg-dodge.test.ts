@@ -197,9 +197,9 @@ describe('settleTrack／FG_SETTLE_MS（停下之後的尾端重算：速度歸�
     expect(settleTrack(moving, 4040, 1016).speed).toBeGreaterThan(0);
   });
 
-  it('尾端重算等的時間：不短於「視為停下」的 300 ms（滾輪刻度之間的空檔不算停），加上淡入 0.3 s 仍在 0.65 s 內回來', () => {
+  it('尾端重算等的時間：不短於「視為停下」的 300 ms（滾輪刻度之間的空檔不算停），加上淡入 0.3 s 在 0.62 s 內完全回來（e2e 在 0.6 s 量 opacity ≥ 0.5）', () => {
     expect(FG_SETTLE_MS).toBeGreaterThanOrEqual(300);
-    expect(FG_SETTLE_MS / 1000 + 0.3).toBeLessThanOrEqual(0.65);
+    expect(FG_SETTLE_MS / 1000 + 0.3).toBeLessThanOrEqual(0.62 + 1e-9);
   });
 });
 

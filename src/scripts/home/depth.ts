@@ -194,6 +194,11 @@ export function initDepth(): void {
   window.addEventListener('scroll', onScroll, { passive: true });
   window.addEventListener('resize', rebuild, { passive: true });
   window.addEventListener('load', rebuild, { once: true });
+  // 重新整理或從上一頁回來（瀏覽器還原捲動位置、bfcache）：再量一次
+  window.addEventListener('pageshow', rebuild);
+  // 文字的升起動畫（beat-text-in、opening-in）結束時位置變了，但不會有任何捲動或尺寸事件：載入時量的是動畫中途的位置，
+  // 前景會停在「文字壓上來」的隱藏狀態（複審：桌機重新整理後還原到 scrollY 4500，窗櫺一直隱藏）。動畫結束就再算一格（animationend 沒有預設行為，不需要 passive）。
+  document.addEventListener('animationend', schedule);
   void document.fonts?.ready.then(rebuild);
   // 版面變高變矮（靜態圖載入、字型換上、面板顯示與隱藏）：重建文字清單
   if (typeof ResizeObserver !== 'undefined') new ResizeObserver(rebuild).observe(document.body);
