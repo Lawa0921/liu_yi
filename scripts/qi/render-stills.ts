@@ -440,7 +440,14 @@ const HEROES = [
 ] as const;
 const POSE_SIZE = { width: 1000, height: 750 } as const;
 /** 影響渲染結果的原始碼（相對專案根目錄）。 */
-const SOURCES = ['scripts/qi/render-stills.ts', 'scripts/qi/hash.ts', 'scripts/qi/staged-output.ts', 'src/qi/shapes/format.ts', 'src/qi/shapes/rng.ts'];
+const SOURCES = [
+  'scripts/qi/render-stills.ts',
+  'scripts/qi/hash.ts',
+  'scripts/qi/staged-output.ts',
+  'src/qi/config/still-fit.ts', // 取景比例（STILL_FIT_WIDTH／STILL_FIT_HEIGHT）：頁面光點層靠它算靜態圖的大小，改了比例靜態圖就要重建
+  'src/qi/shapes/format.ts',
+  'src/qi/shapes/rng.ts',
+];
 const DEFAULT_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
 /** 名稱 → 32 位元種子（sha256 的前 8 個十六進位字元）：不依賴出圖順序，加減形體不會讓其他圖的點跑掉。 */

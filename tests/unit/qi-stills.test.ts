@@ -505,7 +505,7 @@ describe('renderAllStills：失敗與跳過', () => {
     expect(Object.keys(after).filter((f) => after[f] !== before[f])).toEqual(['kao.webp']);
   }, 120_000);
 
-  it('改渲染原始碼或共用的 staged-output.ts（只加註解）→ 重建，而且圖逐位元不變（渲染是確定性的）', async () => {
+  it('改渲染原始碼、共用的 staged-output.ts 或取景比例 config/still-fit.ts（只加註解）→ 重建，而且圖逐位元不變（渲染是確定性的）', async () => {
     const root = tmp();
     for (const rel of ['scripts/qi', 'src/qi']) cpSync(join(ROOT, rel), join(root, rel), { recursive: true });
     const shapesDir = miniShapes();
@@ -513,7 +513,9 @@ describe('renderAllStills：失敗與跳過', () => {
     await renderAllStills({ shapesDir, outDir, root });
     const before = stillsOf(outDir);
 
-    for (const rel of ['scripts/qi/render-stills.ts', 'scripts/qi/staged-output.ts']) {
+    // src/qi/config/still-fit.ts（Task 26）：取景比例 STILL_FIT_WIDTH／STILL_FIT_HEIGHT 在這裡，改了它渲染結果就變（這裡只加註解，圖仍逐位元不變），
+    // 所以它也是輸入雜湊的一部分；不然改了比例，靜態圖不會重建，與引擎的取景（頁面光點層靠它算靜態圖的大小）錯位。
+    for (const rel of ['scripts/qi/render-stills.ts', 'scripts/qi/staged-output.ts', 'src/qi/config/still-fit.ts']) {
       writeFileSync(join(root, rel), `${readFileSync(join(root, rel), 'utf8')}\n// 只加註解\n`);
       expect((await renderAllStills({ shapesDir, outDir, root })).skipped, rel).toBe(false);
       expect(stillsOf(outDir), rel).toEqual(before);
