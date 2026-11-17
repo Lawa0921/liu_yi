@@ -43,3 +43,62 @@ export function overlapsAny(box: Box, texts: readonly Box[], margin: number): bo
   }
   return false;
 }
+
+// ── 提前淡出（複審 Important：真實速度連續捲動時，前景「等文字進來才開始淡出」會短暫壓字）──────────────────
+// 文字以每秒上千 px 掃過前景，淡出要時間（FG_FADE_OUT_S），所以要依「捲動速度 × 淡出時間」往文字來的那一側看遠一點（`leadBox`）：
+// 文字還沒進到前景，前景就已經在淡出，等文字真的碰到時前景已經（接近）透明。
+
+/** 前景淡出的時間（秒）：要與 `styles/depth.css` 的 `[data-fg-hide]` 轉場一致（單元測試只守住這個常數；e2e 以真實速度捲動驗整體）。淡入維持較慢（0.3 s）。 */
+export const FG_FADE_OUT_S = 0.1;
+
+/** 捲動速度的上限（px/s）：程式叫頁面一口氣跳很遠時，不讓提前量大到整個前景消失太久。 */
+const MAX_SCROLL_SPEED = 6000;
+/** 隔了這麼久（ms）才又有一格，視為停下來之後重新開始：速度歸零。 */
+const SCROLL_IDLE_MS = 300;
+
+export interface ScrollTrack {
+  y: number;
+  /** rAF 的時間戳（ms）。 */
+  t: number;
+  /** px/s。 */
+  speed: number;
+  /** +1 往下捲（內容往上跑，文字從下方進到前景）、−1 往上捲、0 不明。 */
+  dir: -1 | 0 | 1;
+}
+
+/**
+ * 依這一格的 scrollY 與時間更新捲動速度與方向。速度取「這一格量到的」與「上一格的 0.8 倍」兩者較大的（減速時不會一格就掉到 0，
+ * 前景才不會在減速的瞬間就以為安全了）；位移為 0（視窗改變、換對象觸發的那一格）時方向沿用、速度衰減。
+ */
+export function trackScroll(previous: ScrollTrack | undefined, y: number, now: number): ScrollTrack {
+  if (!previous || now <= previous.t || now - previous.t > SCROLL_IDLE_MS) return { y, t: now, speed: 0, dir: 0 };
+  const dy = y - previous.y;
+  if (dy === 0) return { y, t: now, speed: previous.speed * 0.8, dir: previous.dir };
+  const instant = (Math.abs(dy) / (now - previous.t)) * 1000;
+  return { y, t: now, speed: Math.min(MAX_SCROLL_SPEED, Math.max(instant, previous.speed * 0.8)), dir: dy > 0 ? 1 : -1 };
+}
+
+/** 前景外框往四邊各加 `margin`（文字離前景這麼近就先淡出，不要等它真的碰到）。 */
+export function inflateBox(box: Box, margin: number): Box {
+  return { left: box.left - margin, right: box.right + margin, top: box.top - margin, bottom: box.bottom + margin };
+}
+
+/**
+ * 「提前量」那一段：前景外框只往文字來的那一側加大 `speed × (淡出時間 ＋ 一格的時間)`（往下捲＝文字從下方來，加下緣；往上捲加上緣；
+ * 方向不明但有速度就兩側都加）。左右不加（文字不會從左右來）。一格的時間最多算 0.1 秒（卡頓時不要加到整個畫面）。
+ * 文字還在這一段裡、還沒碰到前景，前景就先開始淡出。這一段可以伸到景深層的矩形之外（例如窗櫺下緣以下、正在從外框底下進來的文字）：
+ * 那些文字雖然現在看不到，但下一兩格就會進來，所以提前量這一段用「沒有夾過」的文字矩形比。
+ */
+export function leadBox(box: Box, speed: number, dir: -1 | 0 | 1, frameSeconds: number): Box {
+  const lead = speed * (FG_FADE_OUT_S + Math.min(Math.max(frameSeconds, 0), 0.1));
+  return { left: box.left, right: box.right, top: box.top - (dir <= 0 ? lead : 0), bottom: box.bottom + (dir >= 0 ? lead : 0) };
+}
+
+/** 把矩形夾進「看得見的區域」（景深層的矩形：頁首在它上面、外框下緣在它下面）；完全在外面就沒有看得見的部分，回傳 undefined。 */
+export function clipBox(box: Box, area: Box): Box | undefined {
+  const left = Math.max(box.left, area.left);
+  const right = Math.min(box.right, area.right);
+  const top = Math.max(box.top, area.top);
+  const bottom = Math.min(box.bottom, area.bottom);
+  return right > left && bottom > top ? { left, top, right, bottom } : undefined;
+}

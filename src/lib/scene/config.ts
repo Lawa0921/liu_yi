@@ -73,7 +73,7 @@ export const COURSE_SCENES: Record<string, SceneSpec> = {
 };
 
 /**
- * 每種前景素材貼在場景的哪個角落（不翻轉時）。`v` 是上緣、下緣或整個高度（貼著一側的邊緣），`h` 是左或右；翻轉（flip）把左右對調。
+ * 每種前景素材貼在場景的哪個角落（不翻轉時）。`v` 是上緣或下緣，`h` 是左或右；翻轉（flip）把左右對調。
  * `styles/scene.css` 照這張表放位置；單元測試確認同一場景的兩張前景在左右兩側、不擠在同一個角落（使用者的審查：兒童武術的兩張前景都在左下，擠成一團）。
  */
 export const FG_ANCHOR: Record<string, { v: 'top' | 'bottom'; h: 'left' | 'right' }> = {
@@ -84,7 +84,7 @@ export const FG_ANCHOR: Record<string, { v: 'top' | 'bottom'; h: 'left' | 'right
   // （廊柱 fg-pillars 已拿掉：兩柱一梁像日本鳥居；只取單柱，頂端的平直橫梁仍呈 T 字，複審員與控制者都認為像鳥居的一角，所以整件不用。）
 };
 
-/** 一張前景（含翻轉）實際貼的角落，例如 `top-right`、`bottom-left`、`full-left`。 */
+/** 一張前景（含翻轉）實際貼的角落，例如 `top-right`、`bottom-left`、`top-left`。 */
 export function fgCorner(layer: SceneLayerRef): string {
   const anchor = FG_ANCHOR[layer.asset];
   if (!anchor) throw new Error(`fg anchor missing: ${layer.asset}`);

@@ -3,6 +3,7 @@ import sharp from 'sharp';
 import type { QiDebug } from '../../src/qi/engine/qi-stage';
 import type { BeatId } from '../../src/qi/config/poses';
 import { HOME_FG_LEFT_BEATS } from '../../src/lib/scene/config';
+import { FG_OPAQUE_BOX } from '../../src/lib/scene/fg-dodge';
 
 // 首頁景深層（Task 27，使用者要求「前中後遠景的效果沒有出現」）：光點拳師照舊，後面有遠景屋脊與中景（依段落換，在人形旁邊）、前面有框在左右的前景（簷角、窗櫺）。
 //   - 層都在、圖已載入、純裝飾（aria-hidden、不接收指標事件）。
@@ -559,3 +560,231 @@ for (const size of [
     });
   });
 }
+
+// ── 真實速度的連續捲動：前景的淡出來得及（複審 Important）──────────────────────
+//
+// 上面「每 40 px 量一次」關掉了轉場、量的是目標狀態，抓不到「前景要等文字進入之後才開始淡出」：文字以每秒上千 px 掃過前景，
+// 淡出要 0.3 s，文字早就過去了（複審員用 rAF 逐格量到：手機 500 px/s 有 5 格超過 5%、1200 px/s 有 14 格、最高 75%；桌機 2500 px/s 有 3 格）。
+// 這裡不關轉場，在頁面裡用 rAF 以固定速度連續捲動（每格 scrollTo），每一格量「文字被前景不透明部分蓋住的比例」，
+// 並以前景實際畫出來的 computed opacity 加權（量的是真正畫到螢幕上的樣子，不是目標狀態）：每一格都要 ≤ 5%。
+//   - 量測順序：我的 rAF 回呼先於頁面腳本的回呼，所以這一格看到的幾何（文字位置）是上一格畫出去的那一個，
+//     opacity 要用上一格開頭讀到的（轉場在每格開頭才推進）——兩個合起來才是上一格實際畫出去的畫面。
+//   - 文字只算看得見的部分：夾在景深層的矩形裡（頁首在它上面、外框下緣在它下面），被頁首蓋住的文字不算。
+//   - 速度用真實時間（performance.now）積分，所以畫格掉了也是同樣的速度。
+
+interface SweepResult {
+  frames: number;
+  /** 前景（加權後）蓋住文字的比例超過 5% 的畫格：每格最大的那一個。 */
+  bad: { y: number; share: number; asset: string; text: string }[];
+  worst: number;
+  /** 至少有一張前景的 opacity > 0.5 的畫格數。 */
+  visibleFrames: number;
+  seconds: number;
+}
+
+async function sweep(page: Page, options: { speed: number; start: number; end: number }): Promise<SweepResult> {
+  await page.waitForFunction(() => document.querySelector('.depth-fg')?.hasAttribute('data-fg-ready') === true, undefined, { timeout: 15_000 });
+  return page.evaluate(
+    async ({ speed, start, end, opaque }) => {
+      const area = document.querySelector('.depth-fg')!;
+      const images = [...document.querySelectorAll<HTMLImageElement>('.depth-fg img')];
+      const range = document.createRange();
+      const texts: Text[] = [];
+      const walker = document.createTreeWalker(document.querySelector('main')!, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const text = node as Text;
+        if (text.data.trim() && !text.parentElement?.closest('.depth, .depth-fg, script, style, noscript, [hidden]')) texts.push(text);
+      }
+      const opacities = () => images.map((img) => Number(getComputedStyle(img).opacity));
+
+      window.scrollTo({ top: start, behavior: 'instant' });
+      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      await new Promise((resolve) => setTimeout(resolve, 700)); // 起點的前景轉場走完
+      let painted = opacities();
+
+      const bad: { y: number; share: number; asset: string; text: string }[] = [];
+      let worst = 0;
+      let frames = 0;
+      let visibleFrames = 0;
+      let y = start;
+      let last = performance.now();
+      const began = last;
+
+      return new Promise<{ frames: number; bad: typeof bad; worst: number; visibleFrames: number; seconds: number }>((resolve) => {
+        const step = (now: number): void => {
+          // 1. 上一格實際畫出去的畫面：現在的幾何 × 上一格開頭的 opacity
+          const clip = area.getBoundingClientRect();
+          const boxes = images.map((img, index) => {
+            const rect = img.getBoundingClientRect();
+            if (rect.width === 0 || rect.height === 0) return null;
+            const fraction = opaque[img.dataset.asset ?? ''] ?? { x0: 0, x1: 1, y0: 0, y1: 1 };
+            const flipped = new DOMMatrixReadOnly(getComputedStyle(img).transform).a < 0;
+            const x0 = flipped ? 1 - fraction.x1 : fraction.x0;
+            const x1 = flipped ? 1 - fraction.x0 : fraction.x1;
+            const w = rect.width;
+            const h = rect.height;
+            return {
+              asset: img.dataset.asset ?? '',
+              opacity: painted[index]!,
+              left: Math.max(rect.left + x0 * w, clip.left),
+              right: Math.min(rect.left + x1 * w, clip.right),
+              top: Math.max(rect.top + fraction.y0 * h, clip.top),
+              bottom: Math.min(rect.top + fraction.y1 * h, clip.bottom),
+            };
+          });
+          if (boxes.some((box) => box && box.opacity > 0.5)) visibleFrames++;
+          let frameWorst = 0;
+          let frameBad: { share: number; asset: string; text: string } | undefined;
+          for (const text of texts) {
+            range.selectNodeContents(text);
+            for (const r of range.getClientRects()) {
+              const left = Math.max(r.left, clip.left);
+              const right = Math.min(r.right, clip.right);
+              const top = Math.max(r.top, clip.top);
+              const bottom = Math.min(r.bottom, clip.bottom);
+              if (right <= left || bottom <= top) continue; // 看不到的部分（在頁首底下、外框下緣之外）不算
+              const textArea = (right - left) * (bottom - top);
+              for (const box of boxes) {
+                if (!box) continue;
+                const w = Math.min(right, box.right) - Math.max(left, box.left);
+                const h = Math.min(bottom, box.bottom) - Math.max(top, box.top);
+                if (w <= 0 || h <= 0) continue;
+                const share = ((w * h) / textArea) * box.opacity;
+                if (share > frameWorst) {
+                  frameWorst = share;
+                  frameBad = { share, asset: box.asset, text: (text.data.trim() || '').slice(0, 14) };
+                }
+              }
+            }
+          }
+          frames++;
+          if (frameWorst > worst) worst = frameWorst;
+          if (frameWorst > 0.05 && frameBad) bad.push({ y: Math.round(window.scrollY), ...frameBad });
+          painted = opacities();
+
+          // 2. 往前捲：固定速度（px/s），用真實時間積分（畫格掉了也是同樣速度；單格最多當 100 ms，避免卡頓後一口氣跳太遠）
+          const dt = Math.min(0.1, (now - last) / 1000);
+          last = now;
+          y += speed * dt;
+          if (y >= end) {
+            resolve({ frames, bad, worst, visibleFrames, seconds: (now - began) / 1000 });
+            return;
+          }
+          window.scrollTo({ top: y, behavior: 'instant' });
+          requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+      });
+    },
+    { ...options, opaque: FG_OPAQUE_BOX },
+  );
+}
+
+// 複審員量到的三組速度：手機 500 與 1200 px/s、桌機 2500 px/s（觸控慣性捲動與滑鼠滾輪快速轉動的量級）。
+// 轉場要真的開著：偏好是「不減少動態」（減少動態時全站規則把轉場壓成 0，量不到淡出）；光點引擎的腳本擋掉（只剩海報），
+// 畫格才穩定（軟體繪製的 WebGL 會把畫格拖慢，量到的就是引擎而不是前景）；另有一組「減少動態」（沒有轉場、只剩提前量）。
+for (const scenario of [
+  // minVisible：這一組速度下至少要有這個比例的畫格看得到前景（不是「一捲動就把前景整個關掉」混過去；桌機 2500 px/s 提前量約 290 px，大半時間本來就該躲開，只要求有露出）
+  { name: '手機 390×844，500 px/s', viewport: { width: 390, height: 844 }, speed: 500, motion: 'no-preference' as const, minVisible: 0.4 },
+  { name: '手機 390×844，1200 px/s', viewport: { width: 390, height: 844 }, speed: 1200, motion: 'no-preference' as const, minVisible: 0.3 },
+  { name: '桌機 1440×900，2500 px/s', viewport: { width: 1440, height: 900 }, speed: 2500, motion: 'no-preference' as const, minVisible: 0.02 },
+  { name: '手機 390×844，1200 px/s（減少動態：沒有轉場）', viewport: { width: 390, height: 844 }, speed: 1200, motion: 'reduce' as const, minVisible: 0.3 },
+  // 光點引擎也開著（?qi-tier=min，軟體繪製的 WebGL 會把畫格拖慢，單格位移更大）：提前量是依真實時間算的，畫格慢也要來得及
+  { name: '手機 390×844，1200 px/s（光點引擎開著）', viewport: { width: 390, height: 844 }, speed: 1200, motion: 'no-preference' as const, minVisible: 0.2, engine: true },
+]) {
+  test.describe(`真實速度連續捲動：${scenario.name}`, () => {
+    test.use({ viewport: scenario.viewport, reducedMotion: scenario.motion });
+    test.describe.configure({ timeout: 240_000 });
+
+    test('不關前景的轉場，rAF 固定速度從頂捲到底：每一格文字被前景（以實際 opacity 加權）蓋住的比例都 ≤ 5%', async ({ page }) => {
+      await page.addInitScript(() => sessionStorage.setItem('liuyi:qi-intro', '1'));
+      if (scenario.motion === 'no-preference' && !scenario.engine) await page.route(/\/_astro\/[^/]*(qi|home|init)[^/]*\.js(\?.*)?$/, (route) => route.abort());
+      await page.goto(HOME);
+      if (scenario.engine) await expect(page.locator('html')).toHaveAttribute('data-qi-ready', 'true', { timeout: 60_000 });
+      else await expect(page.locator('html')).not.toHaveAttribute('data-qi-ready', 'true');
+      const fade = await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('.depth-fg img')!).transitionDuration));
+      // 不減少動態：前景的淡入轉場開著（0.3 s；有文字經過的那一張淡出 0.1 s）；減少動態：全站規則把轉場壓到近 0
+      if (scenario.motion === 'no-preference') expect(fade, '前景的轉場開著（沒有被關掉）').toBeCloseTo(0.3, 5);
+      else expect(fade, '減少動態：沒有轉場').toBeLessThan(0.01);
+      const total = await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight);
+      const result = await sweep(page, { speed: scenario.speed, start: 0, end: total });
+      test.info().annotations.push({
+        type: 'sweep',
+        description: `${scenario.name}：${result.frames} 格、${result.seconds.toFixed(1)} 秒，最大蓋住比例 ${(result.worst * 100).toFixed(0)}%，${result.bad.length} 格超過 5%，${result.visibleFrames} 格有前景露出`,
+      });
+      expect(result.frames, '畫格數夠多（不是卡住）').toBeGreaterThan(30);
+      expect(result.visibleFrames / result.frames, '前景在這個速度下仍有露出（不是一捲動就整個關掉）').toBeGreaterThan(scenario.minVisible);
+      expect(
+        result.bad.slice(0, 5).map((b) => `scrollY=${b.y}：${b.asset} 蓋住「${b.text}」${(b.share * 100).toFixed(0)}%`),
+        `${result.bad.length}／${result.frames} 格超過 5%（最大 ${(result.worst * 100).toFixed(0)}%）`,
+      ).toEqual([]);
+    });
+  });
+}
+
+// 被頁首蓋住的文字不算（複審：手機上看不到的文字也會讓簷角淡出）：頁首在景深層的矩形之上，文字捲進頁首底下就看不到了，不該讓前景閃。
+// 前景的視差位移會讓簷角在頁面後段有一截伸到景深層的上緣之外（被裁掉、被頁首蓋住）：在那一截上面放一段文字——
+// 文字也在頁首底下（看不到），簷角不得淡出；再把文字移到簷角看得見的那一塊上面（對照組，證明量測有效），簷角就要淡出。
+// 舊程式把文字與前景都不夾進景深層的矩形，第一種情況也會淡出。
+test.describe('被頁首蓋住的文字不會讓前景淡出：手機 390×844', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test('簷角被頁首蓋住的那一截上面的文字不觸發、移到看得見的那一塊上面才觸發', async ({ page }) => {
+    await page.addInitScript(() => sessionStorage.setItem('liuyi:qi-intro', '1'));
+    await page.route(/\/_astro\/[^/]*(qi|home|init)[^/]*\.js(\?.*)?$/, (route) => route.abort()); // 只剩海報，畫面穩定
+    await page.goto(HOME);
+    await page.waitForFunction(() => document.querySelector('.depth-fg')?.hasAttribute('data-fg-ready') === true);
+    const eave = page.locator('.depth-fg img[data-asset="fg-eave"]');
+
+    const geometry = () =>
+      page.evaluate(() => {
+        const area = document.querySelector('.depth-fg')!.getBoundingClientRect();
+        const rect = document.querySelector('.depth-fg img[data-asset="fg-eave"]')!.getBoundingClientRect();
+        return { areaTop: area.top, top: rect.top, bottom: rect.bottom, left: rect.left, hidden: document.querySelector('.depth-fg img[data-asset="fg-eave"]')!.hasAttribute('data-fg-hide') };
+      });
+
+    // 找一個捲動位置：簷角有一截（≥ 8 px）在景深層上緣之外、看得見的那一塊 ≥ 20 px 高，而且沒有別的文字讓它淡出
+    const max = await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight);
+    let found: Awaited<ReturnType<typeof geometry>> | undefined;
+    for (let p = 0.5; p <= 0.99 && !found; p += 0.01) {
+      await page.evaluate((y) => window.scrollTo(0, y), Math.round(max * p));
+      await page.waitForFunction((y) => Math.abs(Number(document.querySelector('.depth-fg')?.getAttribute('data-fg-sync')) - y) < 2, Math.round(max * p));
+      await page.waitForTimeout(150);
+      const g = await geometry();
+      if (g.top < g.areaTop - 8 && g.bottom > g.areaTop + 20 && !g.hidden) found = g;
+    }
+    expect(found, '找得到簷角有一截伸到頁首底下的捲動位置').toBeTruthy();
+    const scrollY = await page.evaluate(() => window.scrollY);
+
+    const place = (where: 'under-header' | 'over-eave') =>
+      page.evaluate(
+        ({ where: spot, y }) => {
+          const area = document.querySelector('.depth-fg')!.getBoundingClientRect();
+          const rect = document.querySelector('.depth-fg img[data-asset="fg-eave"]')!.getBoundingClientRect();
+          let probe = document.querySelector<HTMLElement>('[data-probe]');
+          if (!probe) {
+            probe = document.createElement('p');
+            probe.dataset.probe = '';
+            probe.textContent = '探針文字';
+            probe.style.cssText = 'position:absolute;margin:0;font-size:16px;line-height:20px;white-space:nowrap';
+            document.querySelector('main')!.appendChild(probe);
+          }
+          // 視窗座標 → 文件座標（加上捲動位置）：頁首底下＝景深層上緣之上 25 px（高 20 px，整段在上緣之外）；看得見的那一塊＝景深層上緣之下 4 px
+          probe.style.left = String(Math.max(0, rect.left) + 8) + 'px';
+          probe.style.top = String(y + (spot === 'under-header' ? area.top - 25 : area.top + 4)) + 'px';
+          window.dispatchEvent(new Event('resize')); // 重建文字清單
+          return { areaTop: area.top, probeBottom: probe.getBoundingClientRect().bottom, probeTop: probe.getBoundingClientRect().top };
+        },
+        { where, y: scrollY },
+      );
+
+    const under = await place('under-header');
+    expect(under.probeBottom, '探針整段在景深層上緣之上（被頁首蓋住）').toBeLessThanOrEqual(under.areaTop);
+    await page.waitForTimeout(500); // 讓腳本量過、轉場走完
+    expect((await geometry()).hidden, '被頁首蓋住的文字不讓簷角淡出').toBe(false);
+
+    const over = await place('over-eave');
+    expect(over.probeTop, '對照：探針在景深層裡面（看得見）').toBeGreaterThanOrEqual(over.areaTop);
+    await expect(eave, '對照：看得見的文字壓在簷角上，簷角淡出').toHaveAttribute('data-fg-hide', /.*/);
+  });
+});

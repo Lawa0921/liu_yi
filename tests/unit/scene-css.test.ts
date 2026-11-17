@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { FG_FADE_OUT_S } from '../../src/lib/scene/fg-dodge';
 
 // 剪影場景與首頁景深層的樣式／標記守則（Task 27）：只用 CSS transform／opacity、不用 WebGL、不用漸層字、減少動態時關閉飄塵。
 const read = (path: string) => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
@@ -91,6 +92,15 @@ describe('首頁景深層（Depth）', () => {
     expect(depthCss).toContain(".depth-fg[data-fg-ready] .depth__img:not([data-fg-hide])");
     const script = read('src/scripts/home/depth.ts');
     for (const attribute of ['data-fg-hide', 'data-fg-ready', 'fgSync']) expect(script, attribute).toContain(attribute);
+  });
+
+  it('前景淡出要快、淡入要慢：[data-fg-hide] 的轉場時間＝FG_FADE_OUT_S（0.1 s），基本的轉場（淡入）0.3 s；已壓上來的（data-fg-cut）不轉場', () => {
+    const hide = /\.depth-fg \.depth__img\[data-fg-hide\]\s*\{[^}]*transition-duration\s*:\s*([\d.]+)s/.exec(depthCss);
+    expect(hide, '有 [data-fg-hide] 的轉場時間').not.toBeNull();
+    expect(Number(hide![1])).toBeCloseTo(FG_FADE_OUT_S, 5);
+    expect(depthCss).toMatch(/\.depth-fg \.depth__img\s*\{[^}]*transition\s*:\s*opacity\s+0\.3s/);
+    expect(depthCss).toMatch(/\[data-fg-hide\]\[data-fg-cut\]\s*\{[^}]*transition-duration\s*:\s*0s/);
+    expect(read('src/scripts/home/depth.ts')).toContain('data-fg-cut');
   });
 
   it('左下窗櫺只有 .depth-fg[data-depth-left=on]（腳本依 HOME_FG_LEFT_BEATS 設）才顯示；腳本有設這個屬性', () => {

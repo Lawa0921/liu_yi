@@ -13,7 +13,9 @@
  * 前面那一組（.depth-fg）：近黑的簷角（橫向右上、直向左上）與窗櫺（橫向左下，只在左下角沒有字的段落；直向不放），一般混合、同樣 z-index: 2（要蓋在海報與光點前面）。
  *   前景在文字之上，所以不能壓住文字：靜止在每一段時位置避開所有文字與光點主體，捲動途中文字從前景底下經過時，
  *   腳本（scripts/home/depth.ts，純函式在 lib/scene/fg-dodge.ts）把與文字相交的那一張前景淡出（data-fg-hide）、走過去再淡入；
- *   e2e（home-depth.spec）每段停下來量一次，並且從頂捲到底每 40 px 量一次，文字被前景蓋住的比例都 ≤ 5%。不接收指標事件；沒有 JS 時前景不顯示。
+ *   文字以每秒上千 px 掃過時淡出來不及，所以依捲動速度提前（文字還沒碰到就開始淡出），淡出 0.1 s、淡入 0.3 s。
+ *   e2e（home-depth.spec）每段停下來量一次、從頂捲到底每 40 px 量一次（量目標狀態），並且以真實速度（手機 500／1200 px/s、桌機 2500 px/s，轉場開著）
+ *   逐格量實際畫出去的樣子，文字被前景蓋住的比例都 ≤ 5%。不接收指標事件；沒有 JS 時前景不顯示。
  * 大小：每張圖用原圖像素（--nw／--nh，Depth.astro 內嵌）乘 100cqh / 1850（矩形高），比例與子頁的場景一致。
  */
 
@@ -161,6 +163,15 @@
   opacity: 1;
 }
 
+/* 淡出要快（0.1 s＝lib/scene/fg-dodge.ts 的 FG_FADE_OUT_S，腳本依捲動速度提前量淡出，文字走到前景之前就來得及）；淡入維持慢（0.3 s）。文字已經壓上來（沒趕上）就直接切掉。 */
+.depth-fg .depth__img[data-fg-hide] {
+  transition-duration: 0.1s;
+}
+
+.depth-fg .depth__img[data-fg-hide][data-fg-cut] {
+  transition-duration: 0s;
+}
+
 .depth-fg .depth__img[data-asset='fg-eave'] {
   top: -8%;
   right: -2%;
@@ -212,7 +223,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .depth__layer[data-depth-layer='mid'] .depth__img,
-  .depth-fg .depth__img {
+  .depth-fg .depth__img,
+  .depth-fg .depth__img[data-fg-hide] {
     transition: none;
   }
 }
