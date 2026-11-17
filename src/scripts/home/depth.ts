@@ -7,13 +7,15 @@
 //   - 前景閃避文字（複審 Critical）：前景在文字之上（為了蓋在不透明的海報與靜態圖前面），所以每一格（捲動、改變視窗大小、換對象）量每個文字矩形，
 //     與前景不透明部分的外框相交的那一張前景淡出（`data-fg-hide`，CSS 的轉場），文字走過去再淡入；減少動態時也照做（這是可讀性，不是動態）。
 //     只算看得見的文字（夾進景深層的矩形：被頁首蓋住、在外框下緣之外的不算）。淡出要快（0.1 s，淡入 0.3 s），所以要提前：依捲動速度與方向
-//     （`trackScroll`）往文字來的那一側看遠 速度 × (0.1 s ＋ 一格)（`leadBox`），文字還沒碰到前景就開始淡出；文字已經壓上來（沒趕上）就直接切掉（`data-fg-cut`）。
+//     （`trackScroll`）往文字來的那一側看遠 速度 × (0.1 s ＋ 餘裕 0.05 s ＋ 一格)（`leadBox`），文字還沒碰到前景就開始淡出；文字已經壓上來（沒趕上）就直接切掉（`data-fg-cut`）。
+//     提前量只看會隨捲動移動的文字；固定在畫面上的切換鈕與段落導覽只算「現在相交」（`dodgeDecision`）。
+//     最後一個 scroll 事件之後 `FG_SETTLE_MS` 再重算一格、速度歸零（`settleTrack`）：突然停下時前景不會卡在隱藏。
 //     第一次量完才標 `data-fg-ready`（之前前景是透明的，沒有 JS 時前景不顯示）；`data-fg-sync` 記這一格用的 scrollY（e2e 用它等腳本處理完）。
 // 這個檔案會被打進首頁的腳本：程式字串只用英文（字型守門會掃 JS 裡的中文字）；也不得 import `config/copy.ts`。
 
 import { BEATS, type BeatId } from '../../qi/config/poses';
 import { HOME_FG_LEFT_BEATS, MID_BY_BEAT } from '../../lib/scene/config';
-import { clipBox, inflateBox, leadBox, opaqueBox, overlapsAny, trackScroll, type Box, type ScrollTrack } from '../../lib/scene/fg-dodge';
+import { clipBox, dodgeDecision, FG_SETTLE_MS, opaqueBox, settleTrack, trackScroll, type Box, type ScrollTrack } from '../../lib/scene/fg-dodge';
 import { homeShift } from '../../lib/scene/parallax';
 
 const KNOWN = new Set<string>(BEATS);
@@ -104,29 +106,24 @@ export function initDepth(): void {
   let items: TextItem[] = [];
   const range = document.createRange();
 
-  /** 目前在視窗附近的文字矩形（視窗座標，沒夾過：提前量要看到還在頁首或外框底下、下一兩格就會進來的文字）。 */
-  const textBoxes = (): Box[] => {
-    const boxes: Box[] = [];
+  /**
+   * 目前在視窗附近的文字矩形（視窗座標，沒夾過：提前量要看到還在頁首或外框底下、下一兩格就會進來的文字），
+   * 分成會隨頁面捲動的與固定在畫面上的（切換鈕、段落導覽：不會靠近，只算現在相交）。
+   */
+  const textBoxes = (): { moving: Box[]; fixed: Box[] } => {
+    const moving: Box[] = [];
+    const fixed: Box[] = [];
     const scrollY = window.scrollY;
     const view = window.innerHeight;
     for (const item of items) {
       if (!item.fixed && (item.bottom - scrollY < -CULL || item.top - scrollY > view + CULL)) continue;
       range.selectNodeContents(item.node);
+      const into = item.fixed ? fixed : moving;
       for (const r of range.getClientRects()) {
-        if (r.width > 0 && r.height > 0) boxes.push({ left: r.left, top: r.top, right: r.right, bottom: r.bottom });
+        if (r.width > 0 && r.height > 0) into.push({ left: r.left, top: r.top, right: r.right, bottom: r.bottom });
       }
     }
-    return boxes;
-  };
-
-  /** 每個文字都夾進景深層的矩形：被頁首蓋住或在外框下緣之外、現在看不到的文字不會讓前景淡出（複審：手機上被頁首蓋住的文字也觸發了隱藏）。 */
-  const visibleBoxes = (texts: Box[], area: Box): Box[] => {
-    const out: Box[] = [];
-    for (const text of texts) {
-      const clipped = clipBox(text, area);
-      if (clipped) out.push(clipped);
-    }
-    return out;
+    return { moving, fixed };
   };
 
   let track: ScrollTrack | undefined;
@@ -135,8 +132,7 @@ export function initDepth(): void {
     if (!front) return;
     const rectOfArea = front.getBoundingClientRect();
     const area: Box = { left: rectOfArea.left, top: rectOfArea.top, right: rectOfArea.right, bottom: rectOfArea.bottom };
-    const texts = textBoxes();
-    const seen = visibleBoxes(texts, area);
+    const { moving, fixed } = textBoxes();
     const speed = track?.speed ?? 0;
     const dir = track?.dir ?? 0;
     for (const img of fgImages) {
@@ -150,25 +146,24 @@ export function initDepth(): void {
         img.removeAttribute('data-fg-cut');
         continue;
       }
-      // 1. 現在：看得見的文字離前景 6 px 以內（或已經壓在上面）
-      const near = clipBox(inflateBox(visible, FG_MARGIN), area);
-      const hitNow = near !== undefined && overlapsAny(near, seen, 0);
-      // 2. 提前量：依捲動速度往文字來的那一側看遠一點，文字還沒碰到就開始淡出（淡出要 0.1 s，文字這段時間會走 速度 × 0.1 px）
-      const hitAhead = speed > 0 && overlapsAny(leadBox(visible, speed, dir, frameSeconds), texts, 0);
-      const hide = hitNow || hitAhead;
+      // 現在相交（看得見的文字，含固定的）、提前量（只看會捲動的文字）、已經壓上來就直接切掉：見 dodgeDecision
+      const { hide, cut } = dodgeDecision({ visible, area, moving, fixed, speed, dir, frameSeconds, margin: FG_MARGIN });
       img.toggleAttribute('data-fg-hide', hide);
-      // 文字已經壓在前景上（提前量沒趕上，例如程式一口氣捲很遠）：不等淡出，直接切掉
-      img.toggleAttribute('data-fg-cut', hide && overlapsAny(visible, seen, 0));
+      img.toggleAttribute('data-fg-cut', cut);
     }
     front.dataset.fgSync = String(Math.round(window.scrollY));
     front.setAttribute('data-fg-ready', '');
   };
 
   let frame = 0;
+  /** 尾端重算：最後一個 scroll 事件之後 FG_SETTLE_MS 再算一格、速度歸零（突然停下時最後一格的速度不能一直留著讓前景躲著）。 */
+  let settle = 0;
+  let settled = false;
   const apply = (now: number): void => {
     frame = 0;
     const previous = track;
-    track = trackScroll(track, window.scrollY, now);
+    track = settled && previous ? settleTrack(previous, window.scrollY, now) : trackScroll(track, window.scrollY, now);
+    settled = false;
     const frameSeconds = previous ? (now - previous.t) / 1000 : 1 / 60;
     if (!reduced) {
       const max = document.documentElement.scrollHeight - window.innerHeight;
@@ -183,12 +178,20 @@ export function initDepth(): void {
   const schedule = (): void => {
     if (frame === 0) frame = requestAnimationFrame(apply);
   };
+  const onScroll = (): void => {
+    schedule();
+    window.clearTimeout(settle);
+    settle = window.setTimeout(() => {
+      settled = true;
+      schedule();
+    }, FG_SETTLE_MS);
+  };
   const rebuild = (): void => {
     items = collectText();
     schedule();
   };
 
-  window.addEventListener('scroll', schedule, { passive: true });
+  window.addEventListener('scroll', onScroll, { passive: true });
   window.addEventListener('resize', rebuild, { passive: true });
   window.addEventListener('load', rebuild, { once: true });
   void document.fonts?.ready.then(rebuild);

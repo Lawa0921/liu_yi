@@ -51,6 +51,12 @@ export function overlapsAny(box: Box, texts: readonly Box[], margin: number): bo
 /** 前景淡出的時間（秒）：要與 `styles/depth.css` 的 `[data-fg-hide]` 轉場一致（單元測試只守住這個常數；e2e 以真實速度捲動驗整體）。淡入維持較慢（0.3 s）。 */
 export const FG_FADE_OUT_S = 0.1;
 
+/**
+ * 提前量多留的餘裕（秒）：淡出要剛好在文字進來時走完，沒有餘裕；負載高時轉場晚一兩格才開始，完整 e2e 下桌機的窗櫺曾在文字進來時
+ * 還剩一點不透明（蓋住 5–6%）。多看遠約三格。
+ */
+export const FG_LEAD_SLACK_S = 0.05;
+
 /** 捲動速度的上限（px/s）：程式叫頁面一口氣跳很遠時，不讓提前量大到整個前景消失太久。 */
 const MAX_SCROLL_SPEED = 6000;
 /** 隔了這麼久（ms）才又有一格，視為停下來之後重新開始：速度歸零。 */
@@ -84,13 +90,13 @@ export function inflateBox(box: Box, margin: number): Box {
 }
 
 /**
- * 「提前量」那一段：前景外框只往文字來的那一側加大 `speed × (淡出時間 ＋ 一格的時間)`（往下捲＝文字從下方來，加下緣；往上捲加上緣；
+ * 「提前量」那一段：前景外框只往文字來的那一側加大 `speed × (淡出時間 ＋ 餘裕 ＋ 一格的時間)`（往下捲＝文字從下方來，加下緣；往上捲加上緣；
  * 方向不明但有速度就兩側都加）。左右不加（文字不會從左右來）。一格的時間最多算 0.1 秒（卡頓時不要加到整個畫面）。
  * 文字還在這一段裡、還沒碰到前景，前景就先開始淡出。這一段可以伸到景深層的矩形之外（例如窗櫺下緣以下、正在從外框底下進來的文字）：
  * 那些文字雖然現在看不到，但下一兩格就會進來，所以提前量這一段用「沒有夾過」的文字矩形比。
  */
 export function leadBox(box: Box, speed: number, dir: -1 | 0 | 1, frameSeconds: number): Box {
-  const lead = speed * (FG_FADE_OUT_S + Math.min(Math.max(frameSeconds, 0), 0.1));
+  const lead = speed * (FG_FADE_OUT_S + FG_LEAD_SLACK_S + Math.min(Math.max(frameSeconds, 0), 0.1));
   return { left: box.left, right: box.right, top: box.top - (dir <= 0 ? lead : 0), bottom: box.bottom + (dir >= 0 ? lead : 0) };
 }
 
@@ -101,4 +107,56 @@ export function clipBox(box: Box, area: Box): Box | undefined {
   const top = Math.max(box.top, area.top);
   const bottom = Math.min(box.bottom, area.bottom);
   return right > left && bottom > top ? { left, top, right, bottom } : undefined;
+}
+
+// ── 停下之後回來（複審 Important）＋固定文字不算提前量（複審 Important）──────────────────
+// 速度只在 scroll 事件那一格更新：突然停下時最後一格的速度會一直留著，前景就一直躲著。腳本在最後一個 scroll 事件之後 FG_SETTLE_MS
+// 再重算一次（`settleTrack`：速度歸零），前景就淡回來。等的時間不短於 SCROLL_IDLE_MS：滾輪刻度之間的空檔不算停下。
+
+/** 最後一個 scroll 事件之後多久（ms）做尾端重算（速度歸零）。加上淡入 0.3 s，停下後約 0.62 s 內前景完全回來。 */
+export const FG_SETTLE_MS = 320;
+
+/**
+ * 尾端重算那一格：位置與上一格一樣（真的停了）就速度與方向歸零（時間記這一格，下次再捲動時從這裡重新量速度）；
+ * 位置變了（頁面卡住一陣子、計時器比畫格先跑，其實還在動）就照一般的速度追蹤，不歸零。
+ */
+export function settleTrack(track: ScrollTrack, y: number, now: number): ScrollTrack {
+  if (y !== track.y) return trackScroll(track, y, now);
+  return { y, t: now, speed: 0, dir: 0 };
+}
+
+export interface DodgeInput {
+  /** 前景看得見的那一塊（不透明外框夾進景深層的矩形）。 */
+  visible: Box;
+  /** 景深層的矩形（頁首在它上面、外框下緣在它下面）。 */
+  area: Box;
+  /** 會隨頁面捲動的文字矩形（視窗座標，沒夾過）。 */
+  moving: readonly Box[];
+  /** 固定在畫面上的文字矩形（切換鈕、段落導覽；視窗座標，沒夾過）：不會隨捲動靠近，只算「現在」相交。 */
+  fixed: readonly Box[];
+  speed: number;
+  dir: -1 | 0 | 1;
+  frameSeconds: number;
+  margin: number;
+}
+
+/**
+ * 這一格前景要不要淡出（`hide`）、要不要不等轉場直接切掉（`cut`）：
+ *   1. 現在：看得見的文字（會捲動的與固定的都算，夾進景深層的矩形）離前景 `margin` 以內。
+ *   2. 提前量：只看會捲動的文字（沒夾過：正在從頁首或外框底下進來的也算），往它們來的那一側看遠 速度 ×（淡出＋一格）。
+ *      固定的文字不會隨捲動靠近（複審：桌機 800 px/s 時簷角被藏的格數有九成是段落導覽觸發的），不算提前量。
+ *   3. 已經壓上來（提前量沒趕上）：直接切掉。
+ */
+export function dodgeDecision(input: DodgeInput): { hide: boolean; cut: boolean } {
+  const { visible, area } = input;
+  const seen: Box[] = [];
+  for (const text of [...input.moving, ...input.fixed]) {
+    const clipped = clipBox(text, area);
+    if (clipped) seen.push(clipped);
+  }
+  const near = clipBox(inflateBox(visible, input.margin), area);
+  const hitNow = near !== undefined && overlapsAny(near, seen, 0);
+  const hitAhead = input.speed > 0 && overlapsAny(leadBox(visible, input.speed, input.dir, input.frameSeconds), input.moving, 0);
+  const hide = hitNow || hitAhead;
+  return { hide, cut: hide && overlapsAny(visible, seen, 0) };
 }

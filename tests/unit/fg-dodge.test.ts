@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
-import { clipBox, FG_FADE_OUT_S, FG_OPAQUE_BOX, inflateBox, leadBox, opaqueBox, overlapsAny, trackScroll } from '../../src/lib/scene/fg-dodge';
+import { clipBox, dodgeDecision, FG_FADE_OUT_S, FG_LEAD_SLACK_S, FG_OPAQUE_BOX, FG_SETTLE_MS, inflateBox, leadBox, opaqueBox, overlapsAny, settleTrack, trackScroll } from '../../src/lib/scene/fg-dodge';
 
 // 首頁前景在文字經過時淡出（複審 Critical：前景在文字之上，捲動途中會壓住文字）：「前景不透明部分的外框」與「文字矩形有沒有相交」是純函式，
 // 這裡驗；腳本（scripts/home/depth.ts）只負責量 DOM 並套用結果，e2e（home-depth.spec 的連續捲動）驗整體。
@@ -128,8 +128,8 @@ describe('leadBox（提前量：前景外框只往文字來的那一側加大，
     expect(leadBox(box, 0, 0, 0.016)).toEqual(box);
   });
 
-  it('往下捲（內容往上跑，文字從下方來）：只有下緣多出 速度 × (淡出時間＋一格)；左右與上緣不變', () => {
-    const lead = 1200 * (FG_FADE_OUT_S + 0.016);
+  it('往下捲（內容往上跑，文字從下方來）：只有下緣多出 速度 × (淡出時間＋餘裕＋一格)；左右與上緣不變', () => {
+    const lead = 1200 * (FG_FADE_OUT_S + FG_LEAD_SLACK_S + 0.016);
     const out = leadBox(box, 1200, 1, 0.016);
     expect(out.bottom).toBeCloseTo(200 + lead, 5);
     expect([out.top, out.left, out.right]).toEqual([100, 100, 200]);
@@ -149,13 +149,18 @@ describe('leadBox（提前量：前景外框只往文字來的那一側加大，
 
   it('提前量隨速度增加；一格的時間有上限（卡頓時不要加到整個畫面）', () => {
     expect(leadBox(box, 2500, 1, 0.016).bottom).toBeGreaterThan(leadBox(box, 500, 1, 0.016).bottom);
-    expect(leadBox(box, 1000, 1, 5).bottom).toBeCloseTo(200 + 1000 * (FG_FADE_OUT_S + 0.1), 5);
+    expect(leadBox(box, 1000, 1, 5).bottom).toBeCloseTo(200 + 1000 * (FG_FADE_OUT_S + FG_LEAD_SLACK_S + 0.1), 5);
   });
 
-  it('桌機 2500 px/s、一格 16 ms：提前量約 290 px（文字在淡出的 0.1 s 裡會走 250 px，再加一格 40 px）', () => {
+  it('桌機 2500 px/s、一格 16 ms：提前量約 415 px（文字在淡出的 0.1 s 裡會走 250 px，餘裕 0.05 s 125 px，再加一格 40 px）', () => {
     const out = leadBox(box, 2500, 1, 0.016);
-    expect(out.bottom - 200).toBeGreaterThan(280);
-    expect(out.bottom - 200).toBeLessThan(300);
+    expect(out.bottom - 200).toBeGreaterThan(400);
+    expect(out.bottom - 200).toBeLessThan(430);
+  });
+
+  it('餘裕約 1–4 格（負載高時轉場晚一兩格才開始；完整 e2e 下桌機窗櫺曾在文字進來時還剩一點不透明，蓋住 5–6%）', () => {
+    expect(FG_LEAD_SLACK_S).toBeGreaterThanOrEqual(0.016);
+    expect(FG_LEAD_SLACK_S).toBeLessThanOrEqual(0.067);
   });
 
   it('淡出約 0.1 秒（要與 depth.css 的 data-fg-hide 轉場一致）', () => {
@@ -178,5 +183,54 @@ describe('clipBox（文字矩形夾進看得見的區域：被頁首蓋住或在
   it('完全在頁首底下、或在外框下緣之外：沒有看得見的部分（回傳 undefined）', () => {
     expect(clipBox({ left: 100, top: 20, right: 200, bottom: 40 }, area)).toBeUndefined();
     expect(clipBox({ left: 100, top: 850, right: 200, bottom: 870 }, area)).toBeUndefined();
+  });
+});
+
+describe('settleTrack／FG_SETTLE_MS（停下之後的尾端重算：速度歸零）', () => {
+  it('停下：位置留著、速度與方向歸零（最後一格的速度不能一直留著讓前景躲著）', () => {
+    expect(settleTrack({ y: 4000, t: 900, speed: 2400, dir: 1 }, 4000, 1300)).toEqual({ y: 4000, t: 1300, speed: 0, dir: 0 });
+  });
+
+  it('其實還在動（頁面卡住一陣子、計時器先跑了，位置卻已經變了）：不歸零，照一般的速度追蹤', () => {
+    const moving = { y: 4000, t: 1000, speed: 2400, dir: 1 as const };
+    expect(settleTrack(moving, 4040, 1016)).toEqual(trackScroll(moving, 4040, 1016));
+    expect(settleTrack(moving, 4040, 1016).speed).toBeGreaterThan(0);
+  });
+
+  it('尾端重算等的時間：不短於「視為停下」的 300 ms（滾輪刻度之間的空檔不算停），加上淡入 0.3 s 仍在 0.65 s 內回來', () => {
+    expect(FG_SETTLE_MS).toBeGreaterThanOrEqual(300);
+    expect(FG_SETTLE_MS / 1000 + 0.3).toBeLessThanOrEqual(0.65);
+  });
+});
+
+describe('dodgeDecision（這一格前景要不要淡出）', () => {
+  const area = { left: 0, top: 70, right: 1440, bottom: 900 };
+  const eave = { left: 1100, top: 70, right: 1440, bottom: 300 };
+  const base = { visible: eave, area, margin: 6, frameSeconds: 0.016 };
+
+  it('沒有文字：不淡出', () => {
+    expect(dodgeDecision({ ...base, moving: [], fixed: [], speed: 0, dir: 0 })).toEqual({ hide: false, cut: false });
+  });
+
+  it('會捲動的文字在提前量那一段裡（下方 200 px、往下捲 2500 px/s）：淡出，但還沒壓上來，不切掉', () => {
+    const text = { left: 1200, top: 500, right: 1300, bottom: 520 };
+    expect(dodgeDecision({ ...base, moving: [text], fixed: [], speed: 2500, dir: 1 })).toEqual({ hide: true, cut: false });
+  });
+
+  it('固定在畫面上的文字（段落導覽）在提前量那一段裡：不淡出——它不會隨捲動靠近（複審：桌機簷角被它白白藏起來）', () => {
+    const rail = { left: 1200, top: 500, right: 1300, bottom: 520 };
+    expect(dodgeDecision({ ...base, moving: [], fixed: [rail], speed: 2500, dir: 1 })).toEqual({ hide: false, cut: false });
+  });
+
+  it('固定的文字離前景 6 px 以內：照樣淡出；壓在上面就直接切掉', () => {
+    expect(dodgeDecision({ ...base, moving: [], fixed: [{ left: 1200, top: 304, right: 1300, bottom: 320 }], speed: 0, dir: 0 })).toEqual({ hide: true, cut: false });
+    expect(dodgeDecision({ ...base, moving: [], fixed: [{ left: 1200, top: 200, right: 1300, bottom: 220 }], speed: 2500, dir: 1 })).toEqual({ hide: true, cut: true });
+  });
+
+  it('看不到的文字（在景深層的矩形之外、被頁首蓋住）不算「現在」，但會捲動的仍算提前量（下一兩格就進來）', () => {
+    const underHeader = { left: 1200, top: 20, right: 1300, bottom: 40 };
+    expect(dodgeDecision({ ...base, moving: [underHeader], fixed: [], speed: 0, dir: 0 }).hide).toBe(false);
+    expect(dodgeDecision({ ...base, moving: [], fixed: [underHeader], speed: 2500, dir: -1 }).hide).toBe(false);
+    expect(dodgeDecision({ ...base, moving: [underHeader], fixed: [], speed: 2500, dir: -1 }).hide).toBe(true);
   });
 });
