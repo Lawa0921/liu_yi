@@ -1,3 +1,4 @@
+import sharp from 'sharp';
 import { expect, test, type Page } from './fixtures';
 import { boxOf, overlapOfBox } from './helpers';
 
@@ -123,6 +124,75 @@ for (const device of [
           expect(ratio).toBeLessThanOrEqual(0.5);
         }
         expect(failed).toEqual([]);
+      });
+    }
+  });
+}
+
+// ── 前景看得見（審查：手機的前景幾乎看不見）：用截圖量每一張前景實際畫在場景上的高度 ─────────────
+
+/** 場景截圖的亮度（0–255）。 */
+async function sceneLuma(page: Page): Promise<{ luma: Float32Array; width: number; height: number }> {
+  const { data, info } = await sharp(await page.locator('.scene').screenshot()).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  const luma = new Float32Array(info.width * info.height);
+  for (let i = 0; i < luma.length; i++) luma[i] = 0.2126 * data[i * 3]! + 0.7152 * data[i * 3 + 1]! + 0.0722 * data[i * 3 + 2]!;
+  return { luma, width: info.width, height: info.height };
+}
+
+/** 門檻：每一張前景看得見的高度（有被畫出來、與沒有它時的截圖差 > 6 的像素所佔的列）至少占場景高的 15%（審查量到第一版手機的石階約 11%、窗櫺與廊柱更少）；差的像素平均至少 8（不是一層淡到看不見的影子）。 */
+const MIN_FG_HEIGHT_SHARE = 0.15;
+const MIN_FG_CONTRAST = 8;
+
+for (const device of [
+  { name: '桌機 1440×900', viewport: { width: 1440, height: 900 } },
+  { name: '手機 390×844', viewport: { width: 390, height: 844 } },
+]) {
+  test.describe(`前景看得見：${device.name}`, () => {
+    // 減少動態：沒有飄塵與視差，同一頁連截兩張是同一個畫面
+    test.use({ viewport: device.viewport, reducedMotion: 'reduce' });
+
+    for (const item of SCENE_PAGES) {
+      test(`${item.name}：每一張前景看得見的高度 ≥ 場景高的 15%，且與背景有亮度差`, async ({ page }) => {
+        await page.goto(item.path);
+        await page.waitForLoadState('load');
+        await page.evaluate(() => Promise.all([...document.querySelectorAll<HTMLImageElement>('.scene img')].map((img) => img.decode().catch(() => undefined))));
+        const count = await page.locator('[data-scene-layer="fg"] img').count();
+        expect(count, '前景 1–2 張').toBeGreaterThanOrEqual(1);
+
+        const hideAll = '[data-scene-layer="fg"] img { visibility: hidden !important }';
+        const base = await (async () => {
+          const handle = await page.addStyleTag({ content: hideAll });
+          const shot = await sceneLuma(page);
+          await handle.evaluate((el) => (el as Element).remove());
+          return shot;
+        })();
+
+        for (let i = 0; i < count; i++) {
+          const asset = await page.locator('[data-scene-layer="fg"] img').nth(i).getAttribute('data-asset');
+          const handle = await page.addStyleTag({ content: `${hideAll} [data-scene-layer="fg"] img:nth-of-type(${i + 1}) { visibility: visible !important }` });
+          const shot = await sceneLuma(page);
+          await handle.evaluate((el) => (el as Element).remove());
+
+          const rows = new Set<number>();
+          let changed = 0;
+          let sum = 0;
+          for (let y = 0; y < shot.height; y++) {
+            let inRow = 0;
+            for (let x = 0; x < shot.width; x++) {
+              const d = Math.abs(shot.luma[y * shot.width + x]! - base.luma[y * shot.width + x]!);
+              if (d > 6) {
+                inRow++;
+                changed++;
+                sum += d;
+              }
+            }
+            if (inRow >= 3) rows.add(y);
+          }
+          const visible = rows.size === 0 ? 0 : Math.max(...rows) - Math.min(...rows) + 1;
+          test.info().annotations.push({ type: `fg-${device.viewport.width}`, description: `${item.path} ${asset}: ${(visible / shot.height * 100).toFixed(0)}% 高，亮度差 ${(sum / Math.max(1, changed)).toFixed(1)}` });
+          expect(visible / shot.height, `${item.path} 的 ${asset} 看得見的高度占場景高`).toBeGreaterThanOrEqual(MIN_FG_HEIGHT_SHARE);
+          expect(sum / Math.max(1, changed), `${item.path} 的 ${asset} 與背景的平均亮度差`).toBeGreaterThanOrEqual(MIN_FG_CONTRAST);
+        }
       });
     }
   });

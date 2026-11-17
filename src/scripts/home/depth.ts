@@ -7,10 +7,11 @@
 // 這個檔案會被打進首頁的腳本：程式字串只用英文（字型守門會掃 JS 裡的中文字）；也不得 import `config/copy.ts`。
 
 import { BEATS, type BeatId } from '../../qi/config/poses';
-import { MID_BY_BEAT } from '../../lib/scene/config';
+import { HOME_FG_LEFT_BEATS, MID_BY_BEAT } from '../../lib/scene/config';
 import { homeShift } from '../../lib/scene/parallax';
 
 const KNOWN = new Set<string>(BEATS);
+const FG_LEFT = new Set<string>(HOME_FG_LEFT_BEATS);
 
 /** 延後載入的圖：有 `data-src` 且還沒有 `src` 才設。 */
 function loadLazy(img: HTMLImageElement): void {
@@ -21,6 +22,7 @@ function loadLazy(img: HTMLImageElement): void {
 export function initDepth(): void {
   const back = document.querySelector<HTMLElement>('.depth[data-depth]');
   if (!back) return;
+  const front = document.querySelector<HTMLElement>('.depth-fg[data-depth]');
   const root = document.documentElement;
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -49,6 +51,8 @@ export function initDepth(): void {
         const img = back.querySelector<HTMLImageElement>(`img[data-mid="${mid}"]`);
         if (img) loadLazy(img); // 輪到這一段了：還沒載的先載（圖很小，淡入時多半已到）
         if (back.dataset.depthMid !== mid) back.dataset.depthMid = mid;
+        const left = FG_LEFT.has(id) ? 'on' : 'off';
+        if (front && front.dataset.depthLeft !== left) front.dataset.depthLeft = left;
       }
     },
     { rootMargin: '-50% 0px -50% 0px' },

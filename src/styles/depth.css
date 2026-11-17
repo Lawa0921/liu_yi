@@ -1,11 +1,17 @@
 /*
  * 首頁的景深層（Task 27）的版面。標記在 src/components/home/Depth.astro，位移與換中景在 src/scripts/home/depth.ts，配對在 src/lib/scene/config.ts。
  *
- * 後面那一組（.depth）：固定在視窗（與光點畫布同一個矩形，高度用 lvh：網址列伸縮時不跟著變）、z-index: -1，在光點畫布底下。
- *   由後到前：天空與霧 → 遠景屋脊（最淡）→ 地平線的霧 → 中景（五種器物疊在同一處，依段落交叉淡化）→ 地面。
+ * 後面那一組（.depth）：固定在視窗（與光點畫布同一個矩形，高度用 lvh：網址列伸縮時不跟著變）。
+ *   由後到前：天空與霧 → 遠景屋脊（最淡）→ 地平線的霧 → 中景（五種器物疊在同一處，依段落交叉淡化）。
  *   「地平線」（--horizon，離矩形底部的距離）對到光點人形的腳底（橫向版面約 20%，直向版面人形在上方約 42%），人物站在院子裡的感覺才對。
- * 前面那一組（.depth-fg）：固定在同一個矩形，z-index: 0（在光點畫布之後、在 [data-beat] 的文字之下），簷角掛在右上角，
- *   位置避開光點主體（e2e 量過）、也不在任何文字底下。
+ *   中景在人形的「旁邊」（--mid-x：橫向在人形左側、文字與人形之間；直向偏左），不是正後方——正後方會被人形遮掉、也看不出前後的距離。
+ *
+ * 層次（z-index）：遠景與中景用 `mix-blend-mode: lighten` 疊在最上面（z-index: 2，在 [data-beat] 的 1 之上、段落導覽 45 與頁首 50 之下）。
+ *   lighten 只把「比後面亮」的地方提亮：霧與屋脊的亮部透出來，後面本來就比它亮的（光點、文字）原樣不動，所以景深層看起來在光點「後面」；
+ *   而開場的靜態海報、靜態圖（減少動態、沒有 WebGL、沒有 JS）的底是近黑的不透明色，lighten 不會被它們蓋住——
+ *   每個狀態（引擎到達之前、引擎在跑、退回靜態圖）都看得到同一組景深。（先前放在畫布底下，不透明的海報一蓋就整層消失，審查指出。）
+ * 前面那一組（.depth-fg）：近黑的簷角（橫向右上、直向左上）與窗櫺（橫向左下，只在左下角沒有字的段落；直向不放），一般混合、同樣 z-index: 2（要蓋在海報與光點前面）。
+ *   位置避開所有文字與光點主體（e2e 量過：每一段、三種視窗尺寸）；不接收指標事件。
  * 大小：每張圖用原圖像素（--nw／--nh，Depth.astro 內嵌）乘 100cqh / 1850（矩形高），比例與子頁的場景一致。
  */
 
@@ -28,39 +34,45 @@
 }
 
 .depth {
-  z-index: -1;
+  z-index: 2;
+  mix-blend-mode: lighten;
   --horizon: 20%;
   --figure-x: 63%;
+  --mid-x: 41%;
   --haze: 201 189 163;
 }
 
 .depth-fg {
-  z-index: 0;
+  z-index: 2;
 }
 
 @media (max-aspect-ratio: 4/5) {
   .depth {
     --horizon: 42%;
     --figure-x: 50%;
+    --mid-x: 24%;
   }
 }
 
 .depth__sky,
-.depth__mist,
-.depth__floor {
+.depth__mist {
   position: absolute;
   inset: 0;
 }
 
-/* 天空：上緣的暮色、地平線的亮霧、人形背後一塊柔光（比子頁淡很多：光點才是主角） */
+/*
+ * 天空：上緣的暮色、地平線的亮霧、人形背後一塊柔光（hero，很淡）、中景背後一塊較亮的逆光（中景才襯得出輪廓）。
+ * 亮度比第一版高：遠景與中景是近黑的剪影，要有東西可以襯（e2e 用截圖量剪影與背景的亮度差，見 home-depth.spec）。
+ */
 .depth__sky {
   background:
-    radial-gradient(ellipse 34% 52% at var(--figure-x) calc(100% - var(--horizon) - 18%), rgb(var(--haze) / 0.12), transparent 70%),
+    radial-gradient(ellipse 30% 48% at var(--figure-x) calc(100% - var(--horizon) - 18%), rgb(var(--haze) / 0.09), transparent 70%),
+    radial-gradient(ellipse 24% 40% at var(--mid-x) calc(100% - var(--horizon) - 15%), rgb(var(--haze) / 0.16), transparent 72%),
     linear-gradient(
       to bottom,
-      rgb(var(--haze) / 0.085) 0%,
-      rgb(var(--haze) / 0.035) 45%,
-      rgb(var(--haze) / 0.12) calc(100% - var(--horizon)),
+      rgb(var(--haze) / 0.07) 0%,
+      rgb(var(--haze) / 0.1) 42%,
+      rgb(var(--haze) / 0.2) calc(100% - var(--horizon)),
       transparent 100%
     );
 }
@@ -69,13 +81,9 @@
   background: linear-gradient(
     to top,
     transparent calc(var(--horizon) - 2%),
-    rgb(var(--haze) / 0.12) calc(var(--horizon) + 5%),
+    rgb(var(--haze) / 0.16) calc(var(--horizon) + 5%),
     transparent calc(var(--horizon) + 30%)
   );
-}
-
-.depth__floor {
-  background: linear-gradient(to bottom, transparent calc(100% - var(--horizon)), rgb(0 0 0 / 0.4) 100%);
 }
 
 .depth__layer {
@@ -93,18 +101,18 @@
   -webkit-user-drag: none;
 }
 
-/* 遠景：整排屋脊橫跨畫面，最淡 */
+/* 遠景：整排屋脊橫跨畫面，比中景淡（大氣透視），但要看得出來 */
 .depth__layer[data-depth-layer='far'] .depth__img {
   left: 50%;
   bottom: calc(var(--horizon) + 1%);
   width: max(104%, 58rem);
-  opacity: 0.3;
+  opacity: 0.62;
   transform: translateX(-50%);
 }
 
-/* 中景：五種器物疊在人形後面，只有目前段落的那一種看得見（交叉淡化） */
+/* 中景：五種器物疊在人形旁邊，只有目前段落的那一種看得見（交叉淡化） */
 .depth__layer[data-depth-layer='mid'] .depth__img {
-  left: var(--figure-x);
+  left: var(--mid-x);
   bottom: calc(var(--horizon) - 0.5%);
   height: calc(var(--nh) * 100cqh / 1850 * var(--k, 1.2));
   width: auto;
@@ -114,46 +122,74 @@
 }
 
 .depth__img[data-mid='gate'] {
-  --k: 1.7;
+  --k: 1.1;
 }
 .depth__img[data-mid='rack'] {
   --k: 1.35;
 }
 .depth__img[data-mid='drum'] {
-  --k: 1.1;
+  --k: 1.2;
 }
 .depth__img[data-mid='banner'] {
   --k: 1.35;
 }
-.depth__img[data-mid='stonelock'] {
-  --k: 1.2;
+.depth__img[data-mid='dummy'] {
+  --k: 1;
 }
 
 .depth[data-depth-mid='gate'] .depth__img[data-mid='gate'],
 .depth[data-depth-mid='rack'] .depth__img[data-mid='rack'],
 .depth[data-depth-mid='drum'] .depth__img[data-mid='drum'],
 .depth[data-depth-mid='banner'] .depth__img[data-mid='banner'],
-.depth[data-depth-mid='stonelock'] .depth__img[data-mid='stonelock'] {
-  opacity: 0.5;
+.depth[data-depth-mid='dummy'] .depth__img[data-mid='dummy'] {
+  opacity: 0.85;
 }
 
-/* 前景：簷角掛在右上角；邊緣一圈很淡的逆光，近黑的簷角在暗處也看得出輪廓 */
+/* 前景：近黑，邊緣一圈很淡的逆光，暗處也看得出輪廓。橫向：簷角掛在右上角、窗櫺貼在左下角，框住左右。 */
 .depth-fg .depth__img {
   filter: drop-shadow(0 0 1px rgb(236 214 160 / 0.32));
 }
 
 .depth-fg .depth__img[data-asset='fg-eave'] {
-  top: -4%;
+  top: -8%;
   right: -2%;
-  width: min(22cqw, 22rem);
+  width: min(30cqw, 28rem);
   transform: scaleX(var(--flip, 1));
 }
 
+/*
+ * 窗櫺：貼著左下角，內側漸隱（近景失焦的味道）。只在左下角沒有字的段落出現（`HOME_FG_LEFT_BEATS`，腳本設 data-depth-left）：
+ * 開場的站名垂直排在左側一路到畫面底，窗櫺會壓到字；沒有 JS 時不顯示。
+ */
+.depth-fg .depth__img[data-asset='fg-lattice'] {
+  left: -3%;
+  bottom: -1%;
+  width: min(20cqw, 20rem);
+  opacity: 0;
+  transition: opacity 0.6s var(--ease-out);
+  -webkit-mask-image: linear-gradient(to right, #000 55%, transparent 100%);
+  mask-image: linear-gradient(to right, #000 55%, transparent 100%);
+}
+
+.depth-fg[data-depth-left='on'] .depth__img[data-asset='fg-lattice'] {
+  opacity: 1;
+}
+
 @media (max-aspect-ratio: 4/5) {
-  /* 直向：頁首右上有大人／小孩切換鈕，簷角往下縮小、避開它（也不進人形所在的中央） */
+  /*
+   * 直向：右上有大人／小孩切換鈕，下半是整寬的文字，光點的兵器（刀、劍、槍）又會伸到上方與兩側，所以前景只放左上角、縮到不碰任何一段的光點外框：
+   * 簷角翻到左上，窗櫺不放。手機只有這一張前景（e2e 量亮度差與看得見的面積，並逐段確認不壓字、不壓光點）。
+   */
   .depth-fg .depth__img[data-asset='fg-eave'] {
-    top: 11%;
-    width: min(26cqw, 14rem);
+    top: -1%;
+    right: auto;
+    left: -3%;
+    width: min(28cqw, 12rem);
+    transform: scaleX(calc(var(--flip, 1) * -1));
+  }
+
+  .depth-fg .depth__img[data-asset='fg-lattice'] {
+    display: none;
   }
 
   .depth__layer[data-depth-layer='far'] .depth__img {
@@ -166,7 +202,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .depth__layer[data-depth-layer='mid'] .depth__img {
+  .depth__layer[data-depth-layer='mid'] .depth__img,
+  .depth-fg .depth__img[data-asset='fg-lattice'] {
     transition: none;
   }
 }

@@ -4,7 +4,10 @@ import { describe, expect, it } from 'vitest';
 import {
   CATEGORY_SCENES,
   COURSE_SCENES,
+  FG_ANCHOR,
+  fgCorner,
   HOME_DEPTH,
+  HOME_FG_LEFT_BEATS,
   MID_BY_BEAT,
   PAGE_SCENES,
   sceneAssets,
@@ -125,8 +128,10 @@ describe('場景配對表', () => {
 });
 
 describe('首頁景深（HOME_DEPTH、MID_BY_BEAT）', () => {
-  it('遠景一張、前景 1–2 張，素材都在', () => {
+  it('遠景一張、前景兩張（簷角在右上、另一張在左側，框住左右），素材都在', () => {
     expect(HOME_DEPTH.far.asset).toMatch(/^bg-far-/);
+    expect(HOME_DEPTH.fg.length).toBe(2);
+    expect(new Set(HOME_DEPTH.fg.map((fg) => FG_ANCHOR[fg.asset]!.h)).size, '兩張前景在左右兩側').toBe(2);
     expect(HOME_DEPTH.fg.length).toBeGreaterThanOrEqual(1);
     expect(HOME_DEPTH.fg.length).toBeLessThanOrEqual(2);
     for (const asset of [HOME_DEPTH.far.asset, ...HOME_DEPTH.fg.map((fg) => fg.asset), ...Object.values(HOME_DEPTH.mids).map((mid) => mid.asset)]) {
@@ -139,5 +144,63 @@ describe('首頁景深（HOME_DEPTH、MID_BY_BEAT）', () => {
     expect(MID_BY_BEAT['opening']).toBe('gate');
     for (const beat of ['weapon-a', 'weapon-b', 'weapon-c'] as const) expect(MID_BY_BEAT[beat]).toBe('rack');
     expect(new Set(Object.values(MID_BY_BEAT)).size).toBeGreaterThanOrEqual(3);
+  });
+
+  it('左下角的窗櫺只在左下角沒有字的段落出現：都是真的 beat，不含開場（站名垂直排到畫面底）與整寬內容的收費、預約', () => {
+    for (const beat of HOME_FG_LEFT_BEATS) expect(BEATS, beat).toContain(beat);
+    expect(HOME_FG_LEFT_BEATS).not.toContain('opening');
+    expect(HOME_FG_LEFT_BEATS).not.toContain('pricing');
+    expect(HOME_FG_LEFT_BEATS).not.toContain('booking');
+    expect(HOME_FG_LEFT_BEATS.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('格鬥兩段的中景是木人樁（石鎖看起來像「禁止」的符號，已拿掉）；沒有任何場景或中景用到 stonelock', () => {
+    expect(MID_BY_BEAT['combat-a']).toBe('dummy');
+    expect(MID_BY_BEAT['combat-b']).toBe('dummy');
+    expect(HOME_DEPTH.mids.dummy.asset).toBe('mid-dummy');
+    expect(Object.keys(HOME_DEPTH.mids).sort()).toEqual(['banner', 'drum', 'dummy', 'gate', 'rack']);
+    const everything = [...Object.values(PAGE_SCENES), ...Object.values(COURSE_SCENES), ...Object.values(CATEGORY_SCENES).flatMap((byAudience) => Object.values(byAudience))].flatMap(sceneAssets);
+    expect(everything.filter((asset) => /stonelock/.test(asset))).toEqual([]);
+    expect(readdirSync(fileURLToPath(SILHOUETTES)).filter((file) => /stonelock/.test(file))).toEqual([]);
+  });
+});
+
+// 前景的位置（Task 27 修正）：每種前景貼在場景的一個角落；同一個場景的兩張前景要在左右兩側（框住畫面），不能擠在同一個角落
+describe('前景的錨點（FG_ANCHOR）', () => {
+  const allScenes: [string, SceneSpec][] = [
+    ...Object.entries(PAGE_SCENES),
+    ...Object.entries(COURSE_SCENES),
+    ...Object.entries(CATEGORY_SCENES).flatMap(([category, byAudience]) => Object.entries(byAudience).map(([audience, spec]) => [`${category}/${audience}`, spec] as [string, SceneSpec])),
+  ];
+
+  it('每一種前景素材都有錨點；翻轉把左右對調', () => {
+    const used = new Set(allScenes.flatMap(([, spec]) => spec.fg.map((layer) => layer.asset)));
+    for (const asset of used) expect(FG_ANCHOR[asset], asset).toBeTruthy();
+    expect(fgCorner({ asset: 'fg-eave' })).toBe('top-right');
+    expect(fgCorner({ asset: 'fg-eave', flip: true })).toBe('top-left');
+    expect(fgCorner({ asset: 'fg-steps' })).toBe('bottom-left');
+    expect(fgCorner({ asset: 'fg-steps', flip: true })).toBe('bottom-right');
+  });
+
+  it('每個場景的前景：兩張時在左右兩側（不擠在同一側），最多兩張', () => {
+    for (const [name, spec] of allScenes) {
+      expect(spec.fg.length, name).toBeLessThanOrEqual(2);
+      if (spec.fg.length < 2) continue;
+      const sides = spec.fg.map((layer) => fgCorner(layer).split('-')[1]);
+      expect(new Set(sides).size, `${name}：${spec.fg.map(fgCorner).join('、')} 擠在同一側`).toBe(2);
+    }
+  });
+
+  it('具名場景對照（回歸）：兒童武術不再是兩張都在左下；教練頁、收費、兒童防身、核心瑜珈也都左右各一', () => {
+    expect(COURSE_SCENES['kids-martial-arts']!.fg.map(fgCorner)).not.toEqual(['bottom-left', 'bottom-left']);
+    for (const [name, spec] of [
+      ['kids-martial-arts', COURSE_SCENES['kids-martial-arts']!],
+      ['kids-self-defense', COURSE_SCENES['kids-self-defense']!],
+      ['core-yoga', COURSE_SCENES['core-yoga']!],
+      ['coach', PAGE_SCENES.coach],
+      ['pricing', PAGE_SCENES.pricing],
+    ] as const) {
+      expect(new Set(spec.fg.map((layer) => fgCorner(layer).split('-')[1])).size, name).toBe(2);
+    }
   });
 });

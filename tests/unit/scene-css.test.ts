@@ -70,19 +70,26 @@ describe('子頁場景（Scene）', () => {
 });
 
 describe('首頁景深層（Depth）', () => {
-  it('遠景與中景在光點畫布後面（負的 z-index）、前景在畫布前面但在文字（beat）之下', () => {
-    expect(depthCss).toMatch(/\.depth\s*\{[^}]*z-index\s*:\s*-1/);
-    expect(depthCss).toMatch(/\.depth-fg\s*\{[^}]*z-index\s*:\s*0/);
+  it('遠景與中景用 lighten 疊在最上面（只把比後面亮的地方提亮：靜態海報與靜態圖的暗底、光點與文字都原樣透出，景深層在每個狀態都看得見）；前景（近黑的簷角與窗櫺）也在最上面，用一般混合', () => {
+    expect(depthCss).toMatch(/\.depth\s*\{[^}]*z-index\s*:\s*2\b[^}]*mix-blend-mode\s*:\s*lighten/);
+    expect(depthCss).toMatch(/\.depth-fg\s*\{[^}]*z-index\s*:\s*2\b/);
+    expect(depthCss).not.toMatch(/\.depth-fg\s*\{[^}]*mix-blend-mode/);
   });
 
-  it('畫布用 screen 疊在景深層上（黑的地方透出後面的層）', () => {
+  it('畫布用 screen（純黑底對頁面底色是中性的；景深層另外用 lighten 疊在上面）', () => {
     expect(homeCss).toMatch(/\.home-canvas\s*\{[^}]*mix-blend-mode\s*:\s*screen/);
   });
 
   it('五種中景都有「目前段落」的顯示規則', () => {
-    for (const key of ['gate', 'rack', 'drum', 'banner', 'stonelock']) {
+    for (const key of ['gate', 'rack', 'drum', 'banner', 'dummy']) {
       expect(depthCss, key).toContain(`.depth[data-depth-mid='${key}'] .depth__img[data-mid='${key}']`);
     }
+  });
+
+  it('左下窗櫺預設透明，只有 .depth-fg[data-depth-left=on]（腳本依 HOME_FG_LEFT_BEATS 設）才顯示；腳本有設這個屬性', () => {
+    expect(depthCss).toMatch(/\[data-asset='fg-lattice'\]\s*\{[^}]*opacity\s*:\s*0/);
+    expect(depthCss).toContain(".depth-fg[data-depth-left='on'] .depth__img[data-asset='fg-lattice']");
+    expect(read('src/scripts/home/depth.ts')).toContain('depthLeft');
   });
 
   it('不接收指標事件、aria-hidden', () => {

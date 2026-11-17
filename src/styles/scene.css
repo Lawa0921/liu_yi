@@ -43,6 +43,7 @@
 @media (max-width: 47.99rem) {
   .scene {
     --scene-h: clamp(14rem, 45svh, 24rem);
+    --floor: 22%;
     --mid-x: 30%;
     --subject-x: 66%;
   }
@@ -142,9 +143,6 @@
 .scene__img[data-asset='mid-dummy'] {
   --k: 0.85;
 }
-.scene__img[data-asset='mid-stonelock'] {
-  --k: 1;
-}
 
 /* 人物：近黑，邊緣一圈細的逆光（讓黑色剪影在暗處也看得出輪廓） */
 .scene__layer--subject .scene__img {
@@ -156,7 +154,7 @@
   filter: drop-shadow(0 0 1px rgb(236 214 160 / 0.6)) drop-shadow(0 0 10px rgb(var(--haze) / 0.12));
 }
 
-/* 場地的主體是石鎖（不是人形） */
+/* 場地的主體是木人樁（不是人形） */
 .scene__layer--subject .scene__img[data-asset^='mid-'] {
   height: calc(var(--nh) * var(--u) * 1.3);
 }
@@ -178,13 +176,16 @@
   opacity: 1;
 }
 
-/* ── 前景：最暗、最快，貼著邊緣框住畫面（不進文字區）─────────────── */
+/* ── 前景：最暗、最快，貼著邊緣框住畫面（不進文字區）───────────────
+ * 每一種貼的角落記在 lib/scene/config.ts 的 FG_ANCHOR（單元測試確認同一場景的兩張在左右兩側）；翻轉（data-flip="-1"）把左右對調。
+ * 手機的場景只有 ~380px 高，前景要夠大才看得出來（審查指出手機的前景幾乎看不見）：e2e 用截圖量每一張「看得見的高度」占場景高的比例（scene.spec）。
+ */
 
 .scene__layer--fg .scene__img {
   opacity: 1;
   transform: scaleX(var(--flip, 1));
-  /* 近黑的前景貼在暗處也要看得出輪廓：邊緣一圈很淡的逆光 */
-  filter: drop-shadow(0 0 1px rgb(236 214 160 / 0.3));
+  /* 近黑的前景貼在暗處也要看得出輪廓：邊緣一圈淡淡的逆光 */
+  filter: drop-shadow(0 0 1px rgb(236 214 160 / 0.42));
 }
 
 /* 簷角掛在上緣的一角：不翻轉在右、翻轉在左（人物在 58% 處，簷角寬 30%，不壓到人物） */
@@ -199,25 +200,40 @@
   left: -2%;
 }
 
+/*
+ * 廊柱：只取一根柱子（連著斗拱托住的橫梁一角），貼著右緣、從地面立到頂；翻轉在左緣。
+ * 原圖是兩柱一梁的門形，整張放進來會像日本鳥居（設計 §4 的反目標，審查指出），所以用 clip-path 只留右邊那一根，
+ * 橫梁的斷口用 mask 淡出。柱腳貼著場景下緣（不浮在半空）；圖高略大於場景高，橫梁與斗拱在上緣內。
+ */
 .scene__img[data-asset='fg-pillars'] {
-  left: 0;
-  top: -3%;
-  width: 100%;
-  transform-origin: center;
+  right: calc(var(--scene-h) * -0.09);
+  bottom: -3%;
+  width: auto;
+  height: calc(var(--scene-h) * 1.04);
+  clip-path: inset(0 0 0 82%);
+  -webkit-mask-image: linear-gradient(to right, transparent 82%, #000 89%);
+  mask-image: linear-gradient(to right, transparent 82%, #000 89%);
 }
 
-/* 窗櫺：貼著左緣的一角，內側漸隱（近景失焦的味道） */
+.scene__img[data-asset='fg-pillars'][data-flip='-1'] {
+  right: auto;
+  left: calc(var(--scene-h) * -0.09);
+}
+
+/* 窗櫺：貼著左下角，內側漸隱（近景失焦的味道） */
 .scene__img[data-asset='fg-lattice'] {
   left: -5%;
   bottom: -12%;
   width: min(30%, 26rem);
-  -webkit-mask-image: linear-gradient(to right, #000 45%, transparent 100%);
-  mask-image: linear-gradient(to right, #000 45%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, #000 55%, transparent 100%);
+  mask-image: linear-gradient(to right, #000 55%, transparent 100%);
 }
 
 .scene__img[data-asset='fg-lattice'][data-flip='-1'] {
   left: auto;
   right: -5%;
+  -webkit-mask-image: linear-gradient(to left, #000 55%, transparent 100%);
+  mask-image: linear-gradient(to left, #000 55%, transparent 100%);
 }
 
 /* 石階：貼著下緣的一側 */
@@ -242,6 +258,45 @@
 .scene__img[data-asset='fg-rack-close'][data-flip='-1'] {
   left: auto;
   right: -3%;
+}
+
+@media (max-width: 47.99rem) {
+  /* 手機：場景矮（~380px）、人物占中間偏右，前景加大一階，貼著邊角 */
+  .scene__img[data-asset='fg-eave'] {
+    top: -3%;
+    width: 54%;
+  }
+
+  .scene__img[data-asset='fg-pillars'] {
+    height: calc(var(--scene-h) * 0.9);
+  }
+
+  .scene__img[data-asset='fg-lattice'] {
+    left: -8%;
+    bottom: 1%;
+    width: 52%;
+  }
+
+  .scene__img[data-asset='fg-lattice'][data-flip='-1'] {
+    left: auto;
+    right: -8%;
+  }
+
+  /* 石階低而寬：手機放大到幾乎滿寬，並把地面線抬高（--floor 22%），人物的腳才不被石階蓋住 */
+  .scene__img[data-asset='fg-steps'] {
+    left: -4%;
+    bottom: -2%;
+    width: 100%;
+  }
+
+  .scene__img[data-asset='fg-steps'][data-flip='-1'] {
+    left: auto;
+    right: -4%;
+  }
+
+  .scene__img[data-asset='fg-rack-close'] {
+    width: 62%;
+  }
 }
 
 /* ── 飄塵（少量 CSS 微光；只動 transform 與 opacity，減少動態時不顯示）─── */

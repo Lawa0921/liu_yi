@@ -4,14 +4,14 @@
  *
  * 子頁（課程總覽、課程內頁、師資、教練、場地、收費、課表、404）頁首是一幕分層剪影，由後到前四層：
  *   1. far     遠景：屋脊與院牆（`bg-far-roofs`），最慢、最淡、略帶霧色。
- *   2. mid     中景：院門、兵器架、鼓、旗、石鎖、木人樁，依頁面。
+ *   2. mid     中景：院門、兵器架、鼓、旗、木人樁，依頁面。
  *   3. subject 人物：該頁對應的剪影（課程內頁＝該課程的 `fig-*`／`kid-*`，師資與 404＝抱拳收勢 `fig-salute`）；
- *              場地是空場，主體改成場上的器具（石鎖），所以場地沒有人物，但四層仍然齊全。
+ *              場地是空場，主體改成場上的器具（木人樁），所以場地沒有人物，但四層仍然齊全。
  *   4. fg      前景 1–2 張（簷角、柱框、窗櫺、石階、近處的兵器架）：最快、最暗，貼著畫面邊緣框住場景。
  * 每一頁的組合都不同（`sceneSignature` 互不相同，單元測試守住），課程內頁的人物各門課專屬，避免看膩。
  * 素材是 `src/assets/silhouettes/<名稱>.webp`（黑色加透明的剪影）；層的位置與大小在 `styles/scene.css`（依 `data-asset`）。
  *
- * 首頁（`HOME_DEPTH`、`MID_BY_BEAT`）：光點拳師照舊，遠景屋脊與中景（院門、兵器架…）放在光點後面，前景簷角框在畫面邊緣；
+ * 首頁（`HOME_DEPTH`、`MID_BY_BEAT`）：光點拳師照舊，遠景屋脊與中景（院門、兵器架…，在人形旁邊）襯在光點後面，前景（簷角、窗櫺）框在畫面左右；
  * 中景依段落換（兵器三段是兵器架）。
  */
 
@@ -49,10 +49,11 @@ export const PAGE_SCENES: Record<PageSceneKind, SceneSpec> = {
   // 課程總覽：站樁的人物，滑過或聚焦課程卡時換成該課的剪影（`Scene.astro` 的 swap）
   courses: scene('bg-mid-gate', 'fig-zhenjiao-land', ['fg-pillars']),
   coaches: scene('mid-banner', 'fig-salute', ['fg-eave', 'fg-steps']),
-  coach: scene('mid-drum', 'fig-salute', ['fg-lattice', ['fg-eave', 'flip']]),
-  // 場地：空場。主體是場上的石鎖與棍
-  facility: scene('bg-mid-gate', 'mid-stonelock', ['fg-steps', 'fg-pillars']),
-  pricing: scene('mid-banner', 'fig-zhenjiao', ['fg-lattice', 'fg-steps']),
+  // 窗櫺在左下、簷角在右上（窗櫺翻到右下會蓋住手機上人物的腳）
+  coach: scene('mid-drum', 'fig-salute', ['fg-lattice', 'fg-eave']),
+  // 場地：空場。主體是場上的木人樁（石鎖看起來像「禁止」的符號，已拿掉）
+  facility: scene('bg-mid-gate', 'mid-dummy', ['fg-steps', 'fg-pillars']),
+  pricing: scene('mid-banner', 'fig-zhenjiao', ['fg-lattice', ['fg-steps', 'flip']]),
   schedule: scene('mid-drum', 'fig-zhenjiao-land', [['fg-eave', 'flip']]),
   // 404：一個人收勢站在空院子裡
   lost: scene('mid-dummy', 'fig-salute', ['fg-steps']),
@@ -63,12 +64,33 @@ export const COURSE_SCENES: Record<string, SceneSpec> = {
   bajiquan: scene('bg-mid-gate', 'fig-dingzhou', ['fg-eave', 'fg-steps']),
   sanshou: scene('mid-dummy', 'fig-chengchui', ['fg-pillars'], { subject: true }),
   'chinese-weapons': scene('bg-mid-rack', 'fig-jian', ['fg-rack-close', 'fg-eave']),
-  'kids-martial-arts': scene('mid-banner', 'fig-kid-wushu', ['fg-steps', 'fg-lattice']),
-  'kids-self-defense': scene('mid-drum', 'fig-kid-defense-a', ['fg-pillars', ['fg-steps', 'flip']], { subject: true }),
+  'kids-martial-arts': scene('mid-banner', 'fig-kid-wushu', ['fg-eave', 'fg-lattice']),
+  'kids-self-defense': scene('mid-drum', 'fig-kid-defense-a', [['fg-pillars', 'flip'], ['fg-steps', 'flip']], { subject: true }),
   'kids-weapons': scene('bg-mid-rack', 'fig-kid-weapon', [['fg-eave', 'flip']], { mid: true }),
-  bjj: scene('mid-stonelock', 'fig-kao', ['fg-lattice']),
-  'core-yoga': scene('mid-banner', 'fig-zhenjiao', [['fg-eave', 'flip'], 'fg-steps']),
+  bjj: scene('mid-drum', 'fig-kao', ['fg-lattice']),
+  'core-yoga': scene('mid-banner', 'fig-zhenjiao', [['fg-eave', 'flip'], ['fg-steps', 'flip']]),
 };
+
+/**
+ * 每種前景素材貼在場景的哪個角落（不翻轉時）。`v` 是上緣、下緣或整個高度（貼著一側的邊緣），`h` 是左或右；翻轉（flip）把左右對調。
+ * `styles/scene.css` 照這張表放位置；單元測試確認同一場景的兩張前景在左右兩側、不擠在同一個角落（使用者的審查：兒童武術的兩張前景都在左下，擠成一團）。
+ */
+export const FG_ANCHOR: Record<string, { v: 'top' | 'bottom' | 'full'; h: 'left' | 'right' }> = {
+  'fg-eave': { v: 'top', h: 'right' },
+  'fg-lattice': { v: 'bottom', h: 'left' },
+  'fg-steps': { v: 'bottom', h: 'left' },
+  'fg-rack-close': { v: 'bottom', h: 'left' },
+  // 單根廊柱（上有斗拱托住的橫梁一角）貼著右緣、從地面立到頂：只取一根柱子，不是兩柱一梁的門形（那個會像日本鳥居）
+  'fg-pillars': { v: 'full', h: 'right' },
+};
+
+/** 一張前景（含翻轉）實際貼的角落，例如 `top-right`、`bottom-left`、`full-left`。 */
+export function fgCorner(layer: SceneLayerRef): string {
+  const anchor = FG_ANCHOR[layer.asset];
+  if (!anchor) throw new Error(`fg anchor missing: ${layer.asset}`);
+  const h = layer.flip ? (anchor.h === 'left' ? 'right' : 'left') : anchor.h;
+  return `${anchor.v}-${h}`;
+}
 
 export type CourseCategory = 'weapon' | 'fist' | 'combat' | 'other';
 export type CourseAudience = 'adult' | 'kid' | 'all';
@@ -118,7 +140,7 @@ export function sceneAssets(spec: SceneSpec): string[] {
 
 // ── 首頁 ────────────────────────────────────────────────────────
 
-export type HomeMidKey = 'gate' | 'rack' | 'drum' | 'banner' | 'stonelock';
+export type HomeMidKey = 'gate' | 'rack' | 'drum' | 'banner' | 'dummy';
 
 export const HOME_DEPTH: {
   far: SceneLayerRef;
@@ -131,17 +153,24 @@ export const HOME_DEPTH: {
     rack: { asset: 'bg-mid-rack' },
     drum: { asset: 'mid-drum' },
     banner: { asset: 'mid-banner' },
-    stonelock: { asset: 'mid-stonelock' },
+    dummy: { asset: 'mid-dummy' },
   },
-  fg: [{ asset: 'fg-eave' }],
+  // 前景兩張框住左右：簷角在右上、窗櫺在左下（直向在左上）
+  fg: [{ asset: 'fg-eave' }, { asset: 'fg-lattice' }],
 };
 
-/** 每個段落（beat）的中景：開場與拳是院門、格鬥是石鎖、兵器三段是兵器架、其他課程是鼓、師資與收費是旗、預約回到院門。 */
+/**
+ * 左下角的窗櫺（前景第二張）只在這幾段出現：開場的站名、副標垂直排在左側一路到畫面底，收費與預約等段的內容是整寬的，左下角都有字。
+ * 其餘段落左下角是空的（文字在視窗中間偏左），窗櫺才不壓到字；e2e 每段量過。
+ */
+export const HOME_FG_LEFT_BEATS: readonly BeatId[] = ['fist', 'combat-a', 'combat-b', 'weapon-a', 'weapon-b', 'weapon-c'];
+
+/** 每個段落（beat）的中景：開場與拳是院門、格鬥是木人樁、兵器三段是兵器架、其他課程是鼓、師資與收費是旗、預約回到院門。 */
 export const MID_BY_BEAT: Record<BeatId, HomeMidKey> = {
   opening: 'gate',
   fist: 'gate',
-  'combat-a': 'stonelock',
-  'combat-b': 'stonelock',
+  'combat-a': 'dummy',
+  'combat-b': 'dummy',
   'weapon-a': 'rack',
   'weapon-b': 'rack',
   'weapon-c': 'rack',

@@ -86,8 +86,8 @@ for (const device of DEVICES) {
       }
       expect(bytes, `首屏 ${mb(bytes)} 不得超過 1.5 MB；最大的回應：${biggest(first)}`).toBeLessThanOrEqual(FIRST_SCREEN_LIMIT);
 
-      // 景深層（Task 27）：首屏只載遠景、院門與簷角；兵器架、鼓、旗、石鎖的中景延後到引擎就緒之後
-      const lazyMids = first.filter((item) => /(bg-mid-rack|mid-drum|mid-banner|mid-stonelock)[^/]*\.webp(\?|$)/.test(item.url));
+      // 景深層（Task 27）：首屏只載遠景、院門與兩張前景（簷角、窗櫺）；兵器架、鼓、旗、木人樁的中景延後到引擎就緒之後
+      const lazyMids = first.filter((item) => /(bg-mid-rack|mid-drum|mid-banner|mid-dummy)[^/]*\.webp(\?|$)/.test(item.url));
       expect(lazyMids.map((item) => fileName(item.url)), '首屏沒有延後載入的中景').toEqual([]);
 
       // 入館閘門（Task 25）：第一次進站首頁先蓋著閘門（量到的就是使用者真實的第一次造訪）。閘門沿用 Task 24 的館徽圖（同一個來源、同樣的候選寬度，

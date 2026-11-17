@@ -1,12 +1,15 @@
 import { expect, test, type Page } from '@playwright/test';
+import sharp from 'sharp';
 import type { QiDebug } from '../../src/qi/engine/qi-stage';
 import type { BeatId } from '../../src/qi/config/poses';
+import { HOME_FG_LEFT_BEATS } from '../../src/lib/scene/config';
 
-// 首頁景深層（Task 27，使用者要求「前中後遠景的效果沒有出現」）：光點拳師照舊，後面有遠景屋脊與中景（依段落換）、前面有框在角落的簷角。
+// 首頁景深層（Task 27，使用者要求「前中後遠景的效果沒有出現」）：光點拳師照舊，後面有遠景屋脊與中景（依段落換，在人形旁邊）、前面有框在左右的前景（簷角、窗櫺）。
 //   - 層都在、圖已載入、純裝飾（aria-hidden、不接收指標事件）。
-//   - 中景依目前的段落換：開場與拳是院門、格鬥是石鎖、兵器三段是兵器架、其他課程是鼓、師資與收費是旗。
+//   - 中景依目前的段落換：開場與拳是院門、格鬥是木人樁、兵器三段是兵器架、其他課程是鼓、師資與收費是旗；中景在人形旁邊（不是正後方）。
+//   - 看得見（審查：遠景與中景的對比太低）：隱藏光點畫布，用截圖量每一層「有／沒有」的亮度差——引擎在跑、引擎到達之前（海報）、減少動態（靜態圖）、沒有 JS 四種狀態都要量。
 //   - 捲動視差：遠景最慢（位移最小）、前景最快，方向相反；減少動態時不位移。
-//   - 前景不遮文字與光點主體：簷角的矩形與每段文字、段落導覽、光點外框都不相交。
+//   - 前景不遮文字與光點主體：每一張前景的矩形與每段文字、段落導覽、光點外框都不相交（每一段、三種視窗尺寸）。
 // headless 的 WebGL 是軟體繪製：引擎相關一律 ?qi-tier=min&qi-debug=1，時間用停住的假時鐘；只用 page.*，不碰 OS 層級的滑鼠鍵盤。
 test.describe.configure({ mode: 'default', timeout: 120_000 });
 
@@ -98,6 +101,8 @@ test.describe('層與素材：桌機 1440×900', () => {
         pointer: [...document.querySelectorAll('.depth, .depth-fg')].map((el) => getComputedStyle(el).pointerEvents),
         zBack: getComputedStyle(document.querySelector('.depth')!).zIndex,
         zFront: getComputedStyle(document.querySelector('.depth-fg')!).zIndex,
+        blendBack: getComputedStyle(document.querySelector('.depth')!).mixBlendMode,
+        blendFront: getComputedStyle(document.querySelector('.depth-fg')!).mixBlendMode,
         zCanvas: getComputedStyle(document.querySelector('.home-canvas')!).zIndex,
         zBeat: getComputedStyle(document.querySelector('[data-beat]')!).zIndex,
       };
@@ -105,21 +110,36 @@ test.describe('層與素材：桌機 1440×900', () => {
     expect(info.loaded).toBe(true);
     expect(info.alts.every((alt) => alt === '')).toBe(true);
     expect(info.far).toBe(1);
-    expect([...info.mid].sort()).toEqual(['banner', 'drum', 'gate', 'rack', 'stonelock']);
-    expect(info.fg).toContain('fg-eave');
+    expect([...info.mid].sort()).toEqual(['banner', 'drum', 'dummy', 'gate', 'rack']);
+    expect([...info.fg].sort(), '前景兩張：簷角與窗櫺').toEqual(['fg-eave', 'fg-lattice']);
     expect(info.hidden).toBe(true);
     expect(info.pointer).toEqual(['none', 'none']);
-    // 層次：遠景與中景在光點畫布後面，前景在畫布前面、在文字（beat）之下
-    expect(Number(info.zBack)).toBeLessThan(Number(info.zCanvas));
-    expect(Number(info.zFront)).toBeGreaterThanOrEqual(Number(info.zCanvas));
-    expect(Number(info.zFront)).toBeLessThan(Number(info.zBeat));
+    // 層次：遠景與中景用 lighten 疊在最上面（比後面亮的才提亮：海報、靜態圖、光點、文字都原樣透出，每個狀態都看得見），前景（近黑，一般混合）同在最上面；兩組都在頁首、段落導覽與外框之下
+    expect(Number(info.zBack)).toBeGreaterThan(Number(info.zBeat));
+    expect(Number(info.zFront)).toBeGreaterThan(Number(info.zBeat));
+    expect(Number(info.zBack)).toBeGreaterThan(Number(info.zCanvas));
+    expect(info.blendBack).toBe('lighten');
+    expect(info.blendFront).toBe('normal');
+    expect(Number(info.zBack)).toBeLessThan(45); // 段落導覽的 z-index
   });
 
-  test('光點畫布用 screen 疊在景深層上：黑的地方透出後面的遠景與中景（不是不透明的黑板）', async ({ page }) => {
+  test('光點畫布用 screen（它的黑底對頁面底色是中性的，不會在底色上多出一塊更黑的矩形）；開場海報在引擎接手後淡出', async ({ page }) => {
     await open(page);
     expect(await page.evaluate(() => getComputedStyle(document.querySelector('.home-canvas')!).mixBlendMode)).toBe('screen');
-    // 開場的靜態海報淡出之後，畫面上看得到遠景（量遠景所在列的亮度比同一列的純底色高）
     await expect.poll(() => page.evaluate(() => getComputedStyle(document.querySelector('.opening__poster')!).opacity)).toBe('0');
+  });
+
+  test('中景在人形旁邊、不是正後方：橫向版面中景的中心在人形（--figure-x）左邊至少 15% 視窗寬', async ({ page }) => {
+    await open(page);
+    const geometry = await page.evaluate(() => {
+      const depth = document.querySelector<HTMLElement>('.depth')!;
+      const visible = document.querySelector<HTMLElement>('.depth__layer[data-depth-layer="mid"] img[data-mid="gate"]')!;
+      const rect = visible.getBoundingClientRect();
+      const box = depth.getBoundingClientRect();
+      return { center: (rect.left + rect.right) / 2, width: box.width, left: box.left, figureX: parseFloat(getComputedStyle(depth).getPropertyValue('--figure-x')) / 100 };
+    });
+    const centerShare = (geometry.center - geometry.left) / geometry.width;
+    expect(geometry.figureX - centerShare, '中景中心離人形中心').toBeGreaterThanOrEqual(0.15);
   });
 });
 
@@ -129,7 +149,7 @@ test.describe('中景依段落換', () => {
   const CASES: { beat: BeatId; pose: string; mid: string }[] = [
     { beat: 'opening', pose: 'land', mid: 'gate' },
     { beat: 'fist', pose: 'dingzhou', mid: 'gate' },
-    { beat: 'combat-a', pose: 'chengchui', mid: 'stonelock' },
+    { beat: 'combat-a', pose: 'chengchui', mid: 'dummy' },
     { beat: 'weapon-a', pose: 'jian', mid: 'rack' },
     { beat: 'weapon-b', pose: 'miaodao', mid: 'rack' },
     { beat: 'weapon-c', pose: 'spear', mid: 'rack' },
@@ -152,7 +172,7 @@ test.describe('中景依段落換', () => {
             ),
           { message: `${beat}：只有 ${mid} 看得見`, timeout: 10_000 },
         )
-        .toEqual(Object.fromEntries(['gate', 'rack', 'drum', 'banner', 'stonelock'].map((key) => [key, key === mid ? 0.5 : 0])));
+        .toEqual(Object.fromEntries(['gate', 'rack', 'drum', 'banner', 'dummy'].map((key) => [key, key === mid ? 0.85 : 0])));
     }
   });
 });
@@ -200,6 +220,151 @@ test.describe('減少動態', () => {
   });
 });
 
+// ── 景深看得見：隱藏光點畫布，量每一層「有／沒有」的亮度差 ─────────────────────
+
+/** 視窗截圖的亮度（0–255）。 */
+async function lumaOf(buffer: Buffer): Promise<Float32Array> {
+  const { data, info } = await sharp(buffer).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  const out = new Float32Array(info.width * info.height);
+  for (let i = 0; i < out.length; i++) out[i] = 0.2126 * data[i * 3]! + 0.7152 * data[i * 3 + 1]! + 0.0722 * data[i * 3 + 2]!;
+  return out;
+}
+
+/** 兩張截圖的平均亮度差：只算有差的像素（差 > 3），也就是那一層的剪影蓋住的地方。 */
+function meanDifference(a: Float32Array, b: Float32Array): { mean: number; share: number } {
+  let n = 0;
+  let sum = 0;
+  for (let i = 0; i < a.length; i++) {
+    const d = Math.abs(a[i]! - b[i]!);
+    if (d > 3) {
+      n++;
+      sum += d;
+    }
+  }
+  return { mean: n === 0 ? 0 : sum / n, share: n / a.length };
+}
+
+const HIDE = {
+  far: '[data-depth-layer="far"] { visibility: hidden !important }',
+  mid: '[data-depth-layer="mid"] { visibility: hidden !important }',
+  fg: '.depth-fg { visibility: hidden !important }',
+};
+
+/** 暫時加一段樣式、截圖、再拿掉。 */
+async function shotWith(page: Page, css: string): Promise<Float32Array> {
+  // 樣式改了要等瀏覽器真的重繪才截（真實時間：假時鐘會接管 rAF，不能用 rAF 等）；顆粒層（.grain）是動的，一併隱藏，不然兩張截圖之間到處都有雜訊差
+  const handle = await page.addStyleTag({ content: `.grain { visibility: hidden !important } ${css}` });
+  await page.waitForTimeout(150);
+  const buffer = await page.screenshot();
+  await handle.evaluate((el) => (el as Element).remove());
+  return lumaOf(buffer);
+}
+
+type Contrast = Record<'far' | 'mid' | 'fg', { mean: number; share: number }>;
+
+/** 量遠景、中景、前景的亮度差（先隱藏光點畫布，只剩景深層、海報或靜態圖、文字；文字在每張圖裡都一樣，不會有差）。 */
+async function measureDepth(page: Page): Promise<Contrast> {
+  await page.evaluate(() => document.querySelectorAll<HTMLImageElement>('.depth img[data-src]').forEach((img) => (img.src ||= img.dataset.src!)));
+  await page.evaluate(async () => {
+    // 直向版面的窗櫺是 display: none 的 lazy 圖（不下載），略過
+    const imgs = [...document.querySelectorAll<HTMLImageElement>('.depth img, .depth-fg img')].filter((img) => img.getAttribute('src') && getComputedStyle(img).display !== 'none');
+    await Promise.all(imgs.map((img) => img.decode().catch(() => undefined)));
+  });
+  await page.addStyleTag({ content: '.home-canvas { visibility: hidden !important }' });
+  const all = await shotWith(page, '');
+  return {
+    far: meanDifference(all, await shotWith(page, HIDE.far)),
+    mid: meanDifference(all, await shotWith(page, HIDE.mid)),
+    fg: meanDifference(all, await shotWith(page, HIDE.fg)),
+  };
+}
+
+/**
+ * 門檻：審查量到第一版遠景約 2.4、中景約 12–15（亮度 0–255），都太淡。現在四種狀態、兩種視窗都量到：遠景 22–25、中景 22–33、前景 18–22；
+ * 門檻取約六成，留給字型、取樣與軟體繪製的誤差。
+ */
+const MIN_DIFF = { far: 14, mid: 16, fg: 12 };
+/** 剪影蓋住的面積占視窗的下限：前景在手機只有一張簷角（約 0.4%），不是一小撮雜訊。 */
+const MIN_SHARE = { far: 0.03, mid: 0.03, fg: 0.003 };
+
+function expectVisibleDepth(result: Contrast, label: string): void {
+  for (const layer of ['far', 'mid', 'fg'] as const) {
+    expect(result[layer].mean, `${label}：${layer} 與背景的平均亮度差`).toBeGreaterThanOrEqual(MIN_DIFF[layer]);
+    expect(result[layer].share, `${label}：${layer} 占畫面的比例（不是一小塊）`).toBeGreaterThan(MIN_SHARE[layer]);
+  }
+}
+
+for (const size of [
+  { width: 1440, height: 900 },
+  { width: 390, height: 844 },
+]) {
+  test.describe(`景深看得見：${size.width}×${size.height}`, () => {
+    test.use({ viewport: size });
+
+    test('引擎在跑（光點畫布隱藏）：遠景、中景、前景與背景的亮度差都夠大，開場（院門）與格鬥（木人樁）兩段都量', async ({ page }) => {
+      await open(page);
+      expectVisibleDepth(await measureDepth(page), `${size.width}px 開場`);
+      await settlePose(page, 'combat-a', 'chengchui');
+      await expect.poll(() => page.evaluate(() => getComputedStyle(document.querySelector('.depth__img[data-mid="dummy"]')!).opacity), { timeout: 10_000 }).toBe('0.85');
+      expectVisibleDepth(await measureDepth(page), `${size.width}px 格鬥`);
+    });
+  });
+
+  test.describe(`靜態狀態也看得見景深：${size.width}×${size.height}`, () => {
+    test.use({ viewport: size });
+
+    test.describe('減少動態', () => {
+      test.use({ reducedMotion: 'reduce' });
+
+      test('退回靜態圖：海報與每段的靜態圖是不透明的暗底，景深層照樣看得見', async ({ page }) => {
+        await page.addInitScript(() => sessionStorage.setItem('liuyi:qi-intro', '1'));
+        await page.goto(HOME);
+        await expect(page.locator('html')).toHaveClass(/qi-static/);
+        await page.waitForTimeout(500);
+        expectVisibleDepth(await measureDepth(page), '減少動態：開場（海報）');
+        await scrollToBeat(page, 'combat-b');
+        await page.waitForTimeout(500);
+        await expect(page.locator('[data-beat="combat-b"] .beat__still:visible')).toHaveCount(1);
+        expectVisibleDepth(await measureDepth(page), '減少動態：格鬥（靜態圖）');
+      });
+    });
+
+    test('引擎到達之前（擋掉引擎腳本，只剩海報）', async ({ page }) => {
+      await page.addInitScript(() => sessionStorage.setItem('liuyi:qi-intro', '1'));
+      await page.route(/\/_astro\/[^/]*(qi|home|init)[^/]*\.js(\?.*)?$/, (route) => route.abort());
+      await page.goto('./');
+      await page.waitForTimeout(800);
+      await expect(page.locator('html')).not.toHaveAttribute('data-qi-ready', 'true');
+      expect(await page.evaluate(() => getComputedStyle(document.querySelector('.opening__poster')!).opacity), '海報還在').toBe('1');
+      expectVisibleDepth(await measureDepth(page), '引擎之前：開場（海報）');
+    });
+
+    test.describe('沒有 JS', () => {
+      test.use({ javaScriptEnabled: false });
+
+      test('海報與靜態圖：遠景與中景（預設的院門）看得見', async ({ page }) => {
+        // 沒有 JS 就不能 addStyleTag：改在文件回應裡塞一段 <style>，同一頁載三次（全部、沒有遠景、沒有中景）
+        const shot = async (css: string): Promise<Float32Array> => {
+          await page.unroute('**/*');
+          await page.route('**/*', async (route) => {
+            if (route.request().resourceType() !== 'document') return route.continue();
+            const response = await route.fetch();
+            await route.fulfill({ response, body: (await response.text()).replace('</head>', `<style>.home-canvas, .grain { visibility: hidden !important } ${css}</style></head>`) });
+          });
+          await page.goto('./');
+          await page.waitForTimeout(400);
+          return lumaOf(await page.screenshot());
+        };
+        const all = await shot('');
+        const far = meanDifference(all, await shot(HIDE.far));
+        const mid = meanDifference(all, await shot(HIDE.mid));
+        expect(far.mean, '沒有 JS：遠景').toBeGreaterThanOrEqual(MIN_DIFF.far);
+        expect(mid.mean, '沒有 JS：中景（院門）').toBeGreaterThanOrEqual(MIN_DIFF.mid);
+      });
+    });
+  });
+}
+
 // ── 前景不遮文字與光點主體 ───────────────────────────────────────────
 
 interface Box {
@@ -209,37 +374,45 @@ interface Box {
   bottom: number;
 }
 
-/** 簷角的不透明外框（視窗座標）：把圖畫到 canvas 取 alpha > 40 的像素範圍，再換算到目前的顯示矩形（含視差位移）。 */
-const eaveBox = (page: Page): Promise<Box> =>
+/** 每一張前景的不透明外框（視窗座標）：把圖畫到 canvas 取 alpha > 40 的像素範圍，再換算到目前的顯示矩形（含視差位移、翻轉），並裁到景深層的矩形內。 */
+const fgBoxes = (page: Page): Promise<{ asset: string; box: Box }[]> =>
   page.evaluate(async () => {
-    const img = document.querySelector<HTMLImageElement>('.depth-fg img[data-asset="fg-eave"]')!;
-    await img.decode();
-    const canvas = document.createElement('canvas');
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
-    const context = canvas.getContext('2d')!;
-    context.drawImage(img, 0, 0);
-    const { data, width, height } = context.getImageData(0, 0, canvas.width, canvas.height);
-    let x0 = width;
-    let x1 = -1;
-    let y0 = height;
-    let y1 = -1;
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        if (data[(y * width + x) * 4 + 3]! <= 40) continue;
-        if (x < x0) x0 = x;
-        if (x > x1) x1 = x;
-        if (y < y0) y0 = y;
-        if (y > y1) y1 = y;
+    const area = document.querySelector('.depth-fg')!.getBoundingClientRect();
+    const out: { asset: string; box: Box }[] = [];
+    for (const img of document.querySelectorAll<HTMLImageElement>('.depth-fg img')) {
+      if (Number(getComputedStyle(img).opacity) < 0.5 || getComputedStyle(img).display === 'none') continue; // 這一段沒有顯示的前景（窗櫺只在左下角沒有字的段落出現、直向版面不顯示）
+      await img.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const context = canvas.getContext('2d')!;
+      context.drawImage(img, 0, 0);
+      const { data, width, height } = context.getImageData(0, 0, canvas.width, canvas.height);
+      let x0 = width;
+      let x1 = -1;
+      let y0 = height;
+      let y1 = -1;
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          if (data[(y * width + x) * 4 + 3]! <= 40) continue;
+          if (x < x0) x0 = x;
+          if (x > x1) x1 = x;
+          if (y < y0) y0 = y;
+          if (y > y1) y1 = y;
+        }
       }
+      const rect = img.getBoundingClientRect(); // 含 transform（視差、翻轉）
+      const sx = rect.width / width;
+      const sy = rect.height / height;
+      const flipped = getComputedStyle(img).transform !== 'none' && new DOMMatrixReadOnly(getComputedStyle(img).transform).a < 0;
+      const left = flipped ? rect.right - (x1 + 1) * sx : rect.left + x0 * sx;
+      const right = flipped ? rect.right - x0 * sx : rect.left + (x1 + 1) * sx;
+      out.push({
+        asset: img.dataset.asset ?? '',
+        box: { left: Math.max(left, area.left), right: Math.min(right, area.right), top: Math.max(rect.top + y0 * sy, area.top), bottom: Math.min(rect.top + (y1 + 1) * sy, area.bottom) },
+      });
     }
-    const rect = img.getBoundingClientRect(); // 含 transform（視差、翻轉）
-    const sx = rect.width / width;
-    const sy = rect.height / height;
-    const flipped = getComputedStyle(img).transform !== 'none' && new DOMMatrixReadOnly(getComputedStyle(img).transform).a < 0;
-    const left = flipped ? rect.right - (x1 + 1) * sx : rect.left + x0 * sx;
-    const right = flipped ? rect.right - x0 * sx : rect.left + (x1 + 1) * sx;
-    return { left, right, top: rect.top + y0 * sy, bottom: rect.top + (y1 + 1) * sy };
+    return out;
   });
 
 const overlaps = (a: Box, b: Box): boolean => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0;
@@ -259,11 +432,18 @@ const textBoxes = (page: Page): Promise<Box[]> =>
     return out;
   });
 
-const FIGURE_BEATS: { beat: BeatId; pose: string }[] = [
+/** 每一段都量（不只是有光點人形的那幾段）：前景是固定在視窗角落的，每一段停下來時都不得壓到文字。 */
+const ALL_BEATS: { beat: BeatId; pose: string }[] = [
   { beat: 'opening', pose: 'land' },
   { beat: 'fist', pose: 'dingzhou' },
+  { beat: 'combat-a', pose: 'chengchui' },
   { beat: 'combat-b', pose: 'kao' },
+  { beat: 'weapon-a', pose: 'jian' },
+  { beat: 'weapon-b', pose: 'miaodao' },
+  { beat: 'weapon-c', pose: 'spear' },
+  { beat: 'others', pose: 'others' },
   { beat: 'coaches', pose: 'salute' },
+  { beat: 'pricing', pose: 'scroll' },
   { beat: 'booking', pose: 'crest' },
 ];
 
@@ -275,17 +455,30 @@ for (const size of [
   test.describe(`前景不遮文字與光點主體：${size.width}×${size.height}`, () => {
     test.use({ viewport: size });
 
-    test('簷角（不透明外框）與每段可見的文字、段落導覽、光點外框都不相交', async ({ page }) => {
+    test('每一張前景（簷角、窗櫺）的不透明外框與每段可見的文字、段落導覽、光點外框都不相交；每段都量', async ({ page }) => {
       await open(page);
-      for (const { beat, pose } of FIGURE_BEATS) {
+      for (const { beat, pose } of ALL_BEATS) {
         await settlePose(page, beat, pose);
-        const eave = await eaveBox(page);
-        expect(eave.right - eave.left, '簷角有大小').toBeGreaterThan(40);
-        for (const box of await textBoxes(page)) expect(overlaps(eave, box), `${beat}：簷角壓到文字 ${JSON.stringify(box)}（簷角 ${JSON.stringify(eave)}）`).toBe(false);
+        // 窗櫺的淡入淡出是 CSS 轉場（走文件時間軸，不受假時鐘控制）：用真實時間等到它停在該有的值
+        const portrait = size.width / size.height <= 0.8; // 直向版面：只有一張簷角（翻到左上），窗櫺不顯示
+        const wantLattice = !portrait && HOME_FG_LEFT_BEATS.includes(beat) ? '1' : '0';
+        if (portrait) await expect(page.locator('.depth-fg img[data-asset="fg-lattice"]'), `${beat} 直向沒有窗櫺`).toBeHidden();
+        else {
+          await expect
+            .poll(() => page.evaluate(() => getComputedStyle(document.querySelector('.depth-fg img[data-asset="fg-lattice"]')!).opacity), { message: `${beat} 的窗櫺`, timeout: 10_000 })
+            .toBe(wantLattice);
+        }
+        const fgs = await fgBoxes(page);
+        expect(fgs.map((fg) => fg.asset).sort(), `${beat} 看得見的前景`).toEqual(wantLattice === '1' ? ['fg-eave', 'fg-lattice'] : ['fg-eave']);
+        const texts = await textBoxes(page);
         const rail = await page.locator('nav.home-rail').boundingBox();
-        if (rail) expect(overlaps(eave, { left: rail.x, right: rail.x + rail.width, top: rail.y, bottom: rail.y + rail.height }), `${beat}：簷角壓到段落導覽`).toBe(false);
         const extent = await page.evaluate(() => (window as unknown as W).__qi.debug.extent());
-        if (extent.right > extent.left) expect(overlaps(eave, extent), `${beat}：簷角壓到光點主體 ${JSON.stringify(extent)}（簷角 ${JSON.stringify(eave)}）`).toBe(false);
+        for (const { asset, box } of fgs) {
+          expect(box.right - box.left, `${asset} 有大小`).toBeGreaterThan(40);
+          for (const text of texts) expect(overlaps(box, text), `${beat}：${asset} 壓到文字 ${JSON.stringify(text)}（${JSON.stringify(box)}）`).toBe(false);
+          if (rail) expect(overlaps(box, { left: rail.x, right: rail.x + rail.width, top: rail.y, bottom: rail.y + rail.height }), `${beat}：${asset} 壓到段落導覽`).toBe(false);
+          if (extent.right > extent.left) expect(overlaps(box, extent), `${beat}：${asset} 壓到光點主體 ${JSON.stringify(extent)}（${JSON.stringify(box)}）`).toBe(false);
+        }
       }
     });
   });

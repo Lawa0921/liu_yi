@@ -26,7 +26,7 @@ export const TILT_MAX_PX: Record<LayerKind, number> = { far: 2, mid: 5, subject:
 const TILT_SIGN: Record<LayerKind, number> = { far: 1, mid: 1, subject: -1, fg: -1 };
 
 /** 首頁固定層的位移幅度（占視窗高的比例）：進度 0 與 1 各移這麼多（遠景往下、前景往上）。 */
-const HOME_AMPLITUDE: Record<'far' | 'mid' | 'fg', number> = { far: 0.015, mid: 0.035, fg: -0.09 };
+const HOME_AMPLITUDE: Record<'far' | 'mid' | 'fg', number> = { far: 0.015, mid: 0.035, fg: -0.055 };
 
 const finite = (value: number): boolean => Number.isFinite(value);
 const clamp = (value: number, low: number, high: number): number => Math.min(Math.max(value, low), high);
