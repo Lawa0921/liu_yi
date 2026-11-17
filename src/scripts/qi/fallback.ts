@@ -1,4 +1,4 @@
-// 光點頁面（首頁與 Task 26 起的各頁）退回靜態圖（D20）：減少動態、沒有 WebGL2、引擎掛不上、WebGL context 中途遺失、
+// 首頁的光點頁面退回靜態圖（D20）：減少動態、沒有 WebGL2、引擎掛不上、WebGL context 中途遺失、
 // 自動降級時重建失敗（`tier-failed`）、離開頁面（引擎釋放），都走同一個 `enterStatic`。
 //
 //   - `<head>` 的行內腳本（BaseLayout）在首繪前先加 `html.qi-static`（減少動態或探測不到 WebGL2）；靜態圖是否顯示只由 CSS 決定。

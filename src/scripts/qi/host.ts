@@ -1,4 +1,5 @@
-// 光點引擎的頁面接線（首頁 `home/init-home.ts` 與 Task 26 起的各頁 `qi/page.ts` 共用的那一半）。
+// 光點引擎的頁面接線（首頁 `home/init-home.ts` 用的那一半：殼、退回、降級、掛載、取景、換姿勢、每格迴圈）。Task 26 曾讓各頁共用（`qi/page.ts`），
+// Task 27 起子頁改成剪影場景（沒有引擎），只剩首頁用它；抽出來的這一層保留（init-home.ts 變短，也讓單元測試好測）。
 //
 //   - 殼：`window.__qi`（只有 ready／frames／tier／mode；`?qi-debug=1` 才多一個 debug）與 `html[data-qi-*]`（`setAttr` 只在值變了才寫 DOM）。
 //   - 退回與收尾：`alive`、`shutdown`（停掉每格迴圈、觀察者、釋放引擎與 GL context）；退回靜態圖（`fallback.ts` 的 `enterStatic`）時一律收尾，

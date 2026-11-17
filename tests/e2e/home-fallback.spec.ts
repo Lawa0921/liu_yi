@@ -38,7 +38,7 @@ interface Seen {
 const seen = new WeakMap<Page, Seen>();
 
 function watch(page: Page): Seen {
-  const log: Seen = { errors: [], warnings: [], allowErrors: [VIEW_TRANSITION_ABORT_NOISE], allowWarnings: [] }; // 站內連續換頁偶爾會有瀏覽器自己的轉場中止雜訊（helpers.ts）
+  const log: Seen = { errors: [], warnings: [], allowErrors: [], allowWarnings: [] };
   seen.set(page, log);
   page.on('pageerror', (error) => log.errors.push(`pageerror: ${error}`));
   page.on('console', (message) => {
@@ -46,6 +46,11 @@ function watch(page: Page): Seen {
     if (message.type() === 'warning') log.warnings.push(`console.warning: ${message.text()}`);
   });
   return log;
+}
+
+/** 這個測試會連續換頁（換頁的轉場還沒結束就再換頁）：容許瀏覽器自己的轉場中止雜訊（helpers.ts 說明），只吃這一則；沒有連續換頁的測試不得呼叫（沒有 `watch`／`open` 的測試根本不檢查 pageerror，也不需要）。 */
+function chainsNavigations(page: Page): void {
+  seen.get(page)?.allowErrors.push(VIEW_TRANSITION_ABORT_NOISE);
 }
 
 function expectClean(log: Seen): void {
@@ -253,6 +258,7 @@ async function expectStaticHome(page: Page, requests: string[], reason: string):
  * 課程連結進課程頁、教練連結進教練頁、預約按鈕開 LINE 視窗。每一輪重新載入首頁。
  */
 async function expectClickThrough(page: Page, baseURL: string | undefined): Promise<void> {
+  chainsNavigations(page); // 點連結換頁之後立刻 goto 下一輪：連續換頁
   const base = basePath(baseURL);
 
   await page.goto('./');

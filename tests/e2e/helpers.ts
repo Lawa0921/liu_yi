@@ -156,7 +156,7 @@ export async function figureBoxes(page: Page): Promise<{ poster: Box; engine: Bo
   return { poster, engine };
 }
 
-// ── 非首頁的頁面光點層（Task 26）──────────────────────────────────────
+// ── 幾何量測（Task 27 的場景與景深 e2e 用；位置原本是 Task 26 的頁面光點層留下的）──────────────
 
 /** 符合選擇器、有大小的元素的視窗座標外框（display:none 的不算）。 */
 export function boxOf(page: Page, selector: string): Promise<Box[]> {
@@ -181,6 +181,10 @@ export function overlapOfBox(a: Box, b: Box): number {
  * 推門換頁（Task 27，styles/transition.css）的已知瀏覽器雜訊：Chromium 在跨文件轉場被下一次換頁打斷時，會把
  * 「Transition was aborted because of invalid state. ViewTransition opt-in disabled」當成沒人接的 promise rejection 報成 pageerror。
  * 那些 promise 是瀏覽器內部建立的（轉場在 pagereveal 之前就被取消，事件沒有觸發，頁面腳本接不到），不是頁面程式的錯；
- * 偶爾在站內連續換頁的測試（點連結、上一頁、再點）裡看到。這些測試的「頁面全程沒有 pageerror」把它列為已知雜訊。
+ * 偶爾在站內連續換頁的測試（點連結、上一頁、再點）裡看到。
+ * 不得當成整支 spec 的預設容許（那會讓真正的 pageerror 也被這條正規式以外的漏洞蓋掉）：只有「真的連續換頁」的那幾個測試才用，
+ * 而且只吃這一則。稽核過的 spec（有監看 pageerror 的）：home-fallback 的 `expectClickThrough`（點連結換頁之後立刻 goto 下一輪）才容許；
+ * home-gate、home-crest、home-engine、visual、screen-polish、scene、arsenal、qi-engine、qi-effects 的每個測試只有一次 `goto`（home-gate／home-crest／home-engine 另有
+ * `reload`，是重新載入同一頁、不是轉場進行中又換到另一頁），一律嚴格；之後若有測試開始連續換頁，要在那個測試裡明寫容許並說明。
  */
 export const VIEW_TRANSITION_ABORT_NOISE = /Transition was aborted because of invalid state/;
