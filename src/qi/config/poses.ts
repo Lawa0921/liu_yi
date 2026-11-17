@@ -44,7 +44,9 @@ export type PoseId =
   | 'kid-wushu'
   | 'kid-defense-a'
   | 'kid-defense-b'
-  | 'kid-weapon';
+  | 'kid-weapon'
+  | 'kid-miaodao'
+  | 'kid-spear';
 
 /** 首頁 beat 的先後順序（即頁面由上而下）。 */
 export const BEATS: readonly BeatId[] = [
@@ -85,8 +87,8 @@ export const POSE_BY_BEAT: Record<Audience, Record<BeatId, PoseId>> = {
     'combat-a': 'kid-defense-a',
     'combat-b': 'kid-defense-b',
     'weapon-a': 'kid-weapon',
-    'weapon-b': 'miaodao',
-    'weapon-c': 'spear',
+    'weapon-b': 'kid-miaodao',
+    'weapon-c': 'kid-spear',
     others: 'others',
     coaches: 'salute',
     pricing: 'scroll',
@@ -131,6 +133,9 @@ export const BURSTS: Record<PoseId, Burst> = {
   'kid-defense-a': { dir: [1, 0.1, 0], power: 3.0, mode: 1 },
   'kid-defense-b': { dir: [1, 0.1, 0], power: 3.0, mode: 1 },
   'kid-weapon': { dir: [1, 0.1, 0], power: 3.0, mode: 1 },
+  // Task 27 追加：小孩持刀、持槍（兵器三段都有小孩版），同其他小孩段
+  'kid-miaodao': { dir: [1, 0.1, 0], power: 3.0, mode: 1 },
+  'kid-spear': { dir: [1, 0.1, 0], power: 3.0, mode: 1 },
 };
 
 export function poseFor(beat: BeatId, audience: Audience): PoseId {

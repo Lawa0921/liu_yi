@@ -2,7 +2,7 @@
  * 持械形體的設定（Task 27）：首頁兵器三段（劍、苗刀、大槍）與小孩的持劍，光點聚成「拳師拿著兵器」，不再是單獨一把兵器。
  *
  * 每一筆：
- *   - `src`：`src/assets/silhouettes/` 下的剪影（`fig-jian`、`fig-miaodao`、`fig-daqiang`、`fig-kid-weapon`，剪影裡的人本來就拿著兵器）。
+ *   - `src`：`src/assets/silhouettes/` 下的剪影（`fig-jian`、`fig-miaodao`、`fig-daqiang`、`fig-kid-weapon`、`fig-kid-miaodao`、`fig-kid-daqiang`，剪影裡的人本來就拿著兵器）。
  *   - `headPx`／`scaleOverride`：與 `config/figures.ts` 同一套比例規則（頭部對齊落地那張，`scale = land.headPx / headPx`）。持械的架勢列寬輪廓裡沒有
  *     可靠的頸谷（兵器的細線也算進列寬），所以 `headPx` 是看圖量的（剪影的頭頂到頸與肩交界的高度，註解寫在各筆）。
  *   - `weapon`：用哪一件兵器的幾何（`src/qi/data/weapons/<name>.geo`；小孩的劍用劍的幾何，縮在較短的軸上）。
@@ -46,7 +46,9 @@ export interface ArmedDef {
   spec: ArmedSpec;
 }
 
-export const ARMED: Record<'jian' | 'miaodao' | 'spear' | 'kid-weapon', ArmedDef> = {
+export type ArmedId = 'jian' | 'miaodao' | 'spear' | 'kid-weapon' | 'kid-miaodao' | 'kid-spear';
+
+export const ARMED: Record<ArmedId, ArmedDef> = {
   // 劍：弓步刺劍，劍朝左平伸。頭頂 y = 8、頸與肩的交界約 y = 135 → 頭高 127。
   // 劍身與護手在 x < 303（y 128–182），劍柄在拳裡（x 305–365），劍穗從柄尾垂下（x 335–380、y 186–330）：都剔掉，換成劍的幾何。
   jian: {
@@ -84,17 +86,17 @@ export const ARMED: Record<'jian' | 'miaodao' | 'spear' | 'kid-weapon', ArmedDef
       surfaceShare: 0.55,
     },
   },
-  // 大槍：弓步平扎，槍朝左平伸，前手在 (531, 160) 握槍桿、後手藏在肩後（槍尾從肩後露出到 x = 1109）。頭頂 y = 10、頸與肩的交界約 y = 119 → 頭高 109。
-  // 剪影原圖 968×406 過不了品管的尺寸閘門（兩邊都要 ≥ 500），所以放大 1.25 倍（cubic、alpha 二值化）成 1210×508；下面的座標都是放大後的像素。
-  // 槍頭、纓與前手之前的槍桿在 x < 498；後面露出的槍尾在 x > 979：都剔掉，換成大槍的幾何。
+  // 大槍（Task 27 重生，1536×1024 橫式畫布，後處理成 1378×600）：弓步平扎，槍朝左平伸、槍桿微微往右下斜（約 2°）。前手在 (575, 182) 握槍桿、
+  // 後手在 (1097, 218) 握槍桿尾段（槍桿從拳後露出到 x = 1357），兩手都在槍桿線上。頭頂 y = 8、頸與肩的交界約 y = 120 → 頭高 112。
+  // 槍頭、纓與前手之前的槍桿在 x < 538；後手之後露出的槍尾在 x > 1122：都剔掉，換成大槍的幾何；兩隻手與身體（槍桿在身體前面的那一段與身體黏在一起）保留。
   spear: {
     src: 'fig-daqiang',
-    headPx: 109,
+    headPx: 112,
     weapon: 'spear',
     spec: {
-      tip: [10, 156],
-      butt: [1109, 160],
-      erase: { rects: [[0, 120, 498, 269], [979, 140, 1210, 183]] },
+      tip: [8, 167],
+      butt: [1357, 217],
+      erase: { rects: [[0, 140, 538, 292], [1122, 195, 1378, 238]] },
       weaponShare: 0.44,
       surfaceShare: 0.66,
     },
@@ -111,6 +113,43 @@ export const ARMED: Record<'jian' | 'miaodao' | 'spear' | 'kid-weapon', ArmedDef
       erase: { capsules: [{ a: [372, 288], b: [700, 4], r: 24 }], rects: [[352, 240, 420, 308]], keep: [[362, 322, 42]] },
       weaponShare: 0.26,
       surfaceShare: 0.5,
+    },
+  },
+  // 小孩持刀（Task 27 追加，用 `tools/silhouettes` 產線生成，854×1177）：站姿雙手握長刀，刀斜指右上、安全朝上，沒有對人。頭頂 y = 245、頸與肩的交界約 y = 405 → 頭高 160。
+  // 刀從拳（380, 555）往右上到鋒尖（843, 12）：剪影的刀身是弧的（比弦凸約 15 px），剔除用一串膠囊貼著弧走；握刀的兩隻拳（x 360–450、y 490–590）是保留圈。
+  'kid-miaodao': {
+    src: 'fig-kid-miaodao',
+    headPx: 160,
+    weapon: 'miaodao',
+    spec: {
+      tip: [843, 12],
+      butt: [380, 560],
+      erase: {
+        capsules: [
+          { a: [843, 12], b: [760, 130], r: 28 },
+          { a: [760, 130], b: [640, 265], r: 32 },
+          { a: [640, 265], b: [520, 400], r: 32 },
+          { a: [520, 400], b: [440, 490], r: 32 },
+        ],
+        rects: [[395, 455, 465, 495]],
+        keep: [[390, 548, 72]],
+      },
+      weaponShare: 0.3,
+      surfaceShare: 0.5,
+    },
+  },
+  // 小孩持槍（Task 27 追加，1213×574，橫式）：低弓步向前扎槍（指向空處），前手在 (470, 205) 握槍桿、後手在 (930, 235) 握槍桿尾段，槍桿在身體前面、微微往右下斜。
+  // 頭頂 y = 8、頸與肩的交界約 y = 145 → 頭高 135。槍頭、纓與前手之前的槍桿在 x < 432；後手之後露出的槍尾在 x > 990。
+  'kid-spear': {
+    src: 'fig-kid-daqiang',
+    headPx: 135,
+    weapon: 'spear',
+    spec: {
+      tip: [8, 200],
+      butt: [1147, 228],
+      erase: { rects: [[0, 160, 432, 275], [990, 208, 1213, 245]] },
+      weaponShare: 0.46,
+      surfaceShare: 0.7,
     },
   },
 };

@@ -616,6 +616,8 @@ interface ArmedCase {
   label: string;
   /** 先在這個姿勢（大人版）等形體載入，再按「小孩」切到 c.pose。 */
   kid?: boolean;
+  /** 小孩版切換之前，這一段的大人姿勢（預設 jian：weapon-a）。 */
+  adultPose?: string;
 }
 
 const ARMED_CASES: ArmedCase[] = [
@@ -623,6 +625,9 @@ const ARMED_CASES: ArmedCase[] = [
   { pose: 'miaodao', beat: 'weapon-b', label: 'miaodao（苗刀）' },
   { pose: 'spear', beat: 'weapon-c', label: 'spear（大槍）' },
   { pose: 'kid-weapon', beat: 'weapon-a', label: 'kid-weapon（小孩持劍，切小孩）', kid: true },
+  // Task 27 追加（使用者：苗刀和大槍的區塊沒有小孩版）
+  { pose: 'kid-miaodao', beat: 'weapon-b', label: 'kid-miaodao（小孩持刀，切小孩）', kid: true, adultPose: 'miaodao' },
+  { pose: 'kid-spear', beat: 'weapon-c', label: 'kid-spear（小孩持槍，切小孩）', kid: true, adultPose: 'spear' },
 ];
 
 /**
@@ -634,7 +639,7 @@ const ARMED_DOMINANT_MIN = 0.4;
 async function measureArmed(page: Page, device: Device, c: ArmedCase): Promise<{ metrics: Metrics; measured: Measured }> {
   await open(page, device, 'seen');
   if (c.kid) {
-    await settlePose(page, c.beat, 'jian');
+    await settlePose(page, c.beat, c.adultPose ?? 'jian');
     await page.getByRole('button', { name: '小孩' }).click();
     await expect(html(page)).toHaveAttribute('data-audience', 'kid');
     await run(page, 200);

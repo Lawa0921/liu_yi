@@ -14,7 +14,7 @@ const T1 = new Date('2026-01-01T09:00:00');
 const READY = { timeout: 30_000 };
 
 const ADULT_POSES = ['land', 'dingzhou', 'chengchui', 'kao', 'jian', 'miaodao', 'spear', 'others', 'salute', 'scroll', 'crest'];
-const KID_POSES = ['land', 'kid-wushu', 'kid-defense-a', 'kid-defense-b', 'kid-weapon', 'miaodao', 'spear', 'others', 'salute', 'scroll', 'crest'];
+const KID_POSES = ['land', 'kid-wushu', 'kid-defense-a', 'kid-defense-b', 'kid-weapon', 'kid-miaodao', 'kid-spear', 'others', 'salute', 'scroll', 'crest'];
 
 type QiGlobal = { ready: boolean; frames: number; tier: string; mode: string; debug?: QiDebug };
 type W = { __qi: QiGlobal & { debug: QiDebug } };
@@ -220,6 +220,33 @@ test.describe('大人｜小孩切換（桌機 1440×900）', () => {
       await scrollToBeat(page, beat);
       await run(page, 200);
       await expect(html(page), beat).toHaveAttribute('data-qi-pose', KID_POSES[index]!);
+    }
+  });
+
+  test('兵器的苗刀與大槍段（使用者：沒有小孩版）：按「小孩」換成小孩持刀、持槍（形體真的換了：先散開再聚回），切回大人換回苗刀、大槍', async ({ page }) => {
+    await open(page);
+    for (const [beat, adult, kid] of [
+      ['weapon-b', 'miaodao', 'kid-miaodao'],
+      ['weapon-c', 'spear', 'kid-spear'],
+    ] as const) {
+      await scrollToBeat(page, beat);
+      await run(page, 300);
+      await expect(html(page), `${beat} 大人`).toHaveAttribute('data-qi-pose', adult);
+      expect(await scatterOf(page)).toBeLessThanOrEqual(0.05);
+
+      await page.locator('[data-audience-option="kid"]').click();
+      await expect(html(page)).toHaveAttribute('data-audience', 'kid');
+      await run(page, 100);
+      expect(await scatterOf(page), `${beat} 換形體時散開`).toBeGreaterThan(0.5);
+      await expect(html(page), `${beat} 小孩`).toHaveAttribute('data-qi-pose', kid);
+      await run(page, 1500);
+      expect(await scatterOf(page), `${beat} 小孩版聚回`).toBeLessThanOrEqual(0.05);
+
+      await page.locator('[data-audience-option="adult"]').click();
+      await expect(html(page)).toHaveAttribute('data-audience', 'adult');
+      await run(page, 200);
+      await expect(html(page), `${beat} 切回大人`).toHaveAttribute('data-qi-pose', adult);
+      await run(page, 1500);
     }
   });
 

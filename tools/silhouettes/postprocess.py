@@ -6,7 +6,7 @@ Run: uv run --no-project --python 3.11 --with pillow --with numpy --with scipy p
                 default: $SILHOUETTES_WORK, else <repo>/.cache/silhouettes-raw  (git-ignored)
   --raw DIR     raw PNG source dir (default: <work>/raw)
   --out DIR     published output dir (default: <repo>/src/assets/silhouettes)
-  --batch N     selection table: 1 (default), 2, 3 (children's figures) or 4 (fig-salute)
+  --batch N     selection table: 1 (default), 2, 3 (children's figures), 4 (fig-salute), 5 (fig-daqiang, Task 27) or 6 (fig-kid-miaodao, fig-kid-daqiang)
   --preview     also write gold-on-dark previews to <work>/qa-preview/
 
 The pass/fail gate is scripts/qi/silhouette-qa.ts (run by tests/unit/silhouette-assets.test.ts on the published
@@ -49,7 +49,6 @@ SEL2 = {
     "fig-kao":           ("b2v2", "fig",   dict(close=2, fill=400, crop="bbox")),
     "mid-drum":          ("b2v3", "scene", dict(close=0, fill=300, crop="rows")),
     "mid-dummy":         ("b2v3", "scene", dict(close=0, fill=300, crop="rows")),
-    "mid-stonelock":     ("b2v2", "scene", dict(close=0, fill=300, crop="rows")),
     "mid-banner":        ("b2v1", "scene", dict(close=0, fill=20,  crop="rows")),
     "fg-eave":           ("b2v1", "scene", dict(close=0, fill=0,   crop="rows")),
     "fg-rack-close":     ("b2v1", "scene", dict(close=0, fill=0,   crop="rows")),
@@ -66,7 +65,17 @@ SEL3 = {
 SEL4 = {
     "fig-salute": ("v1", "fig", dict(close=3, fill=400, crop="bbox")),
 }
-SELECTIONS = {"1": SEL, "2": SEL2, "3": SEL3, "4": SEL4}
+# Batch 5 (run with --batch 5): fig-daqiang regenerated in landscape (Task 27); supersedes batch-1 "v1" (portrait canvas, rear hand hidden).
+# fill=900 also closes the thin white sliver where the shaft crosses the torso.
+SEL5 = {
+    "fig-daqiang": ("t27v3", "fig", dict(close=0, fill=900, crop="bbox")),
+}
+# Batch 6 (run with --batch 6): the children's saber and spear figures (Task 27 follow-up: "苗刀和大槍的區塊沒有小孩版").
+SEL6 = {
+    "fig-kid-miaodao": ("t27k1", "fig", dict(close=3, fill=400, crop="bbox")),
+    "fig-kid-daqiang": ("t27k2", "fig", dict(close=0, fill=900, crop="bbox")),
+}
+SELECTIONS = {"1": SEL, "2": SEL2, "3": SEL3, "4": SEL4, "5": SEL5, "6": SEL6}
 
 
 def disk(r):

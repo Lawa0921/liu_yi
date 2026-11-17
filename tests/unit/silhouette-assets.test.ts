@@ -59,6 +59,13 @@ describe.each(SILHOUETTES_READY)('已核可剪影 %s', (name) => {
     expect(result.ok).toBe(true);
   });
 
+  it('邊緣有半透明的柔邊（8 < alpha < 247 的像素 ≥ 1 000 個，不是只有 0／255 兩個值），與同批剪影一致', async () => {
+    const { data } = await sharp(file(`${name}.png`)).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    let soft = 0;
+    for (let i = 3; i < data.length; i += 4) if (data[i]! > 8 && data[i]! < 247) soft++;
+    expect(soft, `${name} 的柔邊像素數`).toBeGreaterThanOrEqual(1000);
+  });
+
   it('provenance.json 有來源紀錄：請求數 ≤ 3、狀態為 approved 或 legacy', () => {
     const entry = provenance[name];
     expect(entry, `provenance.json 缺 ${name}`).toBeDefined();

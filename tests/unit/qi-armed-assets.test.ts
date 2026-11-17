@@ -72,11 +72,13 @@ function componentAreas(img: FigureImage): number[] {
 const HANDS: Record<string, { points: [number, number][]; tolerance: number }> = {
   jian: { points: [[335, 152]], tolerance: 14 },
   miaodao: { points: [[575, 312], [700, 362]], tolerance: 32 },
-  spear: { points: [[531, 160]], tolerance: 14 },
+  spear: { points: [[575, 182], [1097, 218]], tolerance: 14 },
   'kid-weapon': { points: [[362, 322]], tolerance: 30 },
+  'kid-miaodao': { points: [[390, 548]], tolerance: 32 },
+  'kid-spear': { points: [[470, 205], [930, 235]], tolerance: 16 },
 };
 /** 兵器軸（弦）上每個取樣點，離剪影的不透明像素最遠多少 px：直兵器很近，苗刀的弧讓弦偏離刀身。 */
-const AXIS_SLACK: Record<string, number> = { jian: 14, miaodao: 45, spear: 14, 'kid-weapon': 18 };
+const AXIS_SLACK: Record<string, number> = { jian: 14, miaodao: 45, spear: 14, 'kid-weapon': 18, 'kid-miaodao': 30, 'kid-spear': 16 };
 
 describe.each(Object.entries(ARMED))('持械設定 %s', (id, def) => {
   it('剪影在已核可清單裡，檔案存在', async () => {

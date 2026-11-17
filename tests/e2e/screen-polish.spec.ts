@@ -174,6 +174,31 @@ test.describe('大槍（持械）整體外框：1440×900', () => {
     expect(extent.left, '仍在實際文字右緣之右').toBeGreaterThanOrEqual(inkRight);
     expect(extent.right, '仍在導覽（含光暈）之左').toBeLessThanOrEqual(rail.x - HALO_PX);
   });
+
+  // 小孩版（使用者：苗刀和大槍的區塊沒有小孩版）：比大人矮一截、兵器也短一些，但仍要醒目，且不壓字、不碰導覽。
+  // 實測（1440×900，extent）：小孩持刀 386×526、小孩持槍 661×296（大人苗刀 482×591、大槍 773×335）；門檻取約八成五。
+  test('小孩持刀、持槍（切到小孩）：聚合後外框夠大，仍在文字右緣之右、導覽之左', async ({ page }) => {
+    await open(page);
+    await settlePose(page, 'weapon-b', 'miaodao');
+    await page.getByRole('button', { name: '小孩' }).click();
+    const rail = (await page.locator('nav.home-rail').boundingBox())!;
+    for (const [beat, pose, minWidth, minHeight] of [
+      ['weapon-b', 'kid-miaodao', 330, 440],
+      ['weapon-c', 'kid-spear', 560, 250],
+    ] as const) {
+      await scrollToBeat(page, beat);
+      await page.clock.runFor(200);
+      await expect(page.locator('html')).toHaveAttribute('data-qi-pose', pose, READY);
+      await page.clock.runFor(3500);
+      expect(await page.evaluate(() => (window as unknown as W).__qi.debug.meanError()), `${pose} 已聚合`).toBeLessThan(0.05);
+      const extent = await page.evaluate(() => (window as unknown as W).__qi.debug.extent());
+      const inkRight = await textInkRight(page, beat);
+      expect(extent.right - extent.left, `${pose} 外框寬（左 ${extent.left.toFixed(0)}、右 ${extent.right.toFixed(0)}）`).toBeGreaterThanOrEqual(minWidth);
+      expect(extent.bottom - extent.top, `${pose} 外框高（上 ${extent.top.toFixed(0)}、下 ${extent.bottom.toFixed(0)}）`).toBeGreaterThanOrEqual(minHeight);
+      expect(extent.left, `${pose}：仍在實際文字右緣之右`).toBeGreaterThanOrEqual(inkRight);
+      expect(extent.right, `${pose}：仍在導覽（含光暈）之左`).toBeLessThanOrEqual(rail.x - HALO_PX);
+    }
+  });
 });
 
 // 視窗改變、換到別的兵器段：左右界跟著重新量。
@@ -226,13 +251,16 @@ test.describe('兵器左右界重新量', () => {
     }
   });
 
-  test('切換對象（大人→小孩→大人）後，大槍那一段的左端仍在文字右緣之右', async ({ page }) => {
+  test('切換對象（大人→小孩→大人）後，大槍那一段（小孩是 kid-spear）的左端仍在文字右緣之右', async ({ page }) => {
     await open(page);
     await settlePose(page, 'weapon-c', 'spear');
-    for (const label of ['小孩', '大人']) {
+    for (const [label, pose] of [
+      ['小孩', 'kid-spear'],
+      ['大人', 'spear'],
+    ] as const) {
       await page.getByRole('button', { name: label }).click();
       await page.clock.runFor(200);
-      await expect(page.locator('html')).toHaveAttribute('data-qi-pose', 'spear', READY);
+      await expect(page.locator('html')).toHaveAttribute('data-qi-pose', pose, READY);
       await page.clock.runFor(3500);
       const inkRight = await textInkRight(page, 'weapon-c');
       const extent = await page.evaluate(() => (window as unknown as W).__qi.debug.extent());

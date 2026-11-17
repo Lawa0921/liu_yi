@@ -18,7 +18,7 @@
 
 export type ShapeRecipe =
   | { kind: 'figure'; figure: string }
-  | { kind: 'armed'; armed: 'jian' | 'miaodao' | 'spear' | 'kid-weapon' }
+  | { kind: 'armed'; armed: 'jian' | 'miaodao' | 'spear' | 'kid-weapon' | 'kid-miaodao' | 'kid-spear' }
   | { kind: 'seal' }
   | { kind: 'scroll' }
   | { kind: 'crest' }
@@ -87,4 +87,6 @@ export const SHAPES: Record<string, ShapeRecipe> = {
   'kid-defense-a': { kind: 'figure', figure: 'kid-defense-a' },
   'kid-defense-b': { kind: 'figure', figure: 'kid-defense-b' },
   'kid-weapon': { kind: 'armed', armed: 'kid-weapon' },
+  'kid-miaodao': { kind: 'armed', armed: 'kid-miaodao' },
+  'kid-spear': { kind: 'armed', armed: 'kid-spear' },
 };

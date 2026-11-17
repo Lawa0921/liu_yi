@@ -32,6 +32,8 @@ const ALL_POSES: PoseId[] = [
   'kid-defense-a',
   'kid-defense-b',
   'kid-weapon',
+  'kid-miaodao',
+  'kid-spear',
 ];
 
 describe('BEATS', () => {
@@ -75,12 +77,14 @@ describe('POSE_BY_BEAT', () => {
     });
   });
 
-  it('小孩：拳與格鬥與兵器 a 換成小孩姿勢，其餘同大人', () => {
+  it('小孩：拳、格鬥與兵器三段都換成小孩姿勢（持劍、持刀、持槍），其餘同大人', () => {
     expect(POSE_BY_BEAT.kid.fist).toBe('kid-wushu');
     expect(POSE_BY_BEAT.kid['combat-a']).toBe('kid-defense-a');
     expect(POSE_BY_BEAT.kid['combat-b']).toBe('kid-defense-b');
     expect(POSE_BY_BEAT.kid['weapon-a']).toBe('kid-weapon');
-    const swapped: BeatId[] = ['fist', 'combat-a', 'combat-b', 'weapon-a'];
+    expect(POSE_BY_BEAT.kid['weapon-b']).toBe('kid-miaodao');
+    expect(POSE_BY_BEAT.kid['weapon-c']).toBe('kid-spear');
+    const swapped: BeatId[] = ['fist', 'combat-a', 'combat-b', 'weapon-a', 'weapon-b', 'weapon-c'];
     for (const beat of BEATS) {
       if (swapped.includes(beat)) continue;
       expect(POSE_BY_BEAT.kid[beat], beat).toBe(POSE_BY_BEAT.adult[beat]);
@@ -176,7 +180,7 @@ describe('BURSTS', () => {
   });
 
   it('kid-* 沿用 chengchui 的 mode 1／力道 3.0', () => {
-    for (const pose of ['kid-wushu', 'kid-defense-a', 'kid-defense-b', 'kid-weapon'] as const) {
+    for (const pose of ['kid-wushu', 'kid-defense-a', 'kid-defense-b', 'kid-weapon', 'kid-miaodao', 'kid-spear'] as const) {
       expect(BURSTS[pose].mode, pose).toBe(1);
       expect(BURSTS[pose].power, pose).toBe(3.0);
     }

@@ -77,6 +77,24 @@ for (const device of DEVICES) {
       }
     });
 
+    test('兵器三段：小孩版各有一句小孩語氣的說明（持劍、持刀、持槍，編號四、五、六），大人版仍是大人的說明；名稱都是課程子項的名稱', async ({ page }) => {
+      await page.goto('./');
+      const expected = {
+        kid: { 'weapon-a': '雙手握穩，劍尖向前。', 'weapon-b': '雙手握緊長刀，刀尖朝上。', 'weapon-c': '雙手持槍，穩穩向前扎。' },
+        adult: { 'weapon-a': '劍走輕靈，點、刺、削、撩。', 'weapon-b': '雙手長刀，一刀一式，直來直往。', 'weapon-c': '大槍丈二，扎、攔、拿，步步進身。' },
+      } as const;
+      const numbers = { 'weapon-a': '四', 'weapon-b': '五', 'weapon-c': '六' } as const;
+      for (const audience of ['kid', 'adult'] as const) {
+        for (const beat of ['weapon-a', 'weapon-b', 'weapon-c'] as const) {
+          const item = page.locator(`[data-beat="${beat}"] [data-audience-panel="${audience}"] [data-sub-item]`);
+          await expect(item, `${audience} ${beat}`).toHaveCount(1);
+          const text = await item.innerText();
+          expect(text, `${audience} ${beat}`).toContain(expected[audience][beat]);
+          expect(text, `${audience} ${beat} 編號`).toContain(numbers[beat]);
+        }
+      }
+    });
+
     test('其他課程：巴西柔術、核心瑜珈，另有「所有課程」連到課程總覽', async ({ page }) => {
       await page.goto('./');
       const section = page.locator('section#others[data-beat="others"]');

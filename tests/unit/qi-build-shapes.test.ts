@@ -75,11 +75,11 @@ beforeAll(async () => {
 }, 120_000);
 
 describe('SHAPES 配方', () => {
-  it('鍵恰為十七個形體 id，且等於 FIGURES ∪ 三件兵器 ∪ kid-weapon（小孩持劍）∪ seal ∪ scroll ∪ crest ∪ others', () => {
+  it('鍵恰為十九個形體 id，且等於 FIGURES ∪ 三件兵器 ∪ 小孩持劍、持刀、持槍 ∪ seal ∪ scroll ∪ crest ∪ others', () => {
     expect([...IDS].sort()).toEqual(
-      ['lift', 'land', 'dingzhou', 'chengchui', 'kao', 'jian', 'miaodao', 'spear', 'salute', 'seal', 'scroll', 'crest', 'others', 'kid-wushu', 'kid-defense-a', 'kid-defense-b', 'kid-weapon'].sort(),
+      ['lift', 'land', 'dingzhou', 'chengchui', 'kao', 'jian', 'miaodao', 'spear', 'salute', 'seal', 'scroll', 'crest', 'others', 'kid-wushu', 'kid-defense-a', 'kid-defense-b', 'kid-weapon', 'kid-miaodao', 'kid-spear'].sort(),
     );
-    expect([...IDS].sort()).toEqual([...Object.keys(FIGURES), ...WEAPON_NAMES, 'kid-weapon', 'seal', 'scroll', 'crest', 'others'].sort());
+    expect([...IDS].sort()).toEqual([...Object.keys(FIGURES), ...WEAPON_NAMES, 'kid-weapon', 'kid-miaodao', 'kid-spear', 'seal', 'scroll', 'crest', 'others'].sort());
   });
 
   it('兵器名單與入庫的 .geo 檔一致（不 import weapons.ts）', () => {
@@ -87,10 +87,11 @@ describe('SHAPES 配方', () => {
     expect([...WEAPON_NAMES].sort()).toEqual(geo.sort());
   });
 
-  it('figure 配方的 figure 就是自己的 id；三件兵器與小孩持劍是 armed 配方（持械的人），ARMED 的鍵就是自己的 id', () => {
+  it('figure 配方的 figure 就是自己的 id；三件兵器與小孩持劍、持刀、持槍是 armed 配方（持械的人），ARMED 的鍵就是自己的 id', () => {
     for (const id of Object.keys(FIGURES)) expect(SHAPES[id]).toEqual({ kind: 'figure', figure: id });
-    for (const id of [...WEAPON_NAMES, 'kid-weapon']) expect(SHAPES[id], id).toEqual({ kind: 'armed', armed: id });
-    expect(Object.keys(ARMED).sort()).toEqual([...WEAPON_NAMES, 'kid-weapon'].sort());
+    const armedIds = [...WEAPON_NAMES, 'kid-weapon', 'kid-miaodao', 'kid-spear'];
+    for (const id of armedIds) expect(SHAPES[id], id).toEqual({ kind: 'armed', armed: id });
+    expect(Object.keys(ARMED).sort()).toEqual([...armedIds].sort());
     expect(SHAPES.seal).toEqual({ kind: 'seal' });
     expect(SHAPES.scroll).toEqual({ kind: 'scroll' });
     expect(SHAPES.crest).toEqual({ kind: 'crest' });
@@ -112,7 +113,7 @@ describe('SHAPES 配方', () => {
 });
 
 describe('buildAllShapes：第一次建置', () => {
-  it('不是跳過，built 列出全部十七個 id', () => {
+  it('不是跳過，built 列出全部十九個 id', () => {
     expect(first.skipped).toBe(false);
     expect([...first.built].sort()).toEqual([...IDS].sort());
   });
@@ -174,9 +175,9 @@ describe('buildAllShapes：第一次建置', () => {
     expect(existsSync(join(OUT, '.staging'))).toBe(false);
   });
 
-  it('全部 .bin 合計 ≤ 1.9 MB', () => {
+  it('全部 .bin 合計 ≤ 2.3 MB（十九個，每個 114 728 B；使用者每頁只下載用到的幾個，整頁預算由 budget.spec 守住）', () => {
     const total = IDS.reduce((sum, id) => sum + statSync(join(OUT, `${id}.bin`)).size, 0);
-    expect(total).toBeLessThanOrEqual(1.9 * 1024 * 1024);
+    expect(total).toBeLessThanOrEqual(2.3 * 1024 * 1024);
   });
 
   it('人形的外框＝腳底在 y = 0、中線在 x = 0；lift 與 land 的世界身高接近 2', () => {
@@ -218,7 +219,7 @@ describe('buildAllShapes：第一次建置', () => {
     }
   });
 
-  it('持械形體：腳底在 y = 0（與其他人形同一把尺）、兵器的點占 weaponShare、兵器軸與剪影一致（鋒尖與尾端落在 ARMED 設定的位置）', async () => {
+  it('持械形體：腳底在 y = 0（與其他人形同一把尺）、兵器的點占 weaponShare、整體（人加兵器）的外框高在 1.2–2.8 世界單位之間（兵器軸與剪影一致由 qi-armed.test、qi-armed-assets.test 驗）', () => {
     for (const [id, def] of Object.entries(ARMED)) {
       const s = decode(OUT, id);
       expect(Math.abs(s.min[1]), `${id} 腳底`).toBeLessThan(0.02);
@@ -447,7 +448,7 @@ describe('buildAllShapes：輸入雜湊與跳過', () => {
     expect(changed.sort()).toEqual(['kao', 'others']);
   }, 120_000);
 
-  it('改朱印遮罩 → 只有 seal 改變；改一個 .geo → 只有那件兵器改變', async () => {
+  it('改朱印遮罩 → 只有 seal 改變；改一個 .geo → 只有用它的兵器形體改變', async () => {
     const root = copyRoot();
     const outDir = join(tmp(), 'shapes');
     await buildAllShapes({ root, outDir });
@@ -469,7 +470,8 @@ describe('buildAllShapes：輸入雜湊與跳過', () => {
     writeFileSync(geo, encodeSnapshot({ ...snap, parts: snap.parts.slice(0, -1) }));
     expect((await buildAllShapes({ root, outDir })).skipped).toBe(false);
     const afterGeo = snapshot(outDir);
-    expect(IDS.filter((id) => afterGeo[id] !== afterSeal[id])).toEqual(['miaodao']);
+    // 苗刀的幾何是大人苗刀與小孩持刀共用的
+    expect(IDS.filter((id) => afterGeo[id] !== afterSeal[id]).sort()).toEqual(['kid-miaodao', 'miaodao']);
   }, 120_000);
 
   it('改取樣原始碼（shapes/*.ts、config/shapes.ts、建置腳本）→ 重建；只動註解時所有 .bin 逐位元不變（建置是確定性的）', async () => {

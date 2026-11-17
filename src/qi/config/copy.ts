@@ -55,6 +55,8 @@ export const COPY: {
     'kid-defense-a': { no: '二', name: '推掌', lines: ['一掌推出，守住自己的空間。'] },
     'kid-defense-b': { no: '三', name: '出拳', lines: ['拳送出去，也要收得回來。'] },
     'kid-weapon': { no: '四', name: '持劍', lines: ['雙手握穩，劍尖向前。'] },
+    'kid-miaodao': { no: '五', name: '持刀', lines: ['雙手握緊長刀，刀尖朝上。'] },
+    'kid-spear': { no: '六', name: '持槍', lines: ['雙手持槍，穩穩向前扎。'] },
   },
 
   weapons: {

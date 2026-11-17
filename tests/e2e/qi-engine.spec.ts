@@ -228,7 +228,7 @@ test.describe('光點引擎核心（桌機，tier=min）', () => {
     await open(page);
     const poses = [
       'lift', 'land', 'dingzhou', 'chengchui', 'kao', 'jian', 'miaodao', 'spear', 'others', 'salute', 'flow', 'seal', 'scroll', 'crest',
-      'kid-wushu', 'kid-defense-a', 'kid-defense-b', 'kid-weapon',
+      'kid-wushu', 'kid-defense-a', 'kid-defense-b', 'kid-weapon', 'kid-miaodao', 'kid-spear',
     ] as const;
     for (const pose of poses) {
       await setPose(page, pose);

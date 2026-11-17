@@ -52,7 +52,7 @@ describe('FIGURES 設定', () => {
     expect(new Set(used).size).toBe(used.length);
     // 持械的三張（劍、苗刀、大槍）與小孩持劍的剪影由 config/armed.ts 使用，不在 FIGURES 裡（Task 27）
     expect([...used, ...Object.values(ARMED).map((d) => d.src)].sort()).toEqual([...SILHOUETTES_READY].sort());
-    expect(SILHOUETTES_READY.length).toBe(13);
+    expect(SILHOUETTES_READY.length).toBe(15);
   });
 
   it('鍵 = id；九個形體 id 齊全（小孩持劍改在 ARMED）；audience 合法；headPx 為正整數', () => {

@@ -20,6 +20,9 @@ export const SILHOUETTES_READY: string[] = [
   'fig-jian',
   'fig-miaodao',
   'fig-daqiang',
+  // Task 27 追加（使用者：苗刀和大槍的區塊沒有小孩版）：小孩持刀、持槍
+  'fig-kid-miaodao',
+  'fig-kid-daqiang',
 ];
 
 /** 待生成：過閘門、補上 provenance 後才移進 READY。目前沒有待生成的剪影。 */
