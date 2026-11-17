@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildAllShapes } from '../../scripts/qi/build-shapes';
 import { hashInputs } from '../../scripts/qi/hash';
 import { FIGURES } from '../../src/qi/config/figures';
-import { CREST_CENTER_Y, CREST_WORLD_WIDTH, GATE_WORLD_WIDTH, SCROLL, SEAL_CENTER_Y, SEAL_WORLD_SIZE, SHAPES, WEAPON_NAMES } from '../../src/qi/config/shapes';
+import { CREST_CENTER_Y, CREST_WORLD_WIDTH, SCROLL, SEAL_CENTER_Y, SEAL_WORLD_SIZE, SHAPES, WEAPON_NAMES } from '../../src/qi/config/shapes';
 import { arrangedSize, figureIndexOf, measureFigures } from '../../src/qi/shapes/arrange';
 import { decodeShape, KIND, SHAPE_COUNT, type Shape } from '../../src/qi/shapes/format';
 import { decodeSnapshot, encodeSnapshot } from '../../src/qi/shapes/weapon-snapshot';
@@ -74,11 +74,11 @@ beforeAll(async () => {
 }, 120_000);
 
 describe('SHAPES 配方', () => {
-  it('鍵恰為十八個形體 id，且等於 FIGURES ∪ 三件兵器 ∪ seal ∪ scroll ∪ crest ∪ others ∪ gate', () => {
+  it('鍵恰為十七個形體 id，且等於 FIGURES ∪ 三件兵器 ∪ seal ∪ scroll ∪ crest ∪ others', () => {
     expect([...IDS].sort()).toEqual(
-      ['lift', 'land', 'dingzhou', 'chengchui', 'kao', 'jian', 'miaodao', 'spear', 'salute', 'seal', 'scroll', 'crest', 'others', 'gate', 'kid-wushu', 'kid-defense-a', 'kid-defense-b', 'kid-weapon'].sort(),
+      ['lift', 'land', 'dingzhou', 'chengchui', 'kao', 'jian', 'miaodao', 'spear', 'salute', 'seal', 'scroll', 'crest', 'others', 'kid-wushu', 'kid-defense-a', 'kid-defense-b', 'kid-weapon'].sort(),
     );
-    expect([...IDS].sort()).toEqual([...Object.keys(FIGURES), ...WEAPON_NAMES, 'seal', 'scroll', 'crest', 'others', 'gate'].sort());
+    expect([...IDS].sort()).toEqual([...Object.keys(FIGURES), ...WEAPON_NAMES, 'seal', 'scroll', 'crest', 'others'].sort());
   });
 
   it('兵器名單與入庫的 .geo 檔一致（不 import weapons.ts）', () => {
@@ -92,7 +92,6 @@ describe('SHAPES 配方', () => {
     expect(SHAPES.seal).toEqual({ kind: 'seal' });
     expect(SHAPES.scroll).toEqual({ kind: 'scroll' });
     expect(SHAPES.crest).toEqual({ kind: 'crest' });
-    expect(SHAPES.gate).toEqual({ kind: 'gate' });
   });
 
   it('others＝land、dingzhou、chengchui、kao 四個小人形，縮成 0.38，由左到右排開', () => {
@@ -111,7 +110,7 @@ describe('SHAPES 配方', () => {
 });
 
 describe('buildAllShapes：第一次建置', () => {
-  it('不是跳過，built 列出全部十八個 id', () => {
+  it('不是跳過，built 列出全部十七個 id', () => {
     expect(first.skipped).toBe(false);
     expect([...first.built].sort()).toEqual([...IDS].sort());
   });
@@ -140,11 +139,11 @@ describe('buildAllShapes：第一次建置', () => {
     }
   });
 
-  it('種類合法：人形、others 與 gate 只有 0–99，兵器只有 100–104，seal 全是 SEAL，scroll 只有 BAMBOO／DARK，crest 全是 CREST', () => {
+  it('種類合法：人形與 others 只有 0–99，兵器只有 100–104，seal 全是 SEAL，scroll 只有 BAMBOO／DARK，crest 全是 CREST', () => {
     for (const id of IDS) {
       const s = decode(OUT, id);
       const kinds = new Set(s.kinds);
-      if (id in FIGURES || id === 'others' || id === 'gate') expect(Math.max(...kinds), id).toBeLessThanOrEqual(99);
+      if (id in FIGURES || id === 'others') expect(Math.max(...kinds), id).toBeLessThanOrEqual(99);
       else if (id === 'seal') expect([...kinds]).toEqual([KIND.SEAL]);
       else if (id === 'scroll') expect([...kinds].sort()).toEqual([KIND.DARK, KIND.BAMBOO].sort());
       else if (id === 'crest') expect([...kinds]).toEqual([KIND.CREST]);
@@ -169,9 +168,9 @@ describe('buildAllShapes：第一次建置', () => {
     expect(existsSync(join(OUT, '.staging'))).toBe(false);
   });
 
-  it('全部 .bin 合計 ≤ 2.1 MB（每個 114 728 B；Task 26 加了 gate 共十八個；使用者每頁只下載用到的幾個，整頁預算由 budget.spec 守住）', () => {
+  it('全部 .bin 合計 ≤ 1.9 MB', () => {
     const total = IDS.reduce((sum, id) => sum + statSync(join(OUT, `${id}.bin`)).size, 0);
-    expect(total).toBeLessThanOrEqual(2.1 * 1024 * 1024);
+    expect(total).toBeLessThanOrEqual(1.9 * 1024 * 1024);
   });
 
   it('人形的外框＝腳底在 y = 0、中線在 x = 0；lift 與 land 的世界身高接近 2', () => {
@@ -182,26 +181,6 @@ describe('buildAllShapes：第一次建置', () => {
     }
     expect(height(decode(OUT, 'land'))).toBeGreaterThan(1.7);
     expect(height(decode(OUT, 'land'))).toBeLessThan(2.1);
-  });
-
-  it('gate（院門門樓，Task 26）：取自 bg-mid-gate 剪影，寬約 GATE_WORLD_WIDTH、腳底在 y = 0、中線在 x = 0，比寬高約 2.3–2.5：1', () => {
-    const s = decode(OUT, 'gate');
-    expect(GATE_WORLD_WIDTH).toBe(2.4);
-    expect(width(s)).toBeGreaterThan(GATE_WORLD_WIDTH * 0.97);
-    expect(width(s)).toBeLessThan(GATE_WORLD_WIDTH * 1.03);
-    expect(Math.abs(s.min[1])).toBeLessThan(0.01);
-    expect(Math.abs(s.min[0] + s.max[0]) / 2).toBeLessThan(0.05);
-    expect(width(s) / height(s)).toBeGreaterThan(2.2);
-    expect(width(s) / height(s)).toBeLessThan(2.6);
-  });
-
-  it('gate 的門洞是空的：門洞中央（x 在 ±0.2、y 在 0.2–0.6）沒有任何光點', () => {
-    const s = decode(OUT, 'gate');
-    for (let i = 0; i < s.count; i++) {
-      const x = s.positions[i * 3]!;
-      const y = s.positions[i * 3 + 1]!;
-      if (Math.abs(x) < 0.2 && y > 0.2 && y < 0.6) throw new Error(`gate 的門洞裡有光點：(${x.toFixed(2)}, ${y.toFixed(2)})`);
-    }
   });
 
   it('兵器：非 AURA 點的長軸 x 範圍剛好是長 1（D13 單位形）', () => {

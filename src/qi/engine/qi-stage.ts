@@ -33,10 +33,9 @@ import { burstSpeed, EXHALE, inhaleDamp, inhaleStreak, SNAP_DAMP_GAIN, streakLen
 import { forcesFor } from './forces';
 import { weaponLeftFor, weaponReachFor } from './framing';
 import { INHALE_AT, introState, type IntroState } from './intro';
-import { othersFit, othersFitWindow } from './others-layout';
+import { othersFit } from './others-layout';
 import { createPointer, type Pointer } from './pointer';
 import { createSim, zeroTexture, type Sim } from './sim';
-import { slotFrame, windowKey, type SlotBox, type SlotFrame, type SlotWorld } from './slot';
 import { createStage, type Stage } from './stage';
 import { createGovernor, TIERS, type Governor, type TierId } from './tiers';
 import { isPortrait } from './viewport';
@@ -84,13 +83,6 @@ export interface QiStageOptions {
    * 沒有文字（harness、橫向、沒有那一段）回 `undefined`＝腳底落在其他姿勢的腳底線上。換姿勢、`resize`、`relayout()` 時都會再問一次。
    */
   textTop?: (pose: PoseId) => number | undefined;
-  /**
-   * 槽取景（Task 26，非首頁的頁面光點層）：形體擺進頁面指定的一塊矩形，不依視窗寬高比（`framing.ts`）。
-   * `box` 回槽在畫布上的矩形（CSS 像素，相對畫布左上角；量不到、display:none 時回 `undefined`＝用預設取景），`world` 是槽要放得下的世界大小
-   * （人形用 `FIGURE_WORLD`）。給了槽之後 `portrait`、`textRight`、`textTop` 都不再使用：兵器用窄版長度並縮進槽、others 依槽的寬窄排成一排或 2×2
-   * （`slot.ts`、`othersFitWindow`）。掛上、`resize`、`reframe()` 時都會再量一次。
-   */
-  slot?: { box: () => SlotBox | undefined; world: SlotWorld };
 }
 
 export interface QiStage {
@@ -132,16 +124,6 @@ export interface QiStage {
   getCrestRect(): Box | null;
   /** 只動相機與 render target，不重建模擬、不動姿勢。 */
   resize(w: number, h: number): void;
-  /**
-   * 槽取景：重新量槽、重新對準相機（頁首的槽隨捲動移動時每格呼叫；便宜，只動相機）。槽的大小變了才重新擺位兵器與合成形體。
-   * 沒給 `slot` 時什麼都不做。
-   */
-  reframe(): void;
-  /**
-   * 暫停或恢復繪製（頁面光點層：整個槽捲出視窗、3D 兵器在視窗內時暫停）。暫停時不跑模擬、不畫、不降級，畫布留著最後一格；
-   * 恢復時重新暖機調速器（暫停期間的計時不算）。減少動態沒有迴圈，不受影響。
-   */
-  setActive(active: boolean): void;
   /**
    * 版面或文字變了（字型載入、切換對象、圖片讓版面位移）：重新量兵器的左界（`textRight`），擺位變了的兵器重展開
    * （姿勢不變、不給衝量）；沒變就什麼都不做。不動取景與畫布大小（那是 `resize`）。
@@ -269,12 +251,6 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
   /** 直向（取景與兵器擺位）：呼叫端告知（首頁依視窗），不給就依畫布本身的寬高比。 */
   const askPortrait = (): boolean => (o.portrait ? o.portrait() : isPortrait(cssWidth, cssHeight));
   let portrait = askPortrait();
-  /** 槽取景（有 `o.slot` 才用）：最近一次量到的槽；量不到就 null（用預設取景）。 */
-  let slotNow: SlotFrame | null = null;
-  const measureSlot = (): SlotFrame | null => {
-    const box = o.slot?.box();
-    return o.slot && box ? slotFrame({ w: cssWidth, h: cssHeight }, box, o.slot.world) : null;
-  };
   /**
    * 兵器擺位的條件：直向用窄版長度；橫向用寬版長度，並依畫布大小留出右緣（段落導覽與槍頭光暈）的位置、
    * 依「該段實際文字」的右緣讓出左邊（`weaponReachFor`、`weaponLeftFor`），所以橫向時畫布或文字一變，兵器的位置與長度也跟著變。
@@ -286,18 +262,14 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
     return textRight === undefined ? undefined : weaponLeftFor(cssWidth / cssHeight, cssWidth, textRight);
   };
   const isWeapon = (id: PoseId): boolean => SHAPES[id]?.kind === 'weapon';
-  const weaponKey = (id: PoseId): string => {
-    if (!isWeapon(id)) return '';
-    if (slotNow) return `slot|${windowKey(slotNow)}`;
-    return `${weaponReach()?.toFixed(4) ?? 'narrow'}|${weaponReachLeft(id)?.toFixed(4) ?? '-'}`;
-  };
+  const weaponKey = (id: PoseId): string => (isWeapon(id) ? `${weaponReach()?.toFixed(4) ?? 'narrow'}|${weaponReachLeft(id)?.toFixed(4) ?? '-'}` : '');
   /**
    * 合成形體（others）的排列條件：橫向固定一種；直向依畫布大小與文字上緣（`textTop`）。
    * 呼叫端量不到文字時是 undefined（`othersFit` 當作沒有）。
    */
   const isCompose = (id: PoseId): boolean => SHAPES[id]?.kind === 'compose';
   const composeTextTop = (id: PoseId): number | undefined => (portrait ? o.textTop?.(id) : undefined);
-  const composeKey = (id: PoseId): string => (isCompose(id) ? (slotNow ? `slot|${windowKey(slotNow)}` : portrait ? `portrait|${cssWidth.toFixed(1)}x${cssHeight.toFixed(1)}|${composeTextTop(id)?.toFixed(1) ?? '-'}` : 'landscape') : '');
+  const composeKey = (id: PoseId): string => (isCompose(id) ? (portrait ? `portrait|${cssWidth.toFixed(1)}x${cssHeight.toFixed(1)}|${composeTextTop(id)?.toFixed(1) ?? '-'}` : 'landscape') : '');
   /** 擺位條件的鍵：兵器與合成形體會隨視窗與文字改變，其他姿勢是空字串。 */
   const layoutKey = (id: PoseId): string => weaponKey(id) || composeKey(id);
   const isLaidOut = (id: PoseId): boolean => isWeapon(id) || isCompose(id);
@@ -364,7 +336,6 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
   let deferredTier: TierId | null = null; // 開場期間調速器說該降的 tier：開場結束後的下一格才降（調速器自己已往下走了一級）
   let failed = false; // 自動降級的重建丟錯：引擎沒有 sim 了，不再排幀、不再降級、已通知呼叫端
   let disposed = false;
-  let active = true; // false ＝ 暫停（`setActive`）：rAF 照排但不模擬、不畫
 
   const fire = (burst: Burst): void => {
     burstAt = time;
@@ -391,18 +362,10 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
         // 四個小人形：橫向一排放大一點，直向 2×2 縮進畫布寬度內並擺在文字上方（others-layout.ts）
         const centers = recipe.parts.map((part) => part.x);
         const boxes = measureFigures(shape, centers);
-        const placed = slotNow
-          ? othersFitWindow({ boxes, halfWidth: slotNow.halfWidth, halfHeight: slotNow.halfHeight, cy: slotNow.cy })
-          : othersFit({ boxes, portrait, cssWidth, cssHeight, textTop: composeTextTop(id) });
+        const placed = othersFit({ boxes, portrait, cssWidth, cssHeight, textTop: composeTextTop(id) });
         data = expandTargets(arrangeFigures(shape, centers, boxes, placed.arrangement, placed.offset), side, ambient);
       } else {
-        const layout =
-          recipe?.kind !== 'weapon'
-            ? undefined
-            : slotNow
-              ? weaponLayout(recipe.name, false, undefined, undefined, { halfWidth: slotNow.halfWidth, halfHeight: slotNow.halfHeight, cy: slotNow.cy })
-              : weaponLayout(recipe.name, !portrait, weaponReach(), weaponReachLeft(id));
-        data = expandTargets(shape, side, ambient, layout);
+        data = expandTargets(shape, side, ambient, recipe?.kind === 'weapon' ? weaponLayout(recipe.name, !portrait, weaponReach(), weaponReachLeft(id)) : undefined);
       }
     }
     const texture = new DataTexture(data, side, side, RGBAFormat, FloatType);
@@ -594,8 +557,7 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
     applyDeferredTier();
   };
 
-  slotNow = measureSlot();
-  stage.setSize(cssWidth, cssHeight, portrait, slotNow?.framing ?? null);
+  stage.setSize(cssWidth, cssHeight, portrait);
   rebuild();
 
   // ── 每一格 ─────────────────────────────────────────────────────
@@ -647,7 +609,6 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
     const now = performance.now();
     const dt = Math.min(Math.max((now - last) / 1000, 0), MAX_DT);
     last = now;
-    if (!active) return;
     if (!virtualClock) governFrame(now); // 降級（重建）在這一格的模擬之前：新的 sim 馬上接手
     else applyDeferredTier(); // 虛擬時間下調速器不吃 rAF，但開場結束後記下的降級仍要補上
     if (failed) return; // 降級的重建丟錯：沒有 sim 了，迴圈已停
@@ -894,28 +855,13 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
       cssWidth = Math.max(1, w);
       cssHeight = Math.max(1, h);
       portrait = askPortrait();
-      slotNow = measureSlot();
-      stage.setSize(cssWidth, cssHeight, portrait, slotNow?.framing ?? null);
+      stage.setSize(cssWidth, cssHeight, portrait);
       refreshWeapons(); // 兵器的長度與傾角依直橫、畫布大小與文字右緣而不同：擺位變了就重展開
       redraw(); // 改了畫布大小，緩衝被清掉
     },
     relayout() {
       if (disposed) return;
       if (refreshWeapons()) redraw();
-    },
-    reframe() {
-      if (disposed || !o.slot) return;
-      slotNow = measureSlot();
-      stage.setFraming(slotNow?.framing ?? null);
-      if (refreshWeapons() || reducedMotion) redraw();
-    },
-    setActive(next) {
-      if (disposed || active === next) return;
-      active = next;
-      if (next) {
-        last = performance.now(); // 暫停期間的時間不算進這一格的 dt
-        if (!failed && !reducedMotion) governor = createGovernor({ start: deferredTier ?? tier });
-      }
     },
     async setTier(next) {
       if (!Object.hasOwn(TIERS, next)) throw new RangeError(`Unknown tier: ${String(next)}`);

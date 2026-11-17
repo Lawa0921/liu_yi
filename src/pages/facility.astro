@@ -1,6 +1,5 @@
 ---
 // 場地。文字只留照片上看得到的事實（鏡面牆、地墊）；地址等業主提供後再加。
-// 光點層（Task 26）：院門門樓（既有的 bg-mid-gate 剪影）；寬螢幕往下捲時光點由飄散聚成門，窄螢幕載入後慢慢聚成。
 import { Image } from 'astro:assets';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Plaque from '../components/Plaque.astro';
@@ -14,7 +13,7 @@ const photos = [
 ];
 ---
 
-<BaseLayout title="場地" description="六藝武術工作室的訓練場地：寬敞明亮，配備鏡面牆與地墊。" ogImage={interior1} qi="facility">
+<BaseLayout title="場地" description="六藝武術工作室的訓練場地：寬敞明亮，配備鏡面牆與地墊。" ogImage={interior1}>
   <section class="section section--flush-top" aria-labelledby="page-title">
     <div class="container">
       <div class="page-head">

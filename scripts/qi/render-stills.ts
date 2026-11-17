@@ -35,7 +35,6 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
-import { STILL_FIT_HEIGHT, STILL_FIT_WIDTH } from '../../src/qi/config/still-fit';
 import { decodeShape, KIND, type Shape } from '../../src/qi/shapes/format';
 import { rng } from '../../src/qi/shapes/rng';
 import { hashInputs, sha256 } from './hash';
@@ -119,9 +118,9 @@ function toneMap(r: number, g: number, b: number, out: Float32Array, o: number):
 }
 
 // ── 調參 ────────────────────────────────────────────────────────────────────
-/** 取景：形體外框占影像的比例上限（高、寬各自）；頁面光點層要換算靜態圖的大小，所以規則放在 `config/still-fit.ts`。 */
-const FIT_HEIGHT = STILL_FIT_HEIGHT;
-const FIT_WIDTH = STILL_FIT_WIDTH;
+/** 取景：形體外框占影像的比例上限（高、寬各自）。 */
+const FIT_HEIGHT = 0.8;
+const FIT_WIDTH = 0.88;
 /**
  * 光點的高斯半徑 ＝ 此係數 × √（形體在影像上實際占住的像素面積）：點數固定，形體占的面積越大，點越要大才蓋得住，
  * 單位面積的光量才一致。「占住」＝外框切成 OCCUPANCY_GRID² 格後有點落入的格數，所以橫排的 others（外框大、人形小）
@@ -440,14 +439,7 @@ const HEROES = [
 ] as const;
 const POSE_SIZE = { width: 1000, height: 750 } as const;
 /** 影響渲染結果的原始碼（相對專案根目錄）。 */
-const SOURCES = [
-  'scripts/qi/render-stills.ts',
-  'scripts/qi/hash.ts',
-  'scripts/qi/staged-output.ts',
-  'src/qi/config/still-fit.ts', // 取景比例（STILL_FIT_WIDTH／STILL_FIT_HEIGHT）：頁面光點層靠它算靜態圖的大小，改了比例靜態圖就要重建
-  'src/qi/shapes/format.ts',
-  'src/qi/shapes/rng.ts',
-];
+const SOURCES = ['scripts/qi/render-stills.ts', 'scripts/qi/hash.ts', 'scripts/qi/staged-output.ts', 'src/qi/shapes/format.ts', 'src/qi/shapes/rng.ts'];
 const DEFAULT_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
 /** 名稱 → 32 位元種子（sha256 的前 8 個十六進位字元）：不依賴出圖順序，加減形體不會讓其他圖的點跑掉。 */

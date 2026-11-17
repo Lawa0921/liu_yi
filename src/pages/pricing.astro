@@ -1,7 +1,6 @@
 ---
 // 收費：這一版照用海報（設計文件 §7）。金額與規定不轉成文字，避免抄錯；
 // 等業主提供文字版資料再改成真正的表格。海報以掛軸的樣子排進版面，點擊在站內放大。
-// 光點層（Task 26）：竹簡（scroll）低亮度背景，文字與海報浮在上面。
 import BaseLayout from '../layouts/BaseLayout.astro';
 import PosterFigure from '../components/PosterFigure.astro';
 import Plaque from '../components/Plaque.astro';
@@ -20,7 +19,7 @@ const posters = [
 ];
 ---
 
-<BaseLayout title="收費" description="六藝武術工作室的收費方案、VIP 會員、會員須知與退費說明。" ogImage={pricingTable} qi="pricing">
+<BaseLayout title="收費" description="六藝武術工作室的收費方案、VIP 會員、會員須知與退費說明。" ogImage={pricingTable}>
   <section class="section section--flush-top" aria-labelledby="page-title">
     <div class="container">
       <div class="page-head">

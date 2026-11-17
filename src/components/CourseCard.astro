@@ -7,13 +7,11 @@
 //            兵器類的字牌是 3D 兵器的宿主（data-weapon3d="card"，設計文件 §15.2-4）：
 //            3D 就緒後線稿退場、單字淡到後面；沒有 WebGL／沒有 JS 時就是原本的線稿字牌。
 // class 名稱與 data-* 屬性是測試與腳本的約定，請保留。
-// data-qi-pose（Task 26）：課程總覽的光點層讀它，滑過或聚焦這張卡時光點聚成這個姿勢（拳→定軸、格鬥→撐捶、兵器→劍、兒童課用 kid-*、其他→others）。
 import { Image } from 'astro:assets';
 import Weapon from './ornament/Weapon.astro';
 import Bafang from './ornament/Bafang.astro';
 import Leitai from './ornament/Leitai.astro';
 import { AUDIENCE_LABEL, CATEGORY_GLYPH } from '../lib/courses';
-import { poseForCourse } from '../qi/config/pages';
 import type { Course } from '../lib/content';
 import { url } from '../lib/url';
 
@@ -27,7 +25,7 @@ const hasPhotos = photos.length > 0;
 const glyph = category === 'other' ? undefined : CATEGORY_GLYPH[category];
 ---
 
-<article class:list={['course-card', 'cornered', hasPhotos ? 'course-card--photo' : 'course-card--text']} data-carousel-host data-qi-pose={poseForCourse({ category, audience })}>
+<article class:list={['course-card', 'cornered', hasPhotos ? 'course-card--photo' : 'course-card--text']} data-carousel-host>
   <a class="course-card__link" href={url(`/courses/${course.id}/`)}>
     <i class="cornered__tick"></i>
     <i class="cornered__tick"></i>

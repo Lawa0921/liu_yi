@@ -1,6 +1,5 @@
 ---
 // 課表：這一版照用海報（設計文件 §7），時間不轉成文字，避免抄錯。
-// 光點層（Task 26）：竹簡（scroll）低亮度背景，文字與海報浮在上面。
 import BaseLayout from '../layouts/BaseLayout.astro';
 import PosterFigure from '../components/PosterFigure.astro';
 import Plaque from '../components/Plaque.astro';
@@ -8,7 +7,7 @@ import schedule from '../assets/images/schedule.png';
 import { BOOKING_ANCHOR } from '../lib/site';
 ---
 
-<BaseLayout title="課表" description="六藝武術工作室的常態班課表。" ogImage={schedule} qi="schedule">
+<BaseLayout title="課表" description="六藝武術工作室的常態班課表。" ogImage={schedule}>
   <section class="section section--flush-top" aria-labelledby="page-title">
     <div class="container">
       <div class="page-head">

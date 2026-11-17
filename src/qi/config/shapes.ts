@@ -8,8 +8,6 @@
  *     幾何見下方 `SCROLL`。`KIND.BAMBOO`（竹片）與 `KIND.DARK`（兩道綁繩）。
  *   - `crest`：燙金獅子館徽（預約段，Task 25）。由 Task 24 的透明底館徽 `src/assets/images/crest-lion.png` 依亮度取樣
  *     （`shapes/sample-crest.ts`；亮線多取、暗面少取）。`KIND.CREST`（金）。
- *   - `gate`：院門門樓（場地頁，Task 26）。由既有的剪影 `src/assets/silhouettes/bg-mid-gate.png` 取樣（走人形的取樣：內部金、輪廓亮，門洞是空的），
- *     世界寬 `GATE_WORLD_WIDTH`、腳底在 y = 0。
  *   - `compose`：把幾個人形縮小、橫排成一個形體。`scale` 是「在該剪影自己的 `figureScale` 之上再乘的倍率」，
  *     `x` 是該人形外框中線在合成形體裡的世界 x；腳底全部落在 y = 0。三個軸一起縮（z 的厚度也乘 `scale`），小人形才是原形的相似形。
  *
@@ -22,7 +20,6 @@ export type ShapeRecipe =
   | { kind: 'seal' }
   | { kind: 'scroll' }
   | { kind: 'crest' }
-  | { kind: 'gate' }
   | { kind: 'compose'; parts: { figure: string; scale: number; x: number }[] };
 
 /** 三件兵器（與 `src/qi/data/weapons/*.geo` 一一對應）。 */
@@ -60,13 +57,6 @@ export const CREST_WORLD_HEIGHT = CREST_WORLD_WIDTH * CREST_ASPECT;
 /** 光點館徽中心的世界 y（與人形身高一半同一帶）。 */
 export const CREST_CENTER_Y = 1.0;
 
-/** 院門的世界寬度（Task 26）：剪影的不透明外框寬 1 151 px、高 489 px（比約 2.35：1），人形身高是 2。 */
-export const GATE_WORLD_WIDTH = 2.4;
-/** 院門的剪影：不是人形，沒有 `FIGURES` 的頭部對齊，直接指定比例（相對落地那張的 `WORLD_UNIT_PER_LAND_PX`）。 */
-export const GATE_SILHOUETTE = 'bg-mid-gate';
-/** 院門剪影的取樣比例：`GATE_WORLD_WIDTH / (1151 × WORLD_UNIT_PER_LAND_PX)`（`WORLD_UNIT_PER_LAND_PX` ＝ 2 / 1161）。 */
-export const GATE_SCALE = GATE_WORLD_WIDTH / (1151 * (2 / 1161));
-
 export const SHAPES: Record<string, ShapeRecipe> = {
   lift: { kind: 'figure', figure: 'lift' },
   land: { kind: 'figure', figure: 'land' },
@@ -80,7 +70,6 @@ export const SHAPES: Record<string, ShapeRecipe> = {
   seal: { kind: 'seal' },
   scroll: { kind: 'scroll' },
   crest: { kind: 'crest' },
-  gate: { kind: 'gate' },
   // 四個小人形橫排：縮成 0.38 後各寬約 0.44／0.69／0.69／0.67、高約 0.76／0.55／0.59／0.46，
   // x 取使相鄰兩個之間約留 0.25 的空隙；總寬約 3.26，總寬 ÷ 總高 ≈ 4.3（需求 ≥ 2.5）。
   others: {

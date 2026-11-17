@@ -15,9 +15,7 @@ const CLOCK_PAUSED = new Date('2026-01-01T01:00:00');
 async function openWithPausedClock(page: Page) {
   await page.clock.install({ time: CLOCK_START });
   // 輪播屬於 CourseCard；首頁改版後不再有卡片，課程總覽頁有同一批。
-  // ?qi-tier=min（Task 26）：課程總覽現在也有光點層（引擎在背景飄氣）。headless 的 WebGL 是軟體繪製，預設的高階 tier 一格要幾十毫秒，
-  // 而這裡假時鐘一次推進幾千毫秒（幾百格）會超過測試時限；輪播本身與光點無關，所以用最低一級。
-  await page.goto('./courses/?qi-tier=min');
+  await page.goto('./courses/');
   await page.clock.pauseAt(CLOCK_PAUSED);
 }
 

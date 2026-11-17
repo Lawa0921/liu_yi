@@ -5,7 +5,7 @@ import { totalBytes, trackTransfers } from './helpers';
 //   - 首屏：載入到 html[data-qi-ready]、尚未捲動為止，≤ 1.5 MB（硬門檻；> 1.3 MB 只記警示，目標未達不算失敗）。
 //     three 的 chunk 與引擎 chunk 在首屏內（ready 之前已載）；新 context（開場待演）只抓 land、lift 兩個形體。
 //   - 整頁：每 700 px 往下捲到底（每一步等 networkidle），切到「小孩」再捲一次，累計 ≤ 5 MB。
-//   - 其他頁面（Task 26）：全站都有光點層，改成每個頁面型別各一頁的預算（見檔尾）。
+//   - 其他頁面（Task 27）：子頁改成剪影立體場景，不載入光點引擎；每個頁面型別各一頁的預算（見檔尾）。
 // 量測用「真實預設 tier」（不帶 ?qi-tier）：桌機寬 ≥ 960 起於 high，手機起於 low；用真實時鐘，不裝假時鐘。
 // 數字是未壓縮的 decoded bytes（`trackTransfers` 慣例；靜態伺服器不壓縮，GitHub Pages 會 gzip，所以是保守上限）。
 // 只用 page.*，不碰 OS 層級的滑鼠鍵盤。
@@ -178,23 +178,24 @@ for (const device of DEVICES) {
   });
 }
 
-// 其他頁面的光點層（Task 26，使用者要求「現在所有的特殊效果基本都在首頁，其他頁面也應該要做」）：
-// 舊斷言「收費、課表、場地完全不載入 three」的前提已不成立（控制者裁定：全站都有光點層），改成每個頁面型別各一頁的預算：
-//   - 首屏（載入到 html[data-qi-ready]、尚未捲動為止；退回靜態圖時到 data-qi-mode="static"）≤ 1.5 MB（硬門檻；> 1.3 MB 只記警示）。
-//   - three 與引擎 chunk、形體延後到首屏文字之後才載入（首次內容繪製早於它們的請求）；形體只載該頁用到的（≤ 2 個）。
+// 其他頁面（Task 27，使用者要求「每一頁都是粒子有點審美疲勞」）：子頁改成剪影立體場景（CSS 分層，沒有 WebGL），不載入光點引擎與形體 .bin。
+// 每個頁面型別各一頁（桌機與手機）：
+//   - 首屏（載入完成、尚未捲動為止）≤ 1.5 MB（硬門檻；> 1.3 MB 只記警示）；子頁遠低於上限，實測數字寫進 annotation。
+//   - 整個載入過程（含捲到底）完全沒有引擎（qi-stage）chunk 與 .bin 的請求；沒有 3D 兵器的頁面也沒有 three
+//     （課程頁的 3D 兵器架自己載 three，等接近它才載，與場景無關）。
 //   - 整頁：每 700 px 往下捲到底（每一步等 networkidle）累計 ≤ 5 MB。
-// 用真實預設 tier（不帶 ?qi-tier）、真實時鐘；數字是未壓縮的 decoded bytes（`trackTransfers` 慣例，GitHub Pages 會 gzip，所以是保守上限）。
+// 真實時鐘；數字是未壓縮的 decoded bytes（`trackTransfers` 慣例，GitHub Pages 會 gzip，所以是保守上限）。
 const PAGE_TYPES = [
-  { name: '課程總覽', path: './courses/' },
-  { name: '課程內頁（拳）', path: './courses/bajiquan/' },
-  { name: '課程內頁（兵器，有 3D 兵器架）', path: './courses/chinese-weapons/' },
-  { name: '課程內頁（有照片）', path: './courses/kids-martial-arts/' },
-  { name: '師資總覽', path: './coaches/' },
-  { name: '教練頁', path: './coaches/chan/' },
-  { name: '場地', path: './facility/' },
-  { name: '收費', path: './pricing/' },
-  { name: '課表', path: './schedule/' },
-  { name: '404', path: './no-such-page/' },
+  { name: '課程總覽', path: './courses/', three: true }, // 兵器課程卡的字牌是 3D 兵器的宿主，three 由它自己載入
+  { name: '課程內頁（拳）', path: './courses/bajiquan/', three: false },
+  { name: '課程內頁（兵器，有 3D 兵器架）', path: './courses/chinese-weapons/', three: true },
+  { name: '課程內頁（有照片）', path: './courses/kids-martial-arts/', three: false },
+  { name: '師資總覽', path: './coaches/', three: false },
+  { name: '教練頁', path: './coaches/chan/', three: false },
+  { name: '場地', path: './facility/', three: false },
+  { name: '收費', path: './pricing/', three: false },
+  { name: '課表', path: './schedule/', three: false },
+  { name: '404', path: './no-such-page/', three: false },
 ];
 
 for (const device of DEVICES) {
@@ -202,54 +203,47 @@ for (const device of DEVICES) {
     test.describe(`其他頁面的傳輸量：${type.name}（${device.name}）`, () => {
       test.use({ viewport: device.viewport });
 
-      test('首屏 ≤ 1.5 MB；three 與引擎在首屏文字之後才載；形體 ≤ 2 個；整頁 ≤ 5 MB', async ({ page }) => {
+      test('首屏 ≤ 1.5 MB；不載入光點引擎與形體；整頁 ≤ 5 MB', async ({ page }) => {
         const transfers = trackTransfers(page);
-        const requestedAt = new Map<string, number>();
-        page.on('request', (request) => requestedAt.set(request.url(), Date.now()));
         await page.goto(type.path);
-        await page.waitForFunction(
-          () => document.documentElement.hasAttribute('data-qi-ready') || document.documentElement.dataset.qiMode === 'static',
-          undefined,
-          READY,
-        );
+        await page.waitForLoadState('networkidle');
         await settleRecording(page);
-        const first = [...transfers]; // 此刻起不再累計：之後的請求（預取、捲動載入的圖）不算首屏
+        const first = [...transfers]; // 此刻起不再累計：之後捲動才載入的圖不算首屏
         expect(await page.evaluate(() => window.scrollY), '量測時尚未捲動').toBe(0);
-        await expect(page.locator('html'), '預設 tier 下引擎要真的接手').toHaveAttribute('data-qi-ready', 'true');
 
         const bytes = totalBytes(first);
-        const tier = await page.locator('html').getAttribute('data-qi-tier');
         test.info().annotations.push({
           type: 'first-screen-bytes',
-          description: `${mb(bytes)}（${bytes} B）＝ ${breakdown(first)}；tier ${tier}；最大：${biggest(first)}`,
+          description: `${mb(bytes)}（${bytes} B）＝ ${breakdown(first)}；最大：${biggest(first)}`,
         });
         if (bytes > FIRST_SCREEN_TARGET) {
           test.info().annotations.push({ type: 'warning', description: `首屏 ${mb(bytes)} 超過目標 1.3 MB（硬門檻 1.5 MB 內，不算失敗）` });
         }
         expect(bytes, `首屏 ${mb(bytes)} 不得超過 1.5 MB；最大的回應：${biggest(first)}`).toBeLessThanOrEqual(FIRST_SCREEN_LIMIT);
 
-        const three = first.filter((item) => /\/three\.module[^/]*\.js(\?|$)/.test(item.url));
-        const engine = first.filter((item) => /\/qi-stage[^/]*\.js(\?|$)/.test(item.url));
-        expect(three, 'three 的 chunk 在首屏內').toHaveLength(1);
-        expect(engine, '引擎（qi-stage）的 chunk 在首屏內').toHaveLength(1);
-        const bins = first.filter((item) => /\.bin(\?|$)/.test(item.url));
-        expect(bins.length, `首屏的 .bin：${bins.map((item) => fileName(item.url)).join('、')}`).toBeLessThanOrEqual(2);
-        test.info().annotations.push({
-          type: 'chunks',
-          description: `three ${kb(three[0]!.bytes)}、qi-stage ${kb(engine[0]!.bytes)}、.bin ${bins.length} 個 ${kb(totalBytes(bins))}`,
-        });
-
-        // 延後：three、引擎、形體的請求都晚於首次內容繪製（文字先出來）
-        const paintAt = await page.evaluate(() => performance.timeOrigin + (performance.getEntriesByName('first-contentful-paint')[0]?.startTime ?? Number.POSITIVE_INFINITY));
-        for (const item of [...three, ...engine, ...bins]) {
-          expect(requestedAt.get(item.url) ?? 0, `${fileName(item.url)} 的請求要晚於首次內容繪製`).toBeGreaterThanOrEqual(paintAt - 50);
-        }
-
         await scrollThrough(page);
         await settleRecording(page);
         const total = totalBytes(transfers);
         test.info().annotations.push({ type: 'full-page-bytes', description: `${mb(total)}（${total} B）；${breakdown(transfers)}` });
         expect(total, `整頁累計 ${mb(total)} 不得超過 5 MB；最大的回應：${biggest(transfers)}`).toBeLessThanOrEqual(FULL_PAGE_LIMIT);
+
+        const engine = transfers.filter((item) => /\/qi-stage[^/]*\.js(\?|$)/.test(item.url));
+        const bins = transfers.filter((item) => /\.bin(\?|$)/.test(item.url));
+        expect(
+          engine.map((item) => fileName(item.url)),
+          '不載入光點引擎',
+        ).toEqual([]);
+        expect(
+          bins.map((item) => fileName(item.url)),
+          '不載入形體檔',
+        ).toEqual([]);
+        if (!type.three) {
+          const three = transfers.filter((item) => /\/three\.module[^/]*\.js(\?|$)/.test(item.url));
+          expect(
+            three.map((item) => fileName(item.url)),
+            '沒有 3D 兵器的頁面不載入 three',
+          ).toEqual([]);
+        }
       });
     });
   }
