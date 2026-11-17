@@ -316,6 +316,62 @@ test.describe('開場結束通知 onEnd（桌機，tier=min）', () => {
     expect(await marks(), 'start 已呼叫過；skip 之後只多一個 end，不會再有 start').toEqual(['full:start:0', 'full:end', 'skip:start:0', 'skip:end']);
   });
 
+  /** 入館閘門（Task 25）：光點在氣流（flow）裡飄，按下「入館」才從吸氣起演（不接續 land、不散開）。 */
+  test('fromAmbient：從氣流起演——計時從吸氣（1.0 s）起算、第一格目標就換成 lift（不經過 land、不重播散開）、落地仍在 2.7 s，約 2.4 s 演完、最後聚回 land', async ({ page }) => {
+    await open(page);
+    await setPose(page, 'land', false);
+    await setPose(page, 'lift', false);
+    await setPose(page, 'flow', false);
+    await run(page, 2500);
+    expect(await poseOf(page)).toBe('flow');
+    const marks = () => page.evaluate(() => (window as unknown as { __marks?: string[] }).__marks ?? []);
+    await page.evaluate(() => {
+      const w = window as unknown as { __marks?: string[] };
+      w.__marks = [];
+      stageOf().playIntro({
+        fromAmbient: true,
+        onStart: () => w.__marks!.push(`start:${stageOf().debug.uniforms().uIntroT}`),
+        onLand: () => w.__marks!.push('land'),
+        onEnd: () => w.__marks!.push('end'),
+      });
+    });
+    expect(await marks(), '形體都載好：當場起算，從吸氣（1）開始').toEqual(['start:1']);
+    expect((await uniforms(page)).uIntroT).toBe(1);
+
+    await run(page, 16); // 第一格：吸氣的目標是 lift，姿勢從 flow 直接換過去（沒有先接 land）
+    expect(await poseOf(page)).toBe('lift');
+    expect((await uniforms(page)).uShockT, '還沒落地').toBe(-1);
+
+    await run(page, 1500); // 約 2.5 s 的時間軸
+    expect(await poseOf(page)).toBe('lift');
+    expect(await marks()).toEqual(['start:1']);
+    await run(page, 400); // 約 2.9 s：落地
+    expect(await marks(), '落地仍在 2.7 s').toEqual(['start:1', 'land']);
+    expect(await poseOf(page)).toBe('land');
+    await run(page, 600); // 約 3.5 s：演完（比接續 land 的 3.4 s 時間軸早結束 1 秒，因為跳過了接手與散開）
+    expect(await marks()).toEqual(['start:1', 'land', 'end']);
+    expect((await uniforms(page)).uIntroT).toBe(-1);
+    await run(page, 2000);
+    expect(await meanError(page), '光點從遠處飛進來，最後聚回 land').toBeLessThan(0.05);
+  });
+
+  test('fromAmbient 中途 skip：立刻收尾、停在 land；之後 playIntro 預設（接續 land）仍從 0 起算', async ({ page }) => {
+    await open(page);
+    await setPose(page, 'land', false);
+    await setPose(page, 'lift', false);
+    await setPose(page, 'flow', false);
+    await run(page, 1000);
+    await page.evaluate(() => stageOf().playIntro({ fromAmbient: true }));
+    await run(page, 500);
+    await page.evaluate(() => stageOf().playIntro({ skip: true }));
+    expect((await uniforms(page)).uIntroT).toBe(-1);
+    expect(await poseOf(page), 'skip 之後停在 land').toBe('land');
+    await run(page, 3000);
+    expect(await meanError(page)).toBeLessThan(0.05);
+    await page.evaluate(() => stageOf().playIntro());
+    expect((await uniforms(page)).uIntroT, '預設 playIntro 從 0 起算').toBe(0);
+  });
+
   test('onStart：等 lift 載入的 pending 期間不呼叫；被別的姿勢取消的開場永遠不呼叫（之後 lift 載好也不補）', async ({ page }) => {
     await open(page);
     await setPose(page, 'land', false); // lift 還沒載過：playIntro 要等它

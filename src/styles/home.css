@@ -235,14 +235,17 @@ html[data-qi-ready] .opening__poster {
 }
 
 .opening__crest .opening__crest-img,
-.opening__crest .opening__crest-sheen {
+.opening__crest .opening__crest-sheen,
+.gate__crest .gate__crest-img,
+.gate__crest .gate__crest-sheen {
   display: block;
   width: 100%;
   height: auto;
   max-width: none;
 }
 
-.opening__crest .opening__crest-sheen {
+.opening__crest .opening__crest-sheen,
+.gate__crest .gate__crest-sheen {
   position: absolute;
   inset: 0;
   height: 100%;
@@ -268,11 +271,13 @@ html[data-qi-ready] .opening__poster {
 
 @media (prefers-reduced-motion: no-preference) {
   /* 沒有指標：每 9 秒由左往右掃過一次（前 45% 的時間），其餘時間停在畫面外；開頭延遲 1.4 秒，讓進場先演完。 */
-  .opening__crest .opening__crest-sheen {
+  .opening__crest .opening__crest-sheen,
+  .gate__crest .gate__crest-sheen {
     animation: crest-sweep 9s var(--ease-in-out) 1.4s infinite both;
   }
 
-  .opening__crest[data-pointer] .opening__crest-sheen {
+  .opening__crest[data-pointer] .opening__crest-sheen,
+  .gate__crest[data-pointer] .gate__crest-sheen {
     animation: none;
   }
 
@@ -317,6 +322,118 @@ html[data-qi-ready] .opening__poster {
   }
   to {
     filter: none;
+  }
+}
+
+/* ── 入館閘門（Task 25）──────────────────────────────
+ * 首次進站（<head> 的行內腳本標 html[data-gate="open"]）蓋一層全屏的黑底：中央是燙金獅子館徽（同一張圖、同樣的金屬掃光）、
+ * 四周緩緩飄浮的光點（引擎的氣流，畫布抬到背板之上）、下方一顆「入館」按鈕。沒有 html[data-gate]（無 JS、減少動態、沒有 WebGL、再訪、帶錨點…）整層不渲染。
+ * 疊放（由下而上）：背板 200（不透明黑底，擋住後面的首屏海報）→ 引擎畫布 201（光點飄在背板上）→ 對話框 202（館徽與按鈕）。
+ * 對話框本身透明、不接收指標事件，只有按鈕接收；館徽之下的光點因此看得到、不被一層黑擋住。
+ * 閘門期間不得捲動：overflow: hidden 於 html（scrollbar-gutter 保留捲軸的位置，開關閘門時版面不位移）；拿掉 data-gate 就還原，任何退出路徑都走同一個屬性。
+ * 淡出（data-gate="leaving"）≤ 600 ms：GATE_FADE_MS（scripts/home/gate.ts）與這裡是同一個數字。
+ */
+.gate,
+.gate-backdrop {
+  display: none;
+}
+
+html[data-gate] {
+  overflow: hidden;
+  scrollbar-gutter: stable;
+  overscroll-behavior: none;
+}
+
+html[data-gate] .gate-backdrop {
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: var(--color-bg);
+  touch-action: none;
+}
+
+html[data-gate] .home-canvas {
+  z-index: 201;
+}
+
+html[data-gate] .gate {
+  --gate-crest-w: clamp(9rem, 36vmin, 18rem);
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: clamp(var(--space-5), 5vh, var(--space-7));
+  position: fixed;
+  inset: 0;
+  z-index: 202;
+  padding: var(--space-6) var(--gutter);
+  pointer-events: none;
+  touch-action: none;
+}
+
+html[data-gate] .gate > .gate__enter {
+  pointer-events: auto;
+}
+
+html[data-gate='leaving'] .gate,
+html[data-gate='leaving'] .gate-backdrop {
+  opacity: 0;
+  transition: opacity 0.5s var(--ease-out);
+}
+
+html[data-gate='leaving'] .gate > .gate__enter {
+  pointer-events: none;
+}
+
+/* 館徽：圖是 960:920，等比縮放；載入後才淡入（scripts/home/gate.ts 標 data-ready），不讓圖突然跳出來。 */
+.gate__crest {
+  position: relative;
+  width: var(--gate-crest-w);
+  pointer-events: none;
+  opacity: 0;
+  transition:
+    opacity 0.8s var(--ease-out),
+    --sheen-x 0.25s var(--ease-out),
+    --sheen-y 0.25s var(--ease-out);
+}
+
+.gate__crest[data-ready] {
+  opacity: 1;
+}
+
+/* .gate .gate__enter：全站的 .button 在樣式表裡排在後面，同一個特異度會蓋掉這裡的字級與高度 */
+.gate .gate__enter {
+  min-width: 10rem;
+  min-height: 3.25rem;
+  font-size: var(--text-xl);
+  letter-spacing: 0.5em;
+  text-indent: 0.5em;
+}
+
+/* 閘門還擋著時，站名組先不演進場（淡出開始才演）：閘門後面的首屏不會在看不見的時候就演完。 */
+html[data-gate='open'] .opening__lockup > * {
+  animation: none;
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .gate .gate__enter {
+    animation: gate-breathe 3.2s var(--ease-in-out) infinite;
+  }
+
+  .gate .gate__enter:hover,
+  .gate .gate__enter:focus-visible {
+    animation: none;
+  }
+}
+
+@keyframes gate-breathe {
+  0%,
+  100% {
+    border-color: var(--color-accent);
+  }
+  50% {
+    border-color: var(--color-line);
   }
 }
 

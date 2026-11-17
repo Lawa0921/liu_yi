@@ -12,6 +12,7 @@ import CoachesBeat from '../components/home/CoachesBeat.astro';
 import PricingBeat from '../components/home/PricingBeat.astro';
 import BookingBeat from '../components/home/BookingBeat.astro';
 import SectionRail from '../components/home/SectionRail.astro';
+import Gate from '../components/home/Gate.astro';
 import { getPublishedCoaches, getPublishedCourses } from '../lib/content';
 import { buildHomeModel } from '../lib/home';
 
@@ -37,6 +38,7 @@ const rail = [
   <PricingBeat />
   <BookingBeat />
   <SectionRail items={rail} />
+  <Gate slot="overlay" />
 </BaseLayout>
 
 <script>

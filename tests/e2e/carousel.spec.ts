@@ -1,4 +1,4 @@
-import { devices, expect, test, type Page } from '@playwright/test';
+import { devices, expect, test, type Page } from './fixtures';
 import { AUDIENCE_STORAGE_KEY } from './helpers';
 
 // 防身格鬥有 3 張照片，用它測輪播。照片只有小孩課程有，所以先把對象設成小孩。

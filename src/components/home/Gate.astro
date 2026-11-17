@@ -1,0 +1,37 @@
+---
+// 入館閘門（Task 25，使用者要求「進入頁面時應該要做一個點擊進入首頁的效果」）：首次進站（每個工作階段一次）蓋一層全屏的黑底，
+// 中央是燙金獅子館徽（沿用 Task 24 的館徽圖與金屬掃光）、四周緩緩飄浮的光點（引擎的氣流，畫在閘門之上）、下方一顆「入館」按鈕；
+// 點按鈕（或按 Enter、空白鍵）後閘門淡出，才開始開場（吸氣聚成拳師、落地、館徽擦出）。
+//
+// 這一塊在 HTML 裡永遠存在、但預設不顯示（home.css：沒有 html[data-gate] 就 display:none）——
+//   - 要不要顯示由 <head> 的行內腳本在首繪前決定（BaseLayout：首頁、沒有減少動態、有 WebGL2、這個工作階段沒進過館、網址沒有 #錨點、不是從站內其他頁來），
+//     標成 html[data-gate="open"]；判斷式與 `scripts/home/intro-gate.ts` 的 `shouldShowGate` 是同一條（單元測試用 vm 跑行內腳本對照）。
+//   - 沒有 JS：沒有人標屬性，閘門不渲染，爬蟲與無 JS 的訪客看到完整首頁。這一塊放在 <body> 的最後（頁尾與對話框之後），
+//     不改變內容的 DOM 順序，h1 仍是站名。
+//   - 無障礙：role="dialog"、aria-modal="true"、aria-label="入館"；腳本（scripts/home/gate.ts）把焦點放在按鈕、背景設 inert，進入後焦點回到 main。
+// 館徽圖與開場區是同一張來源（館徽 960×920 的透明底金色版），同樣的候選寬度，所以裝置挑到的候選通常與開場區那一張相同（DPR ≥ 2 的裝置完全共用）；
+// 館徽純裝飾（外層 aria-hidden、圖 alt=""）。圖是 lazy：閘門沒顯示（再訪等）就不下載，首頁腳本在閘門開著時一開始就改成 eager。
+import { Image } from 'astro:assets';
+import crest from '../../assets/images/crest-lion.png';
+
+// 閘門的館徽寬度由 home.css 的 --gate-crest-w 決定（clamp(9rem, 36vmin, 18rem)；18rem ＝ 288px，正好是最大的候選寬度）；sizes 與它同一把尺。
+const crestImage = {
+  src: crest,
+  alt: '',
+  widths: [80, 96, 128, 192, 288],
+  sizes: 'clamp(9rem, 36vmin, 18rem)',
+  format: 'webp' as const,
+  quality: 70,
+  loading: 'lazy' as const,
+  decoding: 'async' as const,
+};
+---
+
+<div class="gate-backdrop" data-gate-backdrop aria-hidden="true"></div>
+<div class="gate" data-gate-dialog role="dialog" aria-modal="true" aria-label="入館">
+  <div class="gate__crest" data-crest aria-hidden="true">
+    <Image {...crestImage} class="gate__crest-img" />
+    <Image {...crestImage} class="gate__crest-sheen" />
+  </div>
+  <button type="button" class="button gate__enter" data-gate-enter>入館</button>
+</div>

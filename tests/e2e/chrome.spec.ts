@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { ADULT_COURSES, KID_COURSES, basePath, cardTitles } from './helpers';
 
 const NAV_LABELS = ['課程', '師資', '場地', '收費', '課表'];

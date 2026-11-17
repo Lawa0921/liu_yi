@@ -1,5 +1,5 @@
-// 開場的燙金館徽上的金屬掃光（Task 24）：一道亮帶跟著指標（滑鼠、觸控筆）移動。
-// 這裡只把指標位置換成館徽盒子內的百分比，寫進 [data-crest] 的 --sheen-x／--sheen-y，並標 data-pointer；
+// 開場的燙金館徽（Task 24）與入館閘門的館徽（Task 25）上的金屬掃光：一道亮帶跟著指標（滑鼠、觸控筆）移動。
+// 頁面上每個 [data-crest]（開場區一個、閘門一個）各自換算：把指標位置換成館徽盒子內的百分比，寫進它的 --sheen-x／--sheen-y，並標 data-pointer；
 // 樣子（光核、斜帶、漸層遮罩）與「沒有指標時自動緩慢掃過」都是 home.css 的事（.opening__crest-sheen）。
 // 觸控沒有「游標」：手指拖動是捲動，不是在指東西，所以忽略觸控，讓自動掃過照常進行。
 // 減少動態：不掛監聽、不排 rAF，掃光靜止（CSS 也沒有動畫）。
@@ -54,39 +54,43 @@ export function sheenPoint(box: CrestBox, clientX: number, clientY: number): { x
  * 沒有占位（display:none）的維持 lazy：視窗之後變大、館徽出現時才由瀏覽器載。
  */
 export function loadCrestNow(): void {
-  const crest = document.querySelector<HTMLElement>('[data-crest]');
-  if (!crest || crest.getClientRects().length === 0) return;
-  for (const img of crest.querySelectorAll('img')) img.loading = 'eager';
+  for (const crest of document.querySelectorAll<HTMLElement>('[data-crest]')) {
+    if (crest.getClientRects().length === 0) continue;
+    for (const img of crest.querySelectorAll('img')) img.loading = 'eager';
+  }
 }
 
 export function initCrestSheen(reducedMotion: boolean): void {
   if (reducedMotion) return;
-  const crest = document.querySelector<HTMLElement>('[data-crest]');
-  if (!crest) return;
+  const crests = Array.from(document.querySelectorAll<HTMLElement>('[data-crest]'));
+  if (crests.length === 0) return;
 
-  let x = 50;
-  let y = 50;
+  // 每個館徽各自的最新位置；同一格的 rAF 一起寫（沒有位置的館徽——沒占位、捲出視窗——不寫）
+  const points = new Map<HTMLElement, { x: number; y: number }>();
   let raf = 0;
 
   const apply = (): void => {
     raf = 0;
-    crest.style.setProperty('--sheen-x', `${x.toFixed(1)}%`);
-    crest.style.setProperty('--sheen-y', `${y.toFixed(1)}%`);
-    crest.dataset.pointer = '';
+    for (const [crest, point] of points) {
+      crest.style.setProperty('--sheen-x', `${point.x.toFixed(1)}%`);
+      crest.style.setProperty('--sheen-y', `${point.y.toFixed(1)}%`);
+      crest.dataset.pointer = '';
+    }
+    points.clear();
   };
 
   window.addEventListener(
     'pointermove',
     (event) => {
       if (event.pointerType === 'touch') return;
-      const rect = crest.getBoundingClientRect();
-      // 館徽已捲出視窗（或這個尺寸下不顯示）就不用算了。
-      if (rect.bottom < 0 || rect.top > window.innerHeight) return;
-      const point = sheenPoint(rect, event.clientX, event.clientY);
-      if (!point) return;
-      x = point.x;
-      y = point.y;
-      if (!raf) raf = requestAnimationFrame(apply);
+      for (const crest of crests) {
+        const rect = crest.getBoundingClientRect();
+        // 館徽已捲出視窗（或這個尺寸下不顯示）就不用算了。
+        if (rect.bottom < 0 || rect.top > window.innerHeight) continue;
+        const point = sheenPoint(rect, event.clientX, event.clientY);
+        if (point) points.set(crest, point);
+      }
+      if (points.size > 0 && !raf) raf = requestAnimationFrame(apply);
     },
     { passive: true },
   );

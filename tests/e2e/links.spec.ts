@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { COACHES, PUBLISHED_COURSES, basePath } from './helpers';
 
 // 這支在 /liu_yi 與 / 兩種 base 的建置下都會跑（見 playwright.config.ts 的 projects）。

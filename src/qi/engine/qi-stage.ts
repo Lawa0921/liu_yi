@@ -32,7 +32,7 @@ import { floatTargets } from './caps';
 import { burstSpeed, EXHALE, inhaleDamp, inhaleStreak, SNAP_DAMP_GAIN, streakLength } from './effects';
 import { forcesFor } from './forces';
 import { weaponLeftFor, weaponReachFor } from './framing';
-import { introState, type IntroState } from './intro';
+import { INHALE_AT, introState, type IntroState } from './intro';
 import { othersFit } from './others-layout';
 import { createPointer, type Pointer } from './pointer';
 import { createSim, zeroTexture, type Sim } from './sim';
@@ -108,10 +108,12 @@ export interface QiStage {
    * 沒有演出（減少動態、已在演）時不會呼叫；`dispose` 也不呼叫。
    * `onLand`（Task 24，首頁用來在落地衝擊波的瞬間「擦」出館徽）：開場走到落地（約 2.7 秒）的那一格呼叫一次，在 `onEnd` 之前；
    * 落地之前就結束（略過、被打斷、形體載不到）不呼叫，沒有演出時也不呼叫。
-   * `onStart`（Task 25，首頁用來在「開場一開始」就解除館徽的逾時保險）：形體都載好、計時真的開始（`uIntroT` 從 0 起算）的那一刻呼叫一次；
+   * `onStart`（Task 25，首頁用來在「開場一開始」就解除館徽的逾時保險）：形體都載好、計時真的開始（`uIntroT` 從開頭起算）的那一刻呼叫一次；
    * 還在等形體載入（pending）時不呼叫，被取消、略過、形體載不到就永遠不呼叫，沒有演出時也不呼叫。
+   * `fromAmbient`（Task 25，入館閘門）：目前停在氣流（`flow`，光點在閘門後面飄）——不接續 `land` 的聚合態、不散開，時間軸直接從吸氣（`INHALE_AT`，1.0 秒）起算，
+   * 所以按下「入館」後約 2.4 秒演完（落地仍在 2.7 秒，與原本同一個時間點）。預設 false：接續 `land` 的聚合態（靜態圖交接）。
    */
-  playIntro(opts?: { skip?: boolean; onStart?: () => void; onEnd?: () => void; onLand?: () => void }): void;
+  playIntro(opts?: { skip?: boolean; fromAmbient?: boolean; onStart?: () => void; onEnd?: () => void; onLand?: () => void }): void;
   /**
    * 光點館徽在螢幕上的矩形（CSS 像素，與滑鼠座標同一個空間；首頁用來把 `.crest-hit` 定位到館徽上）。
    * 光點還沒聚成館徽就回 `null`：姿勢不是 `crest`、散開量超過 `CREST_SCATTER_MAX`、或聚合後還沒安定滿 `CREST_SETTLE_S`
@@ -810,6 +812,7 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
       }
       if (!sim || introT >= 0 || introPending) return; // 減少動態沒有演出；演出中再呼叫不重來
       introPending = true;
+      const fromAmbient = opts?.fromAmbient === true;
       introOnStart = opts?.onStart ?? null;
       introOnEnd = opts?.onEnd ?? null;
       introOnLand = opts?.onLand ?? null;
@@ -818,9 +821,14 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
         () => {
           if (disposed || token !== introToken) return;
           introPending = false;
-          if (pose !== 'land') apply('land', makeTarget('land'), false); // 交接：從 land 的聚合態開始
-          introT = 0;
-          introExhaled = false;
+          if (fromAmbient) {
+            introT = INHALE_AT; // 從氣流直接吸氣：目標在第一格換成 lift，不重播散開（exhale 的衝量）
+            introExhaled = true;
+          } else {
+            if (pose !== 'land') apply('land', makeTarget('land'), false); // 交接：從 land 的聚合態開始
+            introT = 0;
+            introExhaled = false;
+          }
           introLanded = false;
           const started = introOnStart;
           introOnStart = null;

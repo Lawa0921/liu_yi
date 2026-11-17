@@ -70,6 +70,9 @@ npm run build:harness && npx playwright test --project=engine --workers=2  # dis
 - 光點數分級 `high`／`mid`／`low`／`min`（256²／192²／144²／112²），連續低於 40 fps 自動降一級；開場演出期間先不降，演完才降。
   網址可帶 `?qi-tier=high|mid|low|min` 覆寫分級、`?qi-debug=1` 暴露 `window.__qi.debug`（測試與截圖用）。
 - 減少動態、沒有 WebGL2、引擎掛不上、WebGL context 遺失、自動降級時重建失敗：退回靜態圖（`html.qi-static`），頁面文字與連結不變；沒有 JavaScript 時兩組課程面板與靜態圖都直接可見。
+- **入館閘門**：首次進站（每個工作階段一次，`sessionStorage` 的 `liuyi:qi-intro`）先蓋一層全屏黑底——燙金獅子館徽、四周飄浮的光點（引擎的氣流，`flow` 姿勢）與「入館」按鈕；按下（或 Enter、空白鍵）後淡出（≤ 600 ms）才開始開場，閘門期間 `html` 不可捲動、背景 `inert`、焦點在按鈕，進入後焦點到 `main`。
+  是否顯示由 `<head>` 的行內腳本在首繪前決定（`scripts/home/intro-gate.ts` 的 `shouldShowGate`，單元測試以 vm 對照）：減少動態、沒有 WebGL2、再訪、網址帶 `#錨點`、從站內其他頁進來、沒有 JavaScript 都不擋；首頁腳本載不到時 10 秒後由行內腳本拿掉閘門。
+  網址可帶 `?qi-crest-failsafe=<ms|off>` 注入開場館徽的逾時保險（測試用；預設 7 秒，閘門收起後才起算，開場一開始就解除）。
 - 課程、收費、課表與 LINE 預約一律是 DOM 文字，不只存在畫布裡。
 
 ### 素材產線

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { ADULT_COURSES, AUDIENCE_STORAGE_KEY, KID_COURSES, basePath, cardTitles } from './helpers';
 
 const adultTitles = ADULT_COURSES.map((c) => c.title);

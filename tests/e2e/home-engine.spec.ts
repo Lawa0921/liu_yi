@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { BEATS, type BeatId } from '../../src/qi/config/poses';
 import type { QiDebug } from '../../src/qi/engine/qi-stage';
+import { GATE_FADE_MS } from '../../src/scripts/home/gate';
 
 // 首頁引擎接線（Task 19）：捲動模型、大人／小孩切換、開場閘門、視窗變動，跑在「正式首頁」上（不是 harness）。
 // headless 的 WebGL 是軟體繪製：一律 ?qi-tier=min&qi-debug=1，時間用停住的假時鐘、只有 run 會推進；
@@ -25,7 +26,7 @@ const seen = new WeakMap<Page, { errors: string[]; warnings: string[] }>();
 
 interface OpenOptions {
   url?: string;
-  /** 預設先標記「這個工作階段看過開場」（跳過開場）；'fresh' 才讓開場照演。 */
+  /** 預設先標記「這個工作階段看過開場」（跳過開場）；'fresh' 才讓開場照演（第一次進站：先按「入館」、閘門淡出收起，開場才開始）。 */
   intro?: 'seen' | 'fresh';
   /** 導覽之前（`addInitScript` 之類）要做的事。 */
   before?: (page: Page) => Promise<unknown>;
@@ -53,6 +54,14 @@ async function open(page: Page, options: OpenOptions = {}): Promise<void> {
   await page.goto(options.url ?? HOME);
   await expect(html(page)).toHaveAttribute('data-qi-ready', 'true', READY);
   await page.clock.pauseAt(T1);
+  if (options.intro === 'fresh') await enterGate(page);
+}
+
+/** 按「入館」並把假時鐘推進淡出的時間：閘門收起（html[data-gate] 拿掉），開場才開始。 */
+async function enterGate(page: Page): Promise<void> {
+  await page.locator('[data-gate-enter]').click();
+  await page.clock.runFor(GATE_FADE_MS + 100);
+  await expect(html(page)).not.toHaveAttribute('data-gate', /.*/);
 }
 
 test.afterEach(async ({ page }) => {
@@ -461,6 +470,8 @@ test.describe('開場閘門（RF2、RF3）', () => {
     await run(page, 300);
     await page.reload();
     await expect(html(page)).toHaveAttribute('data-qi-ready', 'true', READY);
+    await expect(html(page), '沒有記憶：閘門再擋一次').toHaveAttribute('data-gate', 'open');
+    await enterGate(page);
     await expect(html(page)).toHaveAttribute('data-qi-intro', 'playing'); // 沒有記憶：再演一次
     await expect(html(page)).toHaveAttribute('data-audience', 'adult'); // 也沒有記住對象
   });

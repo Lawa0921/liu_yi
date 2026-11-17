@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import sharp from 'sharp';
 import type { QiDebug } from '../../src/qi/engine/qi-stage';
 import { CREST_FAILSAFE_MS } from '../../src/scripts/home/crest-sheen';
+import { GATE_FADE_MS } from '../../src/scripts/home/gate';
 import { figureBoxes, overlap, totalBytes, trackTransfers, type Box } from './helpers';
 
 // 首頁開場的燙金獅子館徽（Task 24；使用者要求「原本那個燙金金屬質感 logo 可以考慮整合」）：
@@ -50,7 +51,26 @@ interface OpenOptions {
   clock?: boolean;
 }
 
-/** 開首頁、等引擎 ready。預設先標記看過開場（跳過）；`clock` 時再把時鐘停住（之後只有 `run` 會推進）。 */
+const introT = (page: Page) => page.evaluate(() => (window as unknown as W).__qi.debug.uniforms().uIntroT!);
+
+/** 閘門期間預取的 land、lift 兩個形體都已載完（真時鐘）。 */
+const shapesLoaded = (page: Page) =>
+  page.waitForFunction(
+    () => ['land', 'lift'].every((id) => performance.getEntriesByType('resource').some((e) => e.name.includes('/' + id + '.') && e.name.endsWith('.bin'))),
+    undefined,
+    READY,
+  );
+
+/** 按「入館」（真時鐘）：閘門淡出收起（html[data-gate] 拿掉）之後開場才開始。 */
+async function enterGateNow(page: Page): Promise<void> {
+  await page.locator('[data-gate-enter]').click();
+  await expect(html(page)).not.toHaveAttribute('data-gate', /.*/);
+}
+
+/**
+ * 開首頁、等引擎 ready。預設先標記看過開場（跳過）；`clock` 時再把時鐘停住（之後只有 `run` 會推進）。
+ * 'fresh'（第一次進站）：首頁先蓋著入館閘門，引擎在後面 ready；這裡按「入館」、等閘門淡出收起（假時鐘下推進淡出的時間），之後開場才開始。
+ */
 async function open(page: Page, options: OpenOptions = {}): Promise<void> {
   watch(page);
   if (options.intro !== 'fresh') await page.addInitScript(() => sessionStorage.setItem('liuyi:qi-intro', '1'));
@@ -59,6 +79,11 @@ async function open(page: Page, options: OpenOptions = {}): Promise<void> {
   await page.goto(options.clock ? HOME_NO_FAILSAFE : HOME);
   await expect(html(page)).toHaveAttribute('data-qi-ready', 'true', READY);
   if (options.clock) await page.clock.pauseAt(T1);
+  if (options.intro === 'fresh') {
+    await page.locator('[data-gate-enter]').click();
+    if (options.clock) await run(page, GATE_FADE_MS + 100);
+    await expect(html(page)).not.toHaveAttribute('data-gate', /.*/);
+  }
 }
 
 /** 等所有「會結束」的動畫跑完（進場動畫 0.9 秒）：量到的才是定位後的位置。 */
@@ -387,7 +412,6 @@ test.describe('減少動態：館徽靜止', () => {
 test.describe('進場：開場演出時在落地的衝擊波擦出', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
-  const introT = (page: Page) => page.evaluate(() => (window as unknown as W).__qi.debug.uniforms().uIntroT!);
 
   test('演出中先是擦掉的（黑底）；落地那一格才標 data-qi-crest="in" 並擦出，此時開場還沒結束', async ({ page }) => {
     await open(page, { intro: 'fresh', clock: true });
@@ -486,15 +510,18 @@ test.describe('進場：開場演出時在落地的衝擊波擦出', () => {
     await page.route(/\.bin(\?|$)/, () => {
       // 不回應、不放行：請求一直掛著
     });
-    const startedAt = Date.now();
     await page.goto(HOME);
     expect(await clipTop(page), '一開始（有 JS、引擎還沒好）是擦掉的').toBe(100);
-    await expect(html(page)).not.toHaveAttribute('data-qi-ready', /.*/);
+    // 入館閘門擋著時保險還不起算（開場還沒開始）；按「入館」之後才起算 7 秒
+    await enterGateNow(page);
+    const startedAt = Date.now();
+    // 閘門後面引擎照常 ready（氣流不需要形體）；卡住的是開場要用的 land、lift——開場一直等不到，保險才是館徽唯一的出路
+    expect(await introT(page), '開場從沒起算').toBe(-1);
     await expect.poll(() => crestLuma(page), { timeout: 8000, intervals: [250], message: '8 秒內館徽要可見' }).toBeGreaterThan(LUMA_VISIBLE);
     expect(Date.now() - startedAt, '不是更早就出現（確實是逾時保險）').toBeGreaterThan(CREST_FAILSAFE_MS - 1500);
     await expect(html(page)).toHaveAttribute('data-qi-crest', 'shown');
     expect(await crestAnimations(page), '強制露出沒有擦出動畫').not.toEqual(expect.arrayContaining(['crest-wipe']));
-    await expect(html(page)).not.toHaveAttribute('data-qi-ready', /.*/); // 引擎到最後都沒好
+    expect(await introT(page), '開場到最後都沒起算').toBe(-1);
   });
 
   test('?qi-crest-failsafe=<ms> 可注入：卡住的引擎在指定的毫秒後（不是 7 秒）以終態露出館徽', async ({ page }) => {
@@ -502,13 +529,14 @@ test.describe('進場：開場演出時在落地的衝擊波擦出', () => {
     await page.route(/\.bin(\?|$)/, () => {
       // 不回應、不放行：請求一直掛著
     });
-    const startedAt = Date.now();
     await page.goto(`${HOME}&qi-crest-failsafe=1200`);
     expect(await clipTop(page), '一開始是擦掉的').toBe(100);
+    await enterGateNow(page); // 保險從閘門收起才起算
+    const startedAt = Date.now();
     await expect.poll(() => crestLuma(page), { timeout: 5000, intervals: [100], message: '注入的 1.2 秒到了館徽就要可見' }).toBeGreaterThan(LUMA_VISIBLE);
     expect(Date.now() - startedAt, '遠早於預設的 7 秒').toBeLessThan(CREST_FAILSAFE_MS - 2000);
     await expect(html(page)).toHaveAttribute('data-qi-crest', 'shown');
-    await expect(html(page)).not.toHaveAttribute('data-qi-ready', /.*/);
+    expect(await introT(page), '開場從沒起算').toBe(-1);
   });
 
   test('?qi-crest-failsafe=off：保險關閉，卡住的引擎不會自己把館徽放出來', async ({ page }) => {
@@ -517,6 +545,7 @@ test.describe('進場：開場演出時在落地的衝擊波擦出', () => {
       // 不回應、不放行
     });
     await page.goto(`${HOME}&qi-crest-failsafe=off`);
+    await enterGateNow(page);
     await page.waitForTimeout(2500);
     await expect(html(page)).not.toHaveAttribute('data-qi-crest', /.*/);
     expect(await clipTop(page), '一直是擦掉的').toBe(100);
@@ -528,6 +557,7 @@ test.describe('進場：開場演出時在落地的衝擊波擦出', () => {
       // 不回應、不放行
     });
     await page.goto(`${HOME}&qi-crest-failsafe=abc`);
+    await enterGateNow(page);
     await page.waitForTimeout(2500);
     await expect(html(page)).not.toHaveAttribute('data-qi-crest', /.*/);
   });
@@ -536,9 +566,11 @@ test.describe('進場：開場演出時在落地的衝擊波擦出', () => {
     watch(page);
     await page.goto(`${HOME}&qi-crest-failsafe=600`);
     await expect(html(page)).toHaveAttribute('data-qi-ready', 'true', READY);
+    await shapesLoaded(page); // 閘門期間預取的 land、lift 到了：按下「入館」後引擎計時當場起算（不然 0.6 秒的保險可能搶在形體載入之前到期）
+    await enterGateNow(page); // 保險從閘門收起才起算，開場同時開始；引擎計時一起算就解除保險
     await expect(html(page)).toHaveAttribute('data-qi-intro', 'playing');
     await page.waitForFunction(() => (window as unknown as W).__qi.debug.uniforms().uIntroT! >= 0, undefined, READY); // 計時真的起算
-    await page.waitForTimeout(1500); // 比保險（0.6 秒）久，但還沒到落地（2.7 s）
+    await page.waitForTimeout(800); // 比保險（0.6 秒）久，但還沒到落地（從氣流起演，時間軸約 1.0 + 0.8 s；落地在 2.7 s）
     expect(await page.evaluate(() => (window as unknown as W).__qi.debug.uniforms().uIntroT!), '前提：還沒落地').toBeLessThan(2.6);
     await expect(html(page), '保險已解除，沒有搶先把館徽放出來').not.toHaveAttribute('data-qi-crest', /.*/);
     await expect(html(page)).toHaveAttribute('data-qi-crest', 'in', READY); // 落地才擦出
@@ -550,6 +582,7 @@ test.describe('進場：開場演出時在落地的衝擊波擦出', () => {
       // 不回應、不放行：引擎掛上了但第一個形體永遠載不到，保險一直在等
     });
     await page.goto(`${HOME}&qi-crest-failsafe=1500`);
+    await enterGateNow(page); // 保險從閘門收起才起算：先進館讓計時器掛上，之後的收尾才清得到它
     // 引擎掛上後 WebGL context 遺失 → 退回靜態圖（shutdown）；在掛上之前送的事件沒有人聽，所以重複送到成功
     await expect
       .poll(

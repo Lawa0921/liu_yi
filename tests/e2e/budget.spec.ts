@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, rawTest, test, type Page } from './fixtures';
 import { totalBytes, trackTransfers } from './helpers';
 
 // 首頁傳輸量預算（Task 23；設計 §5、決定 D28）：
@@ -52,10 +52,10 @@ function biggest(transfers: Transfer[], count = 6): string {
 const settleRecording = (page: Page) => page.evaluate(() => new Promise<void>((resolve) => setTimeout(resolve, 300)));
 
 for (const device of DEVICES) {
-  test.describe(`首屏傳輸量：${device.name}`, () => {
-    test.use({ viewport: device.viewport });
+  rawTest.describe(`首屏傳輸量：${device.name}`, () => {
+    rawTest.use({ viewport: device.viewport });
 
-    test('載入到 data-qi-ready（未捲動）：≤ 1.5 MB；three 與引擎 chunk 已載；新 context 只抓 land、lift 兩個 .bin', async ({ page }) => {
+    rawTest('載入到 data-qi-ready（未捲動）：≤ 1.5 MB；three 與引擎 chunk 已載；新 context 只抓 land、lift 兩個 .bin', async ({ page }) => {
       const transfers = trackTransfers(page);
       await page.goto('./');
       // ready（光點引擎接手）或 static（退回靜態圖）才算首屏載完
@@ -85,6 +85,18 @@ for (const device of DEVICES) {
         });
       }
       expect(bytes, `首屏 ${mb(bytes)} 不得超過 1.5 MB；最大的回應：${biggest(first)}`).toBeLessThanOrEqual(FIRST_SCREEN_LIMIT);
+
+      // 入館閘門（Task 25）：第一次進站首頁先蓋著閘門（量到的就是使用者真實的第一次造訪）。閘門沿用 Task 24 的館徽圖（同一個來源、同樣的候選寬度，
+      // DPR ≥ 2 的裝置與開場區共用同一個檔案），不得再下載別的大檔：館徽圖最多兩個（開場區一個、閘門一個），合計 ≤ 80 KB。
+      await expect(page.locator('html'), '前提：第一次進站，閘門擋著').toHaveAttribute('data-gate', 'open');
+      const crestImages = first.filter((item) => /crest-lion[^/]*\.webp(\?|$)/.test(item.url));
+      test.info().annotations.push({
+        type: 'gate-crest-bytes',
+        description: `${crestImages.length} 張：${crestImages.map((item) => `${fileName(item.url)} ${kb(item.bytes)}`).join('、')}（合計 ${kb(totalBytes(crestImages))}）`,
+      });
+      expect(crestImages.length, '館徽圖最多兩個候選（開場區與閘門）').toBeLessThanOrEqual(2);
+      expect(crestImages.length, '閘門的館徽有載入').toBeGreaterThanOrEqual(1);
+      expect(totalBytes(crestImages), '館徽圖合計').toBeLessThanOrEqual(80 * 1024);
 
       // three 與引擎 chunk 都在 ready 之前載完
       const three = first.filter((item) => /\/three\.module[^/]*\.js(\?|$)/.test(item.url));

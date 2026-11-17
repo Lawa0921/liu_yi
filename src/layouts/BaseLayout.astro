@@ -39,7 +39,7 @@ const favicon = await getImage({ src: logoEmblem, width: 96, height: 96, fit: 'c
 ---
 
 <!doctype html>
-<html lang={SITE.lang} data-audience-key={AUDIENCE_STORAGE_KEY}>
+<html lang={SITE.lang} data-audience-key={AUDIENCE_STORAGE_KEY} data-base={url('/')}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -68,7 +68,10 @@ const favicon = await getImage({ src: logoEmblem, width: 96, height: 96, fit: 'c
         首頁另外在這裡判定要不要退回靜態圖（html.qi-static）：偏好減少動態，或取不到 WebGL2。靜態圖要不要顯示只由 CSS 決定，
         所以必須在首繪前定案，不能等光點引擎的腳本載入（決定 D20）。其他頁面不探測（建立 WebGL context 有成本）。
         同一處也標開場館徽：這個工作階段已看過開場（再訪）就不會演，館徽一開始就直接顯示終態（html[data-qi-crest="shown"]，不擦出；home.css），
-        不等腳本；鍵要與 scripts/home/intro-gate.ts 的 INTRO_STORAGE_KEY 一致（tests/unit/home-crest.test.ts 守住）。 */}
+        不等腳本；鍵要與 scripts/home/intro-gate.ts 的 INTRO_STORAGE_KEY 一致（tests/unit/home-crest.test.ts 守住）。
+        入館閘門（Task 25）也在這裡、首繪前決定：首頁、沒有減少動態、有 WebGL2、這個工作階段沒進過館、網址沒有 #錨點、不是從站內其他頁來（referrer 在本站 base 底下），
+        才標 html[data-gate="open"]（home.css 據此鎖住捲動並顯示閘門）。判斷式與 scripts/home/intro-gate.ts 的 shouldShowGate 是同一條（tests/unit/home-gate-head.test.ts 用 vm 跑這段腳本對照）。
+        保險：首頁腳本（scripts/home/gate.ts）接手時設 window.__qiGate；10 秒後還沒接手（腳本載不到），這裡自己拿掉屬性，不讓閘門永遠擋著（GATE_SAFETY_MS）。 */}
     <script is:inline data-probe-engine={home ? '' : undefined}>
       (function () {
         var root = document.documentElement;
@@ -99,9 +102,24 @@ const favicon = await getImage({ src: logoEmblem, width: 96, height: 96, fit: 'c
             still = true;
           }
           if (still) root.classList.add('qi-static');
+          var visited = false;
           try {
-            if (window.sessionStorage.getItem('liuyi:qi-intro') === '1') root.dataset.qiCrest = 'shown';
+            if (window.sessionStorage.getItem('liuyi:qi-intro') === '1') {
+              visited = true;
+              root.dataset.qiCrest = 'shown';
+            }
           } catch (e) {}
+          var hasHash = window.location.hash.length > 1;
+          var fromSite = false;
+          try {
+            fromSite = document.referrer.indexOf(window.location.origin + (root.dataset.base || '/')) === 0;
+          } catch (e) {}
+          if (!still && !visited && !hasHash && !fromSite) {
+            root.dataset.gate = 'open';
+            window.setTimeout(function () {
+              if (!window.__qiGate) delete root.dataset.gate;
+            }, 10000);
+          }
         }
       })();
     </script>
@@ -116,6 +134,8 @@ const favicon = await getImage({ src: logoEmblem, width: 96, height: 96, fit: 'c
     <Frame />
     <LineDialog />
     <PosterDialog />
+    {/* 頁面專屬的全屏疊層（首頁的入館閘門）：放在最後，不改變內容的 DOM 順序。 */}
+    <slot name="overlay" />
 
     <script>
       import { initLineDialog, initNavMenu } from '../scripts/site-chrome';

@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import sharp from 'sharp';
 import type { BeatId } from '../../src/qi/config/poses';
 import type { QiDebug } from '../../src/qi/engine/qi-stage';
+import { GATE_FADE_MS } from '../../src/scripts/home/gate';
 import { basePath, figureBoxes, hiddenByStyle, homeTitles, overlap, type Box } from './helpers';
 
 // 首頁的首屏交接、退回與無障礙（Task 20）：
@@ -62,7 +63,7 @@ test.afterEach(async ({ page }) => {
 
 interface OpenOptions {
   url?: string;
-  /** 預設先標記「這個工作階段看過開場」（跳過開場）；'fresh' 才讓開場照演。 */
+  /** 預設先標記「這個工作階段看過開場」（跳過開場）；'fresh' 才讓開場照演（第一次進站：先按「入館」、閘門淡出收起，開場才開始）。 */
   intro?: 'seen' | 'fresh';
   /** 導覽之前（`addInitScript` 之類）要做的事。 */
   before?: (page: Page) => Promise<unknown>;
@@ -85,6 +86,11 @@ async function open(page: Page, options: OpenOptions = {}): Promise<Seen> {
   await page.goto(options.url ?? HOME);
   await expect(html(page)).toHaveAttribute('data-qi-ready', 'true', READY);
   await page.clock.pauseAt(T1);
+  if (options.intro === 'fresh') {
+    await page.locator('[data-gate-enter]').click();
+    await page.clock.runFor(GATE_FADE_MS + 100);
+    await expect(page.locator('html')).not.toHaveAttribute('data-gate', /.*/);
+  }
   return log;
 }
 
@@ -738,6 +744,12 @@ test.describe('無障礙', () => {
   test('Tab 序：跳到主要內容 → 頁首 →〔略過〕→ 切換鈕 → … → 預約按鈕，沒有陷阱、不經過 canvas', async ({ page }) => {
     await open(page, { intro: 'fresh' });
     await expect(html(page)).toHaveAttribute('data-qi-intro', 'playing');
+    // 按「入館」之後焦點在 main（閘門收起時移過去）；這個測試要驗的是「從頁面最前面開始 Tab」的順序，所以先把循序焦點的起點放回文件開頭
+    await page.evaluate(() => {
+      document.body.tabIndex = -1;
+      document.body.focus();
+      document.body.removeAttribute('tabindex');
+    });
 
     const rank = { 'skip-link': 0, header: 1, 'skip-intro': 2, switch: 3, content: 4, booking: 5 } as const;
     const stops: { region: keyof typeof rank; text: string; index: number; tag: string }[] = [];

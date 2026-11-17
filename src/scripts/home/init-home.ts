@@ -10,6 +10,9 @@
 //   - 離開頁面（`pagehide`、非 bfcache）釋放引擎與 GL context；bfcache 返回（`pageshow` persisted）重設時間戳後繼續。
 //   - 開場的燙金館徽（Task 24）：金屬掃光跟指標走（`crest-sheen.ts`，與引擎無關）；露出的時機用 `html[data-qi-crest]` 表示——
 //     `in`（落地的衝擊波，`playIntro` 的 `onLand`）才有擦出動畫；`shown`（再訪、略過、Esc、捲走、逾時保險）直接顯示終態；退回靜態圖由 CSS 直接露出。
+//   - 入館閘門（Task 25，`gate.ts`）：首次進站先蓋一層全屏閘門（<head> 的行內腳本標 html[data-gate]）。引擎在閘門後面照常載入，姿勢停在氣流（`flow`，光點飄在閘門上）；
+//     按下「入館」、閘門淡出收起之後才開始開場（`playIntro({ fromAmbient: true })`：從氣流直接吸氣聚成拳師）。閘門還擋著時，姿勢、略過、逾時保險都不動作；
+//     引擎掛不上或退回靜態圖就立刻收掉閘門（`onEnterStatic`）。再訪、減少動態、沒有 WebGL、帶 #錨點、從站內其他頁來都沒有閘門（head 的判斷）。
 //   - 這個檔案會被打進首頁的腳本：程式字串與錯誤訊息只用英文（字型守門會掃 JS 裡的中文字）；也不得 import `config/copy.ts`。
 
 import { CENTER_BAND_MARGIN } from '../card-carousel';
@@ -28,6 +31,7 @@ import { readBeatRects } from './beats';
 import { crestFailsafeMs, initCrestSheen, loadCrestNow } from './crest-sheen';
 import { textInkRight, textInkTop } from './text-extent';
 import { enterStatic, onEnterStatic } from './fallback';
+import { initGate } from './gate';
 import { introSeen, markIntroSeen } from './intro-gate';
 
 /** 捲動速度的平滑時間常數（秒）。 */
@@ -59,6 +63,10 @@ export async function initHome(): Promise<void> {
   const main = document.querySelector<HTMLElement>('main[data-home]');
   const canvas = document.querySelector<HTMLCanvasElement>('canvas[data-qi-canvas]');
   if (!main || !canvas) return;
+
+  const session = sessionStorageOrNull();
+  // 入館閘門：一開始就接手（鎖捲動、背景 inert、焦點在按鈕）；沒有閘門就回一個「已收起」的 Gate。
+  const gate = initGate(session);
 
   const params = new URLSearchParams(location.search);
   const tier = initialTier({
@@ -96,6 +104,7 @@ export async function initHome(): Promise<void> {
     qi.mode = 'static';
     qi.ready = false;
     shutdown();
+    gate.removeNow(); // 引擎掛不上、退回靜態圖：閘門立刻收掉（不淡出），不擋內容
   });
 
   // 減少動態，或 <head> 的探測已判定沒有 WebGL2（html.qi-static）：不載入引擎、不預取形體，靜態圖就是畫面。
@@ -104,7 +113,6 @@ export async function initHome(): Promise<void> {
     return;
   }
 
-  const session = sessionStorageOrNull();
   const willPlayIntro = shouldPlayIntro({
     reducedMotion,
     seen: introSeen(session),
@@ -150,8 +158,19 @@ export async function initHome(): Promise<void> {
     if (root.dataset.qiCrest !== undefined) return;
     setAttr('qiCrest', mode);
   };
+  const armCrestFailsafe = (): void => {
+    if (!alive || failsafeMs === null || root.dataset.qiCrest !== undefined) return;
+    crestTimer = setTimeout(() => revealCrest('shown'), failsafeMs);
+  };
+  // 閘門還擋著時開場還沒開始（使用者可能一直不按）：保險從閘門收起才起算，不然閘門後面的館徽會被保險先放出來、之後的擦出就沒了
   if (!willPlayIntro) revealCrest('shown');
-  else if (failsafeMs !== null) crestTimer = setTimeout(() => revealCrest('shown'), failsafeMs);
+  else if (gate.isHolding()) void gate.closed.then(armCrestFailsafe);
+  else armCrestFailsafe();
+
+  /** 閘門還擋著、開場在等它：這段時間不換姿勢、不略過（開場一開始這個旗標就放下）。 */
+  let gateWaiting = willPlayIntro && gate.isHolding();
+  /** 引擎停在氣流（閘門的背景）：開場要從氣流直接吸氣，不接續 land 的聚合態。 */
+  let ambient = false;
 
   // ── 形體載入與預取（引擎一載入完成就用得到）──────────────────────
   const loader = createShapeLoader({ fetch: fetchBytes, resolveUrl: resolveShapeUrl });
@@ -256,7 +275,10 @@ export async function initHome(): Promise<void> {
   };
 
   try {
-    const initial = poseFor(first, currentAudience());
+    // 閘門擋著且要演開場：先停在氣流（光點在閘門上飄），按下「入館」才吸氣聚成拳師；其餘照目前這一段的姿勢。
+    // 引擎還沒好、閘門就已經收起（使用者很快按了「入館」）：首屏海報（聚合的拳師）已經露出來了，照原本的路徑接續它（land → 散開 → 吸氣）。
+    ambient = gateWaiting && gate.isHolding();
+    const initial: PoseId = ambient ? 'flow' : poseFor(first, currentAudience());
     requested = initial;
     await stage.setPose(initial, { burst: false });
     if (!alive) return; // 載入途中退回靜態圖了（context 遺失）
@@ -282,7 +304,7 @@ export async function initHome(): Promise<void> {
   };
   /** 開場提前收尾（略過、捲走、跳段落）：不播任何特效，引擎停在 land；之後的姿勢由捲動位置決定。 */
   const endIntro = (reason: 'done' | 'skipped'): void => {
-    if (!alive || intro !== 'playing') return;
+    if (!alive || intro !== 'playing' || gateWaiting) return; // 閘門還擋著：開場還沒開始，沒有東西可略過
     setIntro(reason);
     stage.playIntro({ skip: true });
   };
@@ -345,7 +367,7 @@ export async function initHome(): Promise<void> {
     if (speed < 1e-3) speed = 0;
 
     // RF2：開場還在演就捲走（含段落跳轉）→ 立刻收尾，姿勢直接去目標
-    if (intro === 'playing' && y > INTRO_MAX_SCROLL * vh) endIntro('done');
+    if (intro === 'playing' && !gateWaiting && y > INTRO_MAX_SCROLL * vh) endIntro('done');
 
     const { beat, scatter: scrolled } = locate();
     if (beat) {
@@ -355,7 +377,7 @@ export async function initHome(): Promise<void> {
         prefetchAround(beat.id);
       }
       const wanted = poseFor(beat.id, currentAudience());
-      if (wanted !== requested) requestPose(wanted, true);
+      if (!gateWaiting && wanted !== requested) requestPose(wanted, true); // 閘門擋著時姿勢留在氣流
     }
     const scatter = Math.max(scrolled, switchAt === null ? 0 : switchScatter(now - switchAt));
     stage.setScatter(scatter);
@@ -444,10 +466,13 @@ export async function initHome(): Promise<void> {
   qi.ready = true;
   setAttr('qiMode', 'webgl');
   setAttr('qiReady', 'true');
-  if (willPlayIntro) {
+  const startIntro = (): void => {
+    if (!alive) return; // 等閘門的期間退回靜態圖了
+    gateWaiting = false;
     markIntroSeen(session);
     setIntro('playing');
     stage.playIntro({
+      fromAmbient: ambient,
       onStart: disarmCrestFailsafe,
       onLand: () => {
         if (alive) revealCrest('in'); // 落地的衝擊波：館徽由下往上擦出
@@ -456,6 +481,11 @@ export async function initHome(): Promise<void> {
         if (intro === 'playing') setIntro('done');
       },
     });
+    schedule();
+  };
+  if (willPlayIntro) {
+    if (gate.isHolding()) void gate.closed.then(startIntro); // 閘門收起（進入或被移除）才開始；被移除時 alive 已是 false
+    else startIntro();
   }
   schedule();
 }

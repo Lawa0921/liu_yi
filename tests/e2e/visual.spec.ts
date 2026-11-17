@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { BEATS, type BeatId } from '../../src/qi/config/poses';
 import type { QiDebug } from '../../src/qi/engine/qi-stage';
+import { GATE_FADE_MS } from '../../src/scripts/home/gate';
 
 // 首頁的截圖驗收（Task 23；設計 §11）：headless 截圖存到 test-results/visual/，再用 sharp 對像素做數值檢查。
 // 每個姿勢量兩件事：
@@ -74,7 +75,7 @@ test.afterEach(async ({ page }) => {
 const html = (page: Page) => page.locator('html');
 const run = (page: Page, ms: number) => page.clock.runFor(ms);
 
-/** 開首頁、等引擎 ready、再把時鐘停住（之後只有 `run` 會推進）。預設先標記看過開場（跳過）；'fresh' 讓開場照演。 */
+/** 開首頁、等引擎 ready、再把時鐘停住（之後只有 `run` 會推進）。預設先標記看過開場（跳過）；'fresh' 讓開場照演（第一次進站：先按「入館」、閘門淡出收起，開場才開始）。 */
 async function open(page: Page, device: Device, intro: 'seen' | 'fresh' = 'seen', realTier = false): Promise<void> {
   watch(page);
   if (intro === 'seen') await page.addInitScript(() => sessionStorage.setItem('liuyi:qi-intro', '1'));
@@ -82,6 +83,11 @@ async function open(page: Page, device: Device, intro: 'seen' | 'fresh' = 'seen'
   await page.goto(homeUrl(device, realTier));
   await expect(html(page)).toHaveAttribute('data-qi-ready', 'true', READY);
   await page.clock.pauseAt(T1);
+  if (intro === 'fresh') {
+    await page.locator('[data-gate-enter]').click();
+    await run(page, GATE_FADE_MS + 100);
+    await expect(html(page)).not.toHaveAttribute('data-gate', /.*/);
+  }
 }
 
 const scrollToBeat = (page: Page, beat: BeatId) =>
@@ -336,6 +342,42 @@ const textRects = (page: Page, scope: string): Promise<Box[]> =>
     }
     return out;
   }, scope);
+
+/** 一維計數裡「至少 minCount 個」的最長連續範圍（中間最多容許 maxGap 個不足的格子）；沒有就是 null。 */
+function longestRun(counts: number[], minCount: number, maxGap: number): { from: number; to: number } | null {
+  let best: { from: number; to: number } | null = null;
+  let current: { from: number; to: number } | null = null;
+  let gap = 0;
+  counts.forEach((n, i) => {
+    if (n >= minCount) {
+      current = current && gap <= maxGap ? { from: current.from, to: i } : { from: i, to: i };
+      gap = 0;
+      if (!best || current.to - current.from > best.to - best.from) best = current;
+    } else gap++;
+  });
+  return best;
+}
+
+/**
+ * 很淡的形體（竹簡）的外框，canvas 本地座標：亮度 > threshold 的像素在一欄裡至少 minCount 個的「最長連續欄範圍」，再在那些欄裡數每一列，取「最長連續列範圍」。
+ * 環境煙的零星亮點與近鏡頭的大光斑只占很窄的一段，不是最長的那一段，所以不會把外框撐大（用「連成一片」的算法時，低門檻下它們會連到竹簡上）。
+ */
+async function denseBox(png: Buffer, threshold: number, minCount: number): Promise<Box | null> {
+  const { data, info } = await sharp(png).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  const lit = (x: number, y: number) => {
+    const o = (y * info.width + x) * 3;
+    return luma(data[o]!, data[o + 1]!, data[o + 2]!) > threshold;
+  };
+  const columns = new Array<number>(info.width).fill(0);
+  for (let y = 0; y < info.height; y++) for (let x = 0; x < info.width; x++) if (lit(x, y)) columns[x]!++;
+  const across = longestRun(columns, minCount, 12);
+  if (!across) return null;
+  const rows = new Array<number>(info.height).fill(0);
+  for (let y = 0; y < info.height; y++) for (let x = across.from; x <= across.to; x++) if (lit(x, y)) rows[y]!++;
+  const down = longestRun(rows, minCount, 12);
+  if (!down) return null;
+  return { left: across.from, right: across.to + 1, top: down.from, bottom: down.to + 1 };
+}
 
 /** 兩個矩形的重疊面積（不重疊是 0）。 */
 function overlapArea(a: Box, b: Box): number {
@@ -595,9 +637,14 @@ for (const device of DEVICES) {
     test('scroll（收費課表的竹簡）：亮點外框與文字矩形重疊 ≤ 5%、文字區域亮度 > 100 的像素 ≤ 4%、外框是橫的長方形、完整在畫布內', async ({ page }) => {
       await open(page, device);
       await settlePose(page, 'pricing', 'scroll');
-      // 竹簡淡（亮度 > 100 的像素很少），外框改以亮度 > 35 的光點量
-      const measured = await shoot(page, `scroll-${device.slug}`, 35);
-      const { analysis, rect, figure } = measured;
+      // 竹簡淡（亮度 > 100 的像素很少）：外框改量「亮度 > 35 的光點在一欄／一列裡至少有 10 個」的範圍（denseBox）——
+      // 環境煙的零星亮點每欄每列只有一兩個，不會把外框撐大；用「連成一片」的算法時，低門檻下環境煙會連到竹簡上。
+      const shot = await shoot(page, `scroll-${device.slug}`, 35);
+      const dense = await denseBox((await captureCanvas(page)).png, 35, 10);
+      expect(dense, 'canvas 上量得到竹簡').not.toBeNull();
+      const { analysis, rect } = shot;
+      const figure: Box = { left: rect.left + dense!.left, right: rect.left + dense!.right, top: rect.top + dense!.top, bottom: rect.top + dense!.bottom };
+      const measured: Measured = { analysis: { ...analysis, lit: dense }, rect, figure };
       const texts = await textRects(page, beatText('pricing'));
       const metrics = metricsOf(measured, device, texts, 'scroll');
       // 位置：完整在畫布內（四邊留 ≥ 8 px）、桌機中心 x ∈ [0.50W, 0.80W]、手機底 < 0.70H 且中心在上 60%、與文字重疊 ≤ 5%
