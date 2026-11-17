@@ -3,7 +3,7 @@ import sharp from 'sharp';
 import type { BeatId } from '../../src/qi/config/poses';
 import type { QiDebug } from '../../src/qi/engine/qi-stage';
 import { GATE_FADE_MS } from '../../src/scripts/home/gate';
-import { basePath, figureBoxes, hiddenByStyle, homeTitles, overlap, type Box } from './helpers';
+import { basePath, figureBoxes, hiddenByStyle, homeTitles, overlap, VIEW_TRANSITION_ABORT_NOISE, type Box } from './helpers';
 
 // 首頁的首屏交接、退回與無障礙（Task 20）：
 //   - 首屏：引擎 chunk 還沒到之前，海報＋h1 就是畫面（不空白）；到了之後交叉淡化、人形對得上。
@@ -38,7 +38,7 @@ interface Seen {
 const seen = new WeakMap<Page, Seen>();
 
 function watch(page: Page): Seen {
-  const log: Seen = { errors: [], warnings: [], allowErrors: [], allowWarnings: [] };
+  const log: Seen = { errors: [], warnings: [], allowErrors: [VIEW_TRANSITION_ABORT_NOISE], allowWarnings: [] }; // 站內連續換頁偶爾會有瀏覽器自己的轉場中止雜訊（helpers.ts）
   seen.set(page, log);
   page.on('pageerror', (error) => log.errors.push(`pageerror: ${error}`));
   page.on('console', (message) => {

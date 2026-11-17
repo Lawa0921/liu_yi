@@ -5,6 +5,7 @@
 //     （`MID_BY_BEAT`：開場與拳是院門、格鬥是石鎖、兵器三段是兵器架、其他課程是鼓、師資與收費是旗、預約回到院門），腳本 `scripts/home/depth.ts` 設 `data-depth-mid`。
 //   - 前面那一組（`.depth-fg`）固定在視窗角落，在光點畫布之上、文字之下（不會遮住文字；角落的位置也不壓到光點主體，e2e 量）。
 //   - 兩組都隨捲動進度位移（遠景最小、前景最大、方向相反；`lib/scene/parallax.ts` 的 `homeShift`）；減少動態時不位移。
+//   - 首屏只載遠景、院門（預設中景）與簷角；其餘四種中景（兵器架、鼓、旗、石鎖，約 49 KB）用 `data-src`，引擎就緒後 2 秒或該段落輪到它時才載（`depth.ts`），首屏預算（≤ 1.5 MB）才有餘裕。
 //   - 全程 aria-hidden、不接收指標事件、不進無障礙樹。沒有 JS 時是靜態的（預設中景是院門）。
 // 注意：開場的靜態海報（hero）是不透明的底，海報還在時（引擎到達之前）蓋住這一層，引擎接手、海報淡出後景深層才露出——所以首屏與退回靜態圖時看到的是原本的畫面。
 import '../../styles/depth.css';
@@ -24,7 +25,7 @@ const fg = HOME_DEPTH.fg.map((layer) => ({ ...sceneImage(layer.asset), flip: lay
   <div class="depth__mist"></div>
   <div class="depth__layer" data-depth-layer="mid">
     {mids.map((mid) => (
-      <img class="depth__img" data-mid={mid.key} data-asset={mid.asset} src={mid.src} width={mid.width} height={mid.height} alt="" decoding="async" style={`--nw:${mid.width};--nh:${mid.height}`} />
+      <img class="depth__img" data-mid={mid.key} data-asset={mid.asset} src={mid.key === 'gate' ? mid.src : undefined} data-src={mid.key === 'gate' ? undefined : mid.src} width={mid.width} height={mid.height} alt="" decoding="async" style={`--nw:${mid.width};--nh:${mid.height}`} />
     ))}
   </div>
   <div class="depth__floor"></div>

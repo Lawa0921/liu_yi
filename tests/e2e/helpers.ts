@@ -176,3 +176,11 @@ export function overlapOfBox(a: Box, b: Box): number {
   const area = (b.right - b.left) * (b.bottom - b.top);
   return area > 0 ? (x * y) / area : 0;
 }
+
+/**
+ * 推門換頁（Task 27，styles/transition.css）的已知瀏覽器雜訊：Chromium 在跨文件轉場被下一次換頁打斷時，會把
+ * 「Transition was aborted because of invalid state. ViewTransition opt-in disabled」當成沒人接的 promise rejection 報成 pageerror。
+ * 那些 promise 是瀏覽器內部建立的（轉場在 pagereveal 之前就被取消，事件沒有觸發，頁面腳本接不到），不是頁面程式的錯；
+ * 偶爾在站內連續換頁的測試（點連結、上一頁、再點）裡看到。這些測試的「頁面全程沒有 pageerror」把它列為已知雜訊。
+ */
+export const VIEW_TRANSITION_ABORT_NOISE = /Transition was aborted because of invalid state/;

@@ -79,6 +79,7 @@ npm run build:harness && npx playwright test --project=engine --workers=2  # dis
   標記在 `components/home/Depth.astro`、樣式 `styles/depth.css`、接線 `scripts/home/depth.ts`，配對在 `lib/scene/config.ts`。光點畫布用 `mix-blend-mode: screen` 疊在景深層上（黑的地方透出後面的層，不必動引擎的著色器），
   前景在畫布之上、文字之下（不遮字；簷角的位置避開光點主體，`tests/e2e/home-depth.spec.ts` 量）。遠景、中景、前景隨整頁捲動進度位移（遠景最小、前景最大、方向相反，只動 transform）；減少動態時不位移。
   開場的靜態海報是不透明的底，引擎接手、海報淡出之後景深層才露出。
+  首屏只載遠景、院門（預設中景）與簷角（首屏預算：首頁首屏 1.398 MB），其餘四種中景用 `data-src`，輪到那一段或引擎就緒後 2 秒才載（`budget.spec` 斷言首屏沒有那四張）。
 - **兵器三段是拳師持械**（Task 27）：劍、苗刀、大槍與小孩的持劍不再是單獨一把兵器，而是「拳師拿著兵器」的光點形體（形體 id 仍是 `jian`／`miaodao`／`spear`／`kid-weapon`）。
   剪影（`fig-jian`、`fig-miaodao`、`fig-daqiang`、`fig-kid-weapon`，人本來就拿著兵器）取樣成人形，把剪影自己畫的細兵器剔掉（`shapes/sample-armed.ts` 的 `eraseWeapon`：膠囊與矩形，手與頭的保留圈不剔），再把兵器幾何（`src/qi/data/weapons/*.geo` 的單位形）依剪影裡兵器的鋒尖與尾端擺上去，所以兵器落在手上、方向與握法和剪影一致；
   兵器點占 `weaponShare` 且表面點多（較密、種類較亮），紅纓仍朝下垂。每一件的座標、頭高與點數比例在 `config/armed.ts`（`tests/unit/qi-armed-assets.test.ts` 用真剪影驗：軸穿過手、剔掉之後人形仍是單一的一塊）。

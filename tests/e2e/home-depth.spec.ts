@@ -83,8 +83,10 @@ test.describe('層與素材：桌機 1440×900', () => {
   test('遠景一張、中景五張、前景簷角都在，圖已載入；純裝飾（aria-hidden、不接收指標事件）', async ({ page }) => {
     await open(page);
     const info = await page.evaluate(async () => {
+      // 非預設的四種中景延後載入（引擎就緒後 2 秒）：等它們都載到
       const imgs = [...document.querySelectorAll<HTMLImageElement>('.depth img, .depth-fg img')];
-      await Promise.all(imgs.map((img) => img.decode().catch(() => undefined)));
+      const deadline = Date.now() + 15_000;
+      while (Date.now() < deadline && imgs.some((img) => !img.getAttribute('src') || !img.complete || img.naturalWidth === 0)) await new Promise((resolve) => setTimeout(resolve, 200));
       return {
         count: imgs.length,
         loaded: imgs.every((img) => img.complete && img.naturalWidth > 0),

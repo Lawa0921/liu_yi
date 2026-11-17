@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { QiDebug } from '../../src/qi/engine/qi-stage';
 import { GATE_FADE_MS, GATE_SAFETY_MS } from '../../src/scripts/home/gate';
+import { VIEW_TRANSITION_ABORT_NOISE } from './helpers';
 
 // 入館閘門（Task 25，使用者要求「進入頁面時應該要做一個點擊進入首頁的效果」）：
 //   - 顯示條件：首次進站才擋；無 JS、減少動態、無 WebGL／引擎掛不上、再訪、站內其他頁來、帶 #錨點都不擋。
@@ -33,7 +34,7 @@ function watch(page: Page): void {
 test.afterEach(async ({ page }) => {
   const log = seen.get(page);
   if (!log) return;
-  expect(log.errors, '頁面全程不得有 pageerror 或 console.error').toEqual([]);
+  expect(log.errors.filter((e) => !VIEW_TRANSITION_ABORT_NOISE.test(e)), '頁面全程不得有 pageerror 或 console.error').toEqual([]);
   expect(log.warnings.filter((w) => !KNOWN_WARNING.test(w)), '頁面全程不得有 console.warning').toEqual([]);
 });
 
