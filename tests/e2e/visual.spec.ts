@@ -608,6 +608,63 @@ async function measureHuman(page: Page, device: Device, c: HumanCase): Promise<M
   return metricsOf(measured, device, await textRects(page, beatText(c.beat)), c.pose);
 }
 
+// ── 持械的人（Task 27：兵器三段與小孩持劍是「拳師拿著兵器」）─────────────────
+
+interface ArmedCase {
+  pose: string;
+  beat: BeatId;
+  label: string;
+  /** 先在這個姿勢（大人版）等形體載入，再按「小孩」切到 c.pose。 */
+  kid?: boolean;
+}
+
+const ARMED_CASES: ArmedCase[] = [
+  { pose: 'jian', beat: 'weapon-a', label: 'jian（劍）' },
+  { pose: 'miaodao', beat: 'weapon-b', label: 'miaodao（苗刀）' },
+  { pose: 'spear', beat: 'weapon-c', label: 'spear（大槍）' },
+  { pose: 'kid-weapon', beat: 'weapon-a', label: 'kid-weapon（小孩持劍，切小孩）', kid: true },
+];
+
+/**
+ * 持械形體：外框（人加兵器）的「主導邊」要夠大：寬占 canvas 寬與高占 canvas 高，取大的那個 ≥ 40%（劍與大槍橫著伸、苗刀與小孩直著高，
+ * 所以不分別設下限）。實測（1440×900）：劍 39%×46%、苗刀 29%×72%、大槍 54%×40%、小孩 21%×49%；手機：大槍 97%×19%、苗刀 66%×45%、小孩 43%×31%。
+ */
+const ARMED_DOMINANT_MIN = 0.4;
+
+async function measureArmed(page: Page, device: Device, c: ArmedCase): Promise<{ metrics: Metrics; measured: Measured }> {
+  await open(page, device, 'seen');
+  if (c.kid) {
+    await settlePose(page, c.beat, 'jian');
+    await page.getByRole('button', { name: '小孩' }).click();
+    await expect(html(page)).toHaveAttribute('data-audience', 'kid');
+    await run(page, 200);
+    await expect(html(page)).toHaveAttribute('data-qi-pose', c.pose, READY);
+    await run(page, 3500);
+    expect(await page.evaluate(() => (window as unknown as W).__qi.debug.meanError()), `${c.pose} 已聚合`).toBeLessThan(0.05);
+  } else {
+    await settlePose(page, c.beat, c.pose);
+  }
+  const measured = await shoot(page, `${c.pose}-${device.tag ?? device.slug}`);
+  return { metrics: metricsOf(measured, device, await textRects(page, beatText(c.beat)), c.pose), measured };
+}
+
+for (const device of DEVICES) {
+  test.describe(`引擎截圖：${device.name}`, () => {
+    test.use({ viewport: device.viewport });
+
+    for (const c of ARMED_CASES) {
+      test(`${c.label}：持械的人——完整在畫布內、位置在人形的位置、不壓字、夠大（外框是人加兵器）`, async ({ page }) => {
+        const { metrics, measured } = await measureArmed(page, device, c);
+        expectPlacement(metrics, device);
+        const widthRatio = (measured.figure.right - measured.figure.left) / measured.rect.width;
+        expect(Math.max(widthRatio, metrics.heightRatio), `外框的主導邊（寬占 canvas 寬 ${pct(widthRatio)}、高占 canvas 高 ${pct(metrics.heightRatio)}）≥ ${ARMED_DOMINANT_MIN * 100}%：${metrics.note}`).toBeGreaterThanOrEqual(ARMED_DOMINANT_MIN);
+        expect(metrics.heightRatio, `外框高占 canvas 高 ≤ 90%：${metrics.note}`).toBeLessThanOrEqual(0.9);
+        expect(widthRatio, `外框寬占 canvas 寬 ≤ 100%（不超出畫布）：${metrics.note}`).toBeLessThanOrEqual(1);
+      });
+    }
+  });
+}
+
 for (const device of DEVICES) {
   test.describe(`引擎截圖：${device.name}`, () => {
     test.use({ viewport: device.viewport });

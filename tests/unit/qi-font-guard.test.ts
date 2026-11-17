@@ -25,6 +25,7 @@ const EXPECTED_SUBDIRS = ['src/qi/engine', 'src/qi/engine/shaders', 'src/qi/shap
 /** 只給 `scripts/qi/*` 的 Node 建置腳本與單元測試用的取樣模組。 */
 const NODE_ONLY = [
   'src/qi/shapes/head.ts',
+  'src/qi/shapes/sample-armed.ts',
   'src/qi/shapes/sample-figure.ts',
   'src/qi/shapes/sample-weapon.ts',
   'src/qi/shapes/weapon-snapshot.ts',

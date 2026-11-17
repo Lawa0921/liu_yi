@@ -22,7 +22,7 @@
  *
  * 產出（`renderAllStills`）：`hero-wide.webp`（1440×810）與 `hero-tall.webp`（780×1280）由 `land` 渲出；
  * 每個形體各一張 `<id>.webp`（1000×750）；`stills.json` ＝ `{ [name]: { width, height, bytes } }`（name 不含副檔名）。
- * 兵器的 `.bin` 是橫放的單位形，靜態圖照引擎寬螢幕的擺法加上仰角（`WEAPON_TILT`）。
+ * 兵器三段與小孩持劍的 `.bin` 是持械的人（人加兵器已合成，世界座標與其他人形同一把尺），靜態圖與其他形體一樣直接渲，不另擺位。
  *
  * 寫檔紀律同 `build-shapes.ts`，由共用的 `staged-output.ts` 的 `commitStaged` 負責：先全部渲到 `outDir/.staging/`，都成功才換入；
  * 失敗不留看起來完整的混雜產物（沒有 `stills.json` 也沒有 `.inputs-hash`），下一次整批重建；殘檔清除；`.staging` 的清理是盡力而為。
@@ -155,8 +155,6 @@ const GLOW_FAR = { sigma: 0.02, weight: 0.2 };
 const GLOW_SOURCE_GAIN = 1.0;
 /** WebP 品質：實測 hero 約 28–43 KB（預算 60）、其餘約 21–34 KB（預算 45）；體積門檻由單元測試把關。 */
 const WEBP_QUALITY = 80;
-/** 兵器的仰角（弧度，鋒尖朝右上；引擎寬螢幕的擺法，見試作）。 */
-const WEAPON_TILT: Record<string, number> = { jian: 0.16, miaodao: 0.22, spear: 0.05 };
 
 // ── 小工具 ───────────────────────────────────────────────────────────────────
 const mix = (a: number, b: number, t: number): number => a + (b - a) * t;
@@ -449,23 +447,6 @@ function failedStill(name: string, cause: unknown): Error {
   return new Error(`靜態圖 ${name}：${cause instanceof Error ? cause.message : String(cause)}`, { cause });
 }
 
-/** 兵器是橫放的單位形；照引擎的擺法繞 z 軸轉一個仰角（鋒尖朝右上），其餘形體原樣。 */
-function placed(id: string, shape: Shape): Shape {
-  const tilt = WEAPON_TILT[id];
-  if (!tilt) return shape;
-  const cos = Math.cos(tilt);
-  const sin = Math.sin(tilt);
-  const positions = new Float32Array(shape.positions.length);
-  for (let i = 0; i < shape.count; i++) {
-    const x = shape.positions[i * 3]!;
-    const y = shape.positions[i * 3 + 1]!;
-    positions[i * 3] = x * cos - y * sin;
-    positions[i * 3 + 1] = x * sin + y * cos;
-    positions[i * 3 + 2] = shape.positions[i * 3 + 2]!;
-  }
-  return { ...shape, positions };
-}
-
 /** `shapes.json` 列出的形體 id（形體檔的權威清單）。 */
 function manifestIds(shapesDir: string): string[] {
   let list: unknown;
@@ -536,7 +517,7 @@ export async function renderAllStills(opts: {
       const shapeOf = (id: string): Shape => {
         let shape = shapes.get(id);
         if (!shape) {
-          shape = placed(id, decodeShape(bins.get(id)!));
+          shape = decodeShape(bins.get(id)!);
           shapes.set(id, shape);
         }
         return shape;

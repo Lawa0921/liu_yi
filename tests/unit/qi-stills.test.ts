@@ -416,17 +416,25 @@ describe('renderAllStills：畫面品質（機械可驗的部分）', () => {
     expect(Math.abs(c.y - 0.5)).toBeLessThan(0.1);
   });
 
-  it('兵器是橫放的長條：亮部外框寬 ≥ 影像的 70%，且寬是高的 2 倍以上', () => {
+  it('持械的人（Task 27）：亮部外框占影像寬的 45% 以上、高的 30% 以上（人加兵器，不是橫躺的一條線；實測苗刀約 50%、劍與大槍更寬）；大槍橫伸得更寬', () => {
+    const shares: Record<string, { w: number; h: number }> = {};
     for (const name of ['jian', 'miaodao', 'spear']) {
       const r = rasters.get(name)!;
-      // 兵器細長：刃身的每一欄只有十來個亮點、斜放時每一列有幾十個；環境煙更少
+      // 人形的每一欄有幾十個亮點、每一列也是；兵器細長，那一欄只有十來個亮點，所以用較低的門檻把兵器算進外框；環境煙更少
       const { rows, columns } = litProfile(r, 50);
       const across = litSpan(columns, 8)!;
-      const down = litSpan(rows, 30)!;
-      const width = across.last - across.first + 1;
-      expect(width / r.width, `${name} 寬`).toBeGreaterThanOrEqual(0.7);
-      expect(width / (down.last - down.first + 1), `${name} 長寬比`).toBeGreaterThan(2);
+      const down = litSpan(rows, 8)!;
+      shares[name] = { w: (across.last - across.first + 1) / r.width, h: (down.last - down.first + 1) / r.height };
     }
+    for (const [name, share] of Object.entries(shares)) {
+      expect(share.w, `${name} 寬`).toBeGreaterThanOrEqual(0.45);
+      expect(share.h, `${name} 高`).toBeGreaterThanOrEqual(0.3);
+      expect(share.h, `${name} 高不超出影像`).toBeLessThanOrEqual(0.95);
+    }
+    // 大槍是橫著伸的：寬高比（以像素算）比劍、苗刀都大
+    const aspect = (name: string) => (shares[name]!.w * rasters.get(name)!.width) / (shares[name]!.h * rasters.get(name)!.height);
+    expect(aspect('spear')).toBeGreaterThan(aspect('jian'));
+    expect(aspect('spear')).toBeGreaterThan(aspect('miaodao'));
   });
 
   it('others 是四個人形橫排：連續有亮點的欄分成 4 段（人形之間有空隙），整排占影像寬的 70% 以上、高度不到一半', () => {

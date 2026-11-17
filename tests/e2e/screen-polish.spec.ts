@@ -156,19 +156,21 @@ for (const size of TEXT_SIZES) {
   });
 }
 
-// 大槍要「丈二」，畫面上要夠長：1440×900 下可見長度（光點外框的寬）≥ 700px。
-// 左界若用整個文字欄的盒子，這裡只剩約 540–600px；改用實際文字右緣就留得住（槍尾離字約 24px）。
-test.describe('大槍長度：1440×900', () => {
+// 大槍要「丈二」，畫面上要夠長，而且（Task 27）是拳師拿著它：整體外框是「人加兵器」。1440×900 下外框的寬 ≥ 700px（量到 762px，不比舊規則寬鬆），
+// 高 ≥ 250px（量到 312px：人不是一個小黑點，整體仍醒目）。左界若用整個文字欄的盒子，這裡只剩約 540–600px；改用實際文字右緣就留得住。
+// 持械的人比單獨一把槍多了身體，所以槍尾在人身後、整體外框的左端是槍頭；比例由剪影決定（`config/armed.ts`），不再依視窗換槍長與傾角。
+test.describe('大槍（持械）整體外框：1440×900', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
-  test('聚合後光點外框的寬 ≥ 700px（而且仍在文字右緣之右、導覽之左）', async ({ page }) => {
+  test('聚合後光點外框（人加兵器）：寬 ≥ 700px、高 ≥ 250px，而且仍在文字右緣之右、導覽之左', async ({ page }) => {
     await open(page);
     await settlePose(page, 'weapon-c', 'spear');
     expect(await page.evaluate(() => (window as unknown as W).__qi.debug.meanError()), '已聚合').toBeLessThan(0.05);
     const extent = await page.evaluate(() => (window as unknown as W).__qi.debug.extent());
     const inkRight = await textInkRight(page, 'weapon-c');
     const rail = (await page.locator('nav.home-rail').boundingBox())!;
-    expect(extent.right - extent.left, `大槍可見長度（左 ${extent.left.toFixed(0)}、右 ${extent.right.toFixed(0)}）`).toBeGreaterThanOrEqual(700);
+    expect(extent.right - extent.left, `大槍加拳師的整體外框寬（左 ${extent.left.toFixed(0)}、右 ${extent.right.toFixed(0)}）`).toBeGreaterThanOrEqual(700);
+    expect(extent.bottom - extent.top, `整體外框高（上 ${extent.top.toFixed(0)}、下 ${extent.bottom.toFixed(0)}）：人要看得清楚`).toBeGreaterThanOrEqual(250);
     expect(extent.left, '仍在實際文字右緣之右').toBeGreaterThanOrEqual(inkRight);
     expect(extent.right, '仍在導覽（含光暈）之左').toBeLessThanOrEqual(rail.x - HALO_PX);
   });

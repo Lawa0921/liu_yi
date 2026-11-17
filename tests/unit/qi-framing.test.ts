@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { framingFor, weaponLeftFor, weaponReachFor, WEAPON_LEFT_MARGIN_PX, WEAPON_RIGHT_RESERVE_PX } from '../../src/qi/engine/framing';
+import { framingFor, PORTRAIT_REACH_MARGIN, portraitReachFor, weaponLeftFor, weaponReachFor, WEAPON_LEFT_MARGIN_PX, WEAPON_RIGHT_RESERVE_PX } from '../../src/qi/engine/framing';
 
 /**
  * 取景（試作的值，原本寫在 stage.ts 的 `fit`）：橫向與直向各自決定可視高度與鏡頭位移。
@@ -84,5 +84,26 @@ describe('weaponLeftFor（兵器左端的世界座標下限：不進入該段實
   it('文字排得越右，下限越往右；留的空隙是 24px', () => {
     expect(WEAPON_LEFT_MARGIN_PX).toBe(24);
     expect(weaponLeftFor(1.5, 1000, 600)).toBeGreaterThan(weaponLeftFor(1.5, 1000, 400));
+  });
+});
+
+describe('portraitReachFor（直向版面持械形體的左右界：畫布的左右緣各留 4%，Task 27）', () => {
+  it('以鏡頭的 lookX 為中心對稱；寬 = 可視寬 × (1 − 2 × 邊距)', () => {
+    for (const aspect of [0.4, 0.46, 0.62, 0.8]) {
+      const { visibleH, lookX } = framingFor(aspect, true);
+      const reach = portraitReachFor(aspect);
+      expect((reach.left + reach.right) / 2, `aspect ${aspect}`).toBeCloseTo(lookX, 10);
+      expect(reach.right - reach.left, `aspect ${aspect}`).toBeCloseTo(visibleH * aspect * (1 - 2 * PORTRAIT_REACH_MARGIN), 10);
+    }
+  });
+
+  it('界在畫布可視範圍之內（比可視寬的一半小）、右界在左界之右；邊距是 4%', () => {
+    expect(PORTRAIT_REACH_MARGIN).toBe(0.04);
+    const aspect = 0.46;
+    const { visibleH } = framingFor(aspect, true);
+    const reach = portraitReachFor(aspect);
+    expect(reach.right).toBeGreaterThan(reach.left);
+    expect(reach.right - reach.left).toBeLessThan(visibleH * aspect);
+    expect(reach.right).toBeGreaterThan(0); // armedLayout 要求右界是正數（直向 lookX = 0）
   });
 });

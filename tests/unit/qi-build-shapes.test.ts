@@ -7,10 +7,11 @@ import sharp from 'sharp';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildAllShapes } from '../../scripts/qi/build-shapes';
 import { hashInputs } from '../../scripts/qi/hash';
+import { ARMED } from '../../src/qi/config/armed';
 import { FIGURES } from '../../src/qi/config/figures';
 import { CREST_CENTER_Y, CREST_WORLD_WIDTH, SCROLL, SEAL_CENTER_Y, SEAL_WORLD_SIZE, SHAPES, WEAPON_NAMES } from '../../src/qi/config/shapes';
 import { arrangedSize, figureIndexOf, measureFigures } from '../../src/qi/shapes/arrange';
-import { decodeShape, KIND, SHAPE_COUNT, type Shape } from '../../src/qi/shapes/format';
+import { decodeShape, KIND, kindToW, SHAPE_COUNT, type Shape } from '../../src/qi/shapes/format';
 import { decodeSnapshot, encodeSnapshot } from '../../src/qi/shapes/weapon-snapshot';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
@@ -74,11 +75,11 @@ beforeAll(async () => {
 }, 120_000);
 
 describe('SHAPES 配方', () => {
-  it('鍵恰為十七個形體 id，且等於 FIGURES ∪ 三件兵器 ∪ seal ∪ scroll ∪ crest ∪ others', () => {
+  it('鍵恰為十七個形體 id，且等於 FIGURES ∪ 三件兵器 ∪ kid-weapon（小孩持劍）∪ seal ∪ scroll ∪ crest ∪ others', () => {
     expect([...IDS].sort()).toEqual(
       ['lift', 'land', 'dingzhou', 'chengchui', 'kao', 'jian', 'miaodao', 'spear', 'salute', 'seal', 'scroll', 'crest', 'others', 'kid-wushu', 'kid-defense-a', 'kid-defense-b', 'kid-weapon'].sort(),
     );
-    expect([...IDS].sort()).toEqual([...Object.keys(FIGURES), ...WEAPON_NAMES, 'seal', 'scroll', 'crest', 'others'].sort());
+    expect([...IDS].sort()).toEqual([...Object.keys(FIGURES), ...WEAPON_NAMES, 'kid-weapon', 'seal', 'scroll', 'crest', 'others'].sort());
   });
 
   it('兵器名單與入庫的 .geo 檔一致（不 import weapons.ts）', () => {
@@ -86,9 +87,10 @@ describe('SHAPES 配方', () => {
     expect([...WEAPON_NAMES].sort()).toEqual(geo.sort());
   });
 
-  it('figure 配方的 figure 就是自己的 id；weapon 配方的 name 就是自己的 id', () => {
+  it('figure 配方的 figure 就是自己的 id；三件兵器與小孩持劍是 armed 配方（持械的人），ARMED 的鍵就是自己的 id', () => {
     for (const id of Object.keys(FIGURES)) expect(SHAPES[id]).toEqual({ kind: 'figure', figure: id });
-    for (const name of WEAPON_NAMES) expect(SHAPES[name]).toEqual({ kind: 'weapon', name });
+    for (const id of [...WEAPON_NAMES, 'kid-weapon']) expect(SHAPES[id], id).toEqual({ kind: 'armed', armed: id });
+    expect(Object.keys(ARMED).sort()).toEqual([...WEAPON_NAMES, 'kid-weapon'].sort());
     expect(SHAPES.seal).toEqual({ kind: 'seal' });
     expect(SHAPES.scroll).toEqual({ kind: 'scroll' });
     expect(SHAPES.crest).toEqual({ kind: 'crest' });
@@ -139,7 +141,7 @@ describe('buildAllShapes：第一次建置', () => {
     }
   });
 
-  it('種類合法：人形與 others 只有 0–99，兵器只有 100–104，seal 全是 SEAL，scroll 只有 BAMBOO／DARK，crest 全是 CREST', () => {
+  it('種類合法：人形與 others 只有 0–99，持械形體是人形（0–99）加兵器（100–104），seal 全是 SEAL，scroll 只有 BAMBOO／DARK，crest 全是 CREST', () => {
     for (const id of IDS) {
       const s = decode(OUT, id);
       const kinds = new Set(s.kinds);
@@ -148,8 +150,12 @@ describe('buildAllShapes：第一次建置', () => {
       else if (id === 'scroll') expect([...kinds].sort()).toEqual([KIND.DARK, KIND.BAMBOO].sort());
       else if (id === 'crest') expect([...kinds]).toEqual([KIND.CREST]);
       else {
-        expect(Math.min(...kinds), id).toBeGreaterThanOrEqual(KIND.STEEL);
+        // 持械形體：人形的點（0–99）加兵器的點（STEEL…AURA）；沒有朱印、竹簡、館徽的種類
+        expect(id in ARMED, id).toBe(true);
+        expect(Math.min(...kinds), id).toBeLessThanOrEqual(99);
         expect(Math.max(...kinds), id).toBeLessThanOrEqual(KIND.AURA);
+        expect(kinds.has(KIND.STEEL) || kinds.has(KIND.DARK), `${id} 有兵器的點`).toBe(true);
+        for (const kind of kinds) expect(kind <= 99 || (kind >= KIND.STEEL && kind <= KIND.AURA), `${id} kind ${kind}`).toBe(true);
       }
     }
   });
@@ -183,18 +189,43 @@ describe('buildAllShapes：第一次建置', () => {
     expect(height(decode(OUT, 'land'))).toBeLessThan(2.1);
   });
 
-  it('兵器：非 AURA 點的長軸 x 範圍剛好是長 1（D13 單位形）', () => {
-    for (const name of WEAPON_NAMES) {
-      const s = decode(OUT, name);
-      let lo = Infinity;
-      let hi = -Infinity;
+  it('持械形體：兵器的點比人形密、比人形亮（使用者：兵器部分的點較密、較亮）——每個佔用的 0.04 格裡，兵器表面的點數 ≥ 人形的 1.25 倍，平均 w ≥ 人形的 2 倍', () => {
+    const cell = 0.04;
+    for (const id of Object.keys(ARMED)) {
+      const s = decode(OUT, id);
+      const body = new Map<string, number>();
+      const weapon = new Map<string, number>();
+      let bodyW = 0;
+      let bodyN = 0;
+      let weaponW = 0;
+      let weaponN = 0;
       for (let i = 0; i < s.count; i++) {
-        if (s.kinds[i] === KIND.AURA) continue;
-        const x = s.positions[i * 3]!;
-        lo = Math.min(lo, x);
-        hi = Math.max(hi, x);
+        const kind = s.kinds[i]!;
+        const key = `${Math.floor(s.positions[i * 3]! / cell)},${Math.floor(s.positions[i * 3 + 1]! / cell)}`;
+        if (kind < 100) {
+          body.set(key, (body.get(key) ?? 0) + 1);
+          bodyW += kindToW(kind);
+          bodyN++;
+        } else if (kind !== KIND.AURA) {
+          weapon.set(key, (weapon.get(key) ?? 0) + 1);
+          weaponW += kindToW(kind);
+          weaponN++;
+        }
       }
-      expect(hi - lo, name).toBeCloseTo(1, 2);
+      const mean = (m: Map<string, number>) => [...m.values()].reduce((a, b) => a + b, 0) / m.size;
+      expect(mean(weapon) / mean(body), `${id} 兵器表面的點密度 ÷ 人形`).toBeGreaterThanOrEqual(1.25);
+      expect(weaponW / weaponN / (bodyW / bodyN), `${id} 兵器的平均 w ÷ 人形`).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it('持械形體：腳底在 y = 0（與其他人形同一把尺）、兵器的點占 weaponShare、兵器軸與剪影一致（鋒尖與尾端落在 ARMED 設定的位置）', async () => {
+    for (const [id, def] of Object.entries(ARMED)) {
+      const s = decode(OUT, id);
+      expect(Math.abs(s.min[1]), `${id} 腳底`).toBeLessThan(0.02);
+      const weapon = Array.from({ length: s.count }, (_, i) => i).filter((i) => s.kinds[i]! >= KIND.STEEL);
+      expect(weapon.length / s.count, `${id} 兵器點占比`).toBeCloseTo(def.spec.weaponShare, 2);
+      expect(height(s), `${id} 世界身高（含兵器，人加兵器的外框高）`).toBeGreaterThan(1.2);
+      expect(height(s)).toBeLessThan(2.8);
     }
   });
 });

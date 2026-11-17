@@ -2,7 +2,9 @@
  * 形體配方：哪個形體 id 由什麼做出來（`scripts/qi/build-shapes.ts` 依它在建置時產生 `<id>.bin`）。
  *
  *   - `figure`：剪影取樣，`figure` 是 `FIGURES` 的鍵；比例照 `figureScale`（頭部對齊或 `scaleOverride`）。
- *   - `weapon`：入庫的 `.geo` 快照取樣（D29，建置時不 import `weapons.ts`），單位形（D13）。
+ *   - `armed`：拳師持械（Task 27）：`config/armed.ts` 的 `ARMED[armed]`——剪影取樣（把剪影自己畫的細兵器剔掉）加入庫的 `.geo` 快照取樣的兵器幾何（D29，建置時不 import `weapons.ts`），
+ *     兵器落在剪影的手上、方向與握法與剪影一致（`shapes/sample-armed.ts`）。世界座標與其他人形同一把尺（腳底 y = 0、中線 x = 0）；兵器點較密、較亮。
+ *     取代了 Task 18 以來「單獨一把兵器」的單位形（使用者：苗刀、大槍等粒子應該要有人物拿著的感覺）。
  *   - `seal`：朱印遮罩 `src/assets/seal/seal-liuyi.png` 取樣（`KIND.SEAL`、深度很薄）。
  *   - `scroll`：攤開的竹簡（收費與課表段，Task 25）。程序化產生（`shapes/sample-scroll.ts`），沒有任何輸入檔，所以不含任何字；
  *     幾何見下方 `SCROLL`。`KIND.BAMBOO`（竹片）與 `KIND.DARK`（兩道綁繩）。
@@ -16,13 +18,13 @@
 
 export type ShapeRecipe =
   | { kind: 'figure'; figure: string }
-  | { kind: 'weapon'; name: 'jian' | 'miaodao' | 'spear' }
+  | { kind: 'armed'; armed: 'jian' | 'miaodao' | 'spear' | 'kid-weapon' }
   | { kind: 'seal' }
   | { kind: 'scroll' }
   | { kind: 'crest' }
   | { kind: 'compose'; parts: { figure: string; scale: number; x: number }[] };
 
-/** 三件兵器（與 `src/qi/data/weapons/*.geo` 一一對應）。 */
+/** 三件兵器的幾何快照（與 `src/qi/data/weapons/*.geo` 一一對應；持械形體 `armed` 用它們）。 */
 export const WEAPON_NAMES = ['jian', 'miaodao', 'spear'] as const;
 
 /** 朱印的世界尺寸：遮罩全寬（512 px）對應的世界單位。比 land 的身高 2 略小，收成「一顆印」。 */
@@ -63,9 +65,9 @@ export const SHAPES: Record<string, ShapeRecipe> = {
   dingzhou: { kind: 'figure', figure: 'dingzhou' },
   chengchui: { kind: 'figure', figure: 'chengchui' },
   kao: { kind: 'figure', figure: 'kao' },
-  jian: { kind: 'weapon', name: 'jian' },
-  miaodao: { kind: 'weapon', name: 'miaodao' },
-  spear: { kind: 'weapon', name: 'spear' },
+  jian: { kind: 'armed', armed: 'jian' },
+  miaodao: { kind: 'armed', armed: 'miaodao' },
+  spear: { kind: 'armed', armed: 'spear' },
   salute: { kind: 'figure', figure: 'salute' },
   seal: { kind: 'seal' },
   scroll: { kind: 'scroll' },
@@ -84,5 +86,5 @@ export const SHAPES: Record<string, ShapeRecipe> = {
   'kid-wushu': { kind: 'figure', figure: 'kid-wushu' },
   'kid-defense-a': { kind: 'figure', figure: 'kid-defense-a' },
   'kid-defense-b': { kind: 'figure', figure: 'kid-defense-b' },
-  'kid-weapon': { kind: 'figure', figure: 'kid-weapon' },
+  'kid-weapon': { kind: 'armed', armed: 'kid-weapon' },
 };

@@ -62,16 +62,15 @@ function insideDistance(mask: Uint8Array, w: number, h: number): Float32Array {
   return d;
 }
 
-export function sampleFigure(img: FigureImage, scale: number, opts: { count: number; seed: number }): Shape {
-  const { alpha, width, height } = img;
-  const { count, seed } = opts;
-  if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0 || alpha.length !== width * height) {
-    throw new RangeError(`剪影尺寸不符：alpha.length = ${alpha.length}，寬高 ${width}×${height}`);
-  }
-  if (!(scale > 0) || !Number.isFinite(scale)) throw new RangeError(`scale 必須是正數：${scale}`);
-  if (!Number.isInteger(count) || count <= 0) throw new RangeError(`count 必須是正整數：${count}`);
+/** 取樣的參考框：不透明外框的中線（原圖 px）與腳底（外框底的下緣，原圖 px）。 */
+export interface FigureFrame {
+  centerPx: number;
+  footPx: number;
+}
 
-  // 不透明外框（原解析度）：腳底與中線都以它為準
+/** 不透明外框 → 參考框（`sampleFigure` 與持械形體 `sample-armed.ts` 共用同一個算法）。全透明丟 `RangeError`。 */
+export function figureFrame(img: FigureImage): FigureFrame {
+  const { alpha, width, height } = img;
   let minX = width;
   let maxX = -1;
   let maxY = -1;
@@ -85,6 +84,20 @@ export function sampleFigure(img: FigureImage, scale: number, opts: { count: num
     }
   }
   if (maxX < 0) throw new RangeError('剪影全透明，沒有東西可取樣');
+  return { centerPx: (minX + maxX + 1) / 2, footPx: maxY + 1 };
+}
+
+export function sampleFigure(img: FigureImage, scale: number, opts: { count: number; seed: number; frame?: FigureFrame }): Shape {
+  const { alpha, width, height } = img;
+  const { count, seed } = opts;
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0 || alpha.length !== width * height) {
+    throw new RangeError(`剪影尺寸不符：alpha.length = ${alpha.length}，寬高 ${width}×${height}`);
+  }
+  if (!(scale > 0) || !Number.isFinite(scale)) throw new RangeError(`scale 必須是正數：${scale}`);
+  if (!Number.isInteger(count) || count <= 0) throw new RangeError(`count 必須是正整數：${count}`);
+
+  // 不透明外框（原解析度）：腳底與中線都以它為準；持械形體（`sample-armed.ts`）把細兵器剔掉之後外框會變，所以可以由呼叫端給原圖的框
+  const frame = opts.frame ?? figureFrame(img);
 
   // 縮成取樣網格：每格記不透明像素數與總像素數
   const gw = Math.max(1, Math.round(width * GRID));
@@ -125,8 +138,7 @@ export function sampleFigure(img: FigureImage, scale: number, opts: { count: num
 
   const unit = WORLD_UNIT_PER_LAND_PX * scale; // 世界單位 / 原圖 px
   const cellWorld = unit * Math.sqrt(cellW * cellH); // 世界單位 / 格（距離換算用）
-  const centerPx = (minX + maxX + 1) / 2;
-  const footPx = maxY + 1;
+  const { centerPx, footPx } = frame;
   const random = rng(seed);
 
   const positions = new Float32Array(count * 3);

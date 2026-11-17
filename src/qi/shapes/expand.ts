@@ -63,15 +63,6 @@ export const CREST_JITTER = 0.002;
 const CREST_W = kindToW(KIND.CREST);
 const JITTER_SEED = 0x6a17;
 
-/** 試作的兵器擺放（D13）：寬螢幕與窄螢幕各自的全長（世界單位）與傾角（弧度，鋒尖朝右上）。 */
-const WEAPON_LAYOUT: Record<'jian' | 'miaodao' | 'spear', { wide: [number, number]; narrow: [number, number] }> = {
-  jian: { wide: [2.9, 0.16], narrow: [1.9, 0.5] },
-  miaodao: { wide: [3.2, 0.22], narrow: [2.1, 0.55] },
-  spear: { wide: [3.8, 0.05], narrow: [2.3, 0.45] },
-};
-/** 兵器中點的世界高度（與人形身高一半同一帶）。 */
-const WEAPON_MID_HEIGHT = 1.05;
-
 /** 收費段的氣流範圍（世界單位）：每個軸都比環境煙（x ±5.8、y −0.2–3.4、z −5.4–3.8）寬。 */
 const FLOW_SEED = 0x0f10;
 const FLOW_HALF_WIDTH = 7.5;
@@ -124,18 +115,18 @@ export function ambientField(count: number, seed: number = AMBIENT_SEED): Ambien
 }
 
 /**
- * 兵器的擺放（D13）：長度、傾角與中點高度依視窗寬窄（`wide`）取試作的數值。
- * `maxRight`／`minLeft`（寬版才有意義）：最右、最左的光點不得超出這個世界 x 範圍（見 `Layout.maxRight`、`Layout.minLeft`）；
- * 窄版（直向）沒有右緣導覽、文字在下方，不套用。兩個都給而窗太窄（< `WEAPON_MIN_SPAN`）時把 `minLeft` 往左放寬到剛好那麼寬。
+ * 持械形體（Task 27：拳師持械，`shapes/sample-armed.ts`）的擺放：形體檔存的就是「人與兵器已經合在一起」的世界座標（腳底在 y = 0、
+ * 兵器的方向與握法由剪影決定），所以不再依視窗換兵器的長度與傾角——`scale` 1、不旋轉、不平移，整個形體與其他人形同一把尺。
+ * 縮放只剩一件事：整體外框（人加兵器）要放得進 `minLeft`…`maxRight` 這個世界 x 的窗（見 `Layout.maxRight`、`Layout.minLeft`）。
+ * 橫向版面：右界避開右緣的段落導覽、左界避開該段文字（`engine/framing.ts`）；直向版面（文字在下）：窗就是畫布的左右緣（`portraitReachFor`）。
+ * 超過就以腳底（offset 在 y = 0）為中心等比例縮小，人仍站在地面線上；兩個都給而窗太窄（< `WEAPON_MIN_SPAN`）時把 `minLeft` 往左放寬到剛好那麼寬。
  */
-export function weaponLayout(name: 'jian' | 'miaodao' | 'spear', wide: boolean, maxRight?: number, minLeft?: number): Layout {
-  if (!Object.hasOwn(WEAPON_LAYOUT, name)) throw new RangeError(`Unknown weapon: ${String(name)}`);
-  if (maxRight !== undefined && !(Number.isFinite(maxRight) && maxRight > 0)) throw new RangeError(`Weapon maxRight must be a positive finite number: ${maxRight}`);
-  if (minLeft !== undefined && !Number.isFinite(minLeft)) throw new RangeError(`Weapon minLeft must be a finite number: ${minLeft}`);
-  const [scale, rotZ] = WEAPON_LAYOUT[name][wide ? 'wide' : 'narrow'];
-  const layout: Layout = { scale, rotZ, offset: [0, WEAPON_MID_HEIGHT, 0] };
-  if (wide && maxRight !== undefined) layout.maxRight = maxRight;
-  if (wide && minLeft !== undefined) layout.minLeft = maxRight !== undefined ? Math.min(minLeft, maxRight - WEAPON_MIN_SPAN) : minLeft;
+export function armedLayout(maxRight?: number, minLeft?: number): Layout {
+  if (maxRight !== undefined && !(Number.isFinite(maxRight) && maxRight > 0)) throw new RangeError(`Armed maxRight must be a positive finite number: ${maxRight}`);
+  if (minLeft !== undefined && !Number.isFinite(minLeft)) throw new RangeError(`Armed minLeft must be a finite number: ${minLeft}`);
+  const layout: Layout = { scale: 1, rotZ: 0, offset: [0, 0, 0] };
+  if (maxRight !== undefined) layout.maxRight = maxRight;
+  if (minLeft !== undefined) layout.minLeft = maxRight !== undefined ? Math.min(minLeft, maxRight - WEAPON_MIN_SPAN) : minLeft;
   return layout;
 }
 

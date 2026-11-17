@@ -25,13 +25,13 @@ import { DataTexture, FloatType, RGBAFormat, Vector3, WebGLRenderer } from 'thre
 import { BURSTS, type Burst, type PoseId } from '../config/poses';
 import { CREST_CENTER_Y, CREST_WORLD_HEIGHT, CREST_WORLD_WIDTH, SHAPES } from '../config/shapes';
 import { arrangeFigures, measureFigures } from '../shapes/arrange';
-import { ambientField, expandTargets, flowTargets, weaponLayout, type AmbientField } from '../shapes/expand';
+import { ambientField, armedLayout, expandTargets, flowTargets, type AmbientField } from '../shapes/expand';
 import type { Shape } from '../shapes/format';
 import type { ShapeLoader } from '../shapes/loader';
 import { floatTargets } from './caps';
 import { burstSpeed, EXHALE, inhaleDamp, inhaleStreak, SNAP_DAMP_GAIN, streakLength } from './effects';
 import { forcesFor } from './forces';
-import { weaponLeftFor, weaponReachFor } from './framing';
+import { portraitReachFor, weaponLeftFor, weaponReachFor } from './framing';
 import { INHALE_AT, introState, type IntroState } from './intro';
 import { othersFit } from './others-layout';
 import { createPointer, type Pointer } from './pointer';
@@ -252,8 +252,8 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
   const askPortrait = (): boolean => (o.portrait ? o.portrait() : isPortrait(cssWidth, cssHeight));
   let portrait = askPortrait();
   /**
-   * 兵器擺位的條件：直向用窄版長度；橫向用寬版長度，並依畫布大小留出右緣（段落導覽與槍頭光暈）的位置、
-   * 依「該段實際文字」的右緣讓出左邊（`weaponReachFor`、`weaponLeftFor`），所以橫向時畫布或文字一變，兵器的位置與長度也跟著變。
+   * 持械形體擺位的條件：橫向依畫布大小留出右緣（段落導覽與槍頭光暈）的位置、依「該段實際文字」的右緣讓出左邊（`weaponReachFor`、`weaponLeftFor`），
+   * 所以橫向時畫布或文字一變，形體的位置與大小也跟著變；直向用畫布的左右緣。
    * 字串鍵讓目標快取比較「擺位有沒有變」；每次換姿勢（換 beat）、`resize`、`relayout` 都重新量。
    */
   const weaponReach = (): number | undefined => (portrait ? undefined : weaponReachFor(cssWidth / cssHeight, cssWidth));
@@ -261,8 +261,23 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
     const textRight = portrait ? undefined : o.textRight?.(id);
     return textRight === undefined ? undefined : weaponLeftFor(cssWidth / cssHeight, cssWidth, textRight);
   };
-  const isWeapon = (id: PoseId): boolean => SHAPES[id]?.kind === 'weapon';
-  const weaponKey = (id: PoseId): string => (isWeapon(id) ? `${weaponReach()?.toFixed(4) ?? 'narrow'}|${weaponReachLeft(id)?.toFixed(4) ?? '-'}` : '');
+  /**
+   * 持械形體（Task 27：拳師持械，兵器三段與小孩的持劍）：整體外框（人加兵器）要放進 `armedWindow` 的左右界。橫向＝右緣避開段落導覽、左緣避開該段文字；
+   * 直向＝畫布的左右緣（`portraitReachFor`）。
+   */
+  const isWeapon = (id: PoseId): boolean => SHAPES[id]?.kind === 'armed';
+  const armedWindow = (id: PoseId): { right: number | undefined; left: number | undefined } => {
+    if (portrait) {
+      const reach = portraitReachFor(cssWidth / cssHeight);
+      return { right: reach.right, left: reach.left };
+    }
+    return { right: weaponReach(), left: weaponReachLeft(id) };
+  };
+  const weaponKey = (id: PoseId): string => {
+    if (!isWeapon(id)) return '';
+    const w = armedWindow(id);
+    return `${portrait ? 'portrait' : 'wide'}|${w.right?.toFixed(4) ?? '-'}|${w.left?.toFixed(4) ?? '-'}`;
+  };
   /**
    * 合成形體（others）的排列條件：橫向固定一種；直向依畫布大小與文字上緣（`textTop`）。
    * 呼叫端量不到文字時是 undefined（`othersFit` 當作沒有）。
@@ -365,7 +380,8 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
         const placed = othersFit({ boxes, portrait, cssWidth, cssHeight, textTop: composeTextTop(id) });
         data = expandTargets(arrangeFigures(shape, centers, boxes, placed.arrangement, placed.offset), side, ambient);
       } else {
-        data = expandTargets(shape, side, ambient, recipe?.kind === 'weapon' ? weaponLayout(recipe.name, !portrait, weaponReach(), weaponReachLeft(id)) : undefined);
+        const reach = recipe?.kind === 'armed' ? armedWindow(id) : undefined;
+        data = expandTargets(shape, side, ambient, reach ? armedLayout(reach.right, reach.left) : undefined);
       }
     }
     const texture = new DataTexture(data, side, side, RGBAFormat, FloatType);
