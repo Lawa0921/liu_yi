@@ -200,26 +200,6 @@
   left: -2%;
 }
 
-/*
- * 廊柱：只取一根柱子（連著斗拱托住的橫梁一角），貼著右緣、從地面立到頂；翻轉在左緣。
- * 原圖是兩柱一梁的門形，整張放進來會像日本鳥居（設計 §4 的反目標，審查指出），所以用 clip-path 只留右邊那一根，
- * 橫梁的斷口用 mask 淡出。柱腳貼著場景下緣（不浮在半空）；圖高略大於場景高，橫梁與斗拱在上緣內。
- */
-.scene__img[data-asset='fg-pillars'] {
-  right: calc(var(--scene-h) * -0.09);
-  bottom: -3%;
-  width: auto;
-  height: calc(var(--scene-h) * 1.04);
-  clip-path: inset(0 0 0 82%);
-  -webkit-mask-image: linear-gradient(to right, transparent 82%, #000 89%);
-  mask-image: linear-gradient(to right, transparent 82%, #000 89%);
-}
-
-.scene__img[data-asset='fg-pillars'][data-flip='-1'] {
-  right: auto;
-  left: calc(var(--scene-h) * -0.09);
-}
-
 /* 窗櫺：貼著左下角，內側漸隱（近景失焦的味道） */
 .scene__img[data-asset='fg-lattice'] {
   left: -5%;
@@ -265,10 +245,6 @@
   .scene__img[data-asset='fg-eave'] {
     top: -3%;
     width: 54%;
-  }
-
-  .scene__img[data-asset='fg-pillars'] {
-    height: calc(var(--scene-h) * 0.9);
   }
 
   .scene__img[data-asset='fg-lattice'] {

@@ -47,12 +47,12 @@ function scene(mid: string, subject: string, fg: (string | [string, 'flip'])[], 
 
 export const PAGE_SCENES: Record<PageSceneKind, SceneSpec> = {
   // 課程總覽：站樁的人物，滑過或聚焦課程卡時換成該課的剪影（`Scene.astro` 的 swap）
-  courses: scene('bg-mid-gate', 'fig-zhenjiao-land', ['fg-pillars']),
+  courses: scene('bg-mid-gate', 'fig-zhenjiao-land', ['fg-eave', 'fg-lattice']),
   coaches: scene('mid-banner', 'fig-salute', ['fg-eave', 'fg-steps']),
   // 窗櫺在左下、簷角在右上（窗櫺翻到右下會蓋住手機上人物的腳）
   coach: scene('mid-drum', 'fig-salute', ['fg-lattice', 'fg-eave']),
   // 場地：空場。主體是場上的木人樁（石鎖看起來像「禁止」的符號，已拿掉）
-  facility: scene('bg-mid-gate', 'mid-dummy', ['fg-steps', 'fg-pillars']),
+  facility: scene('bg-mid-gate', 'mid-dummy', ['fg-steps', 'fg-eave']),
   pricing: scene('mid-banner', 'fig-zhenjiao', ['fg-lattice', ['fg-steps', 'flip']]),
   schedule: scene('mid-drum', 'fig-zhenjiao-land', [['fg-eave', 'flip']]),
   // 404：一個人收勢站在空院子裡
@@ -62,10 +62,11 @@ export const PAGE_SCENES: Record<PageSceneKind, SceneSpec> = {
 /** 每門課各自的場景（鍵是課程 id＝檔名）：人物專屬。 */
 export const COURSE_SCENES: Record<string, SceneSpec> = {
   bajiquan: scene('bg-mid-gate', 'fig-dingzhou', ['fg-eave', 'fg-steps']),
-  sanshou: scene('mid-dummy', 'fig-chengchui', ['fg-pillars'], { subject: true }),
+  // 人物翻轉在左（34%）：窗櫺放右下（左下會蓋住人物的腳），石階在左下（低，在腳下）
+  sanshou: scene('mid-dummy', 'fig-chengchui', [['fg-lattice', 'flip'], 'fg-steps'], { subject: true }),
   'chinese-weapons': scene('bg-mid-rack', 'fig-jian', ['fg-rack-close', 'fg-eave']),
   'kids-martial-arts': scene('mid-banner', 'fig-kid-wushu', ['fg-eave', 'fg-lattice']),
-  'kids-self-defense': scene('mid-drum', 'fig-kid-defense-a', [['fg-pillars', 'flip'], ['fg-steps', 'flip']], { subject: true }),
+  'kids-self-defense': scene('mid-drum', 'fig-kid-defense-a', [['fg-eave', 'flip'], ['fg-steps', 'flip']], { subject: true }),
   'kids-weapons': scene('bg-mid-rack', 'fig-kid-weapon', [['fg-eave', 'flip']], { mid: true }),
   bjj: scene('mid-drum', 'fig-kao', ['fg-lattice']),
   'core-yoga': scene('mid-banner', 'fig-zhenjiao', [['fg-eave', 'flip'], ['fg-steps', 'flip']]),
@@ -75,13 +76,12 @@ export const COURSE_SCENES: Record<string, SceneSpec> = {
  * 每種前景素材貼在場景的哪個角落（不翻轉時）。`v` 是上緣、下緣或整個高度（貼著一側的邊緣），`h` 是左或右；翻轉（flip）把左右對調。
  * `styles/scene.css` 照這張表放位置；單元測試確認同一場景的兩張前景在左右兩側、不擠在同一個角落（使用者的審查：兒童武術的兩張前景都在左下，擠成一團）。
  */
-export const FG_ANCHOR: Record<string, { v: 'top' | 'bottom' | 'full'; h: 'left' | 'right' }> = {
+export const FG_ANCHOR: Record<string, { v: 'top' | 'bottom'; h: 'left' | 'right' }> = {
   'fg-eave': { v: 'top', h: 'right' },
   'fg-lattice': { v: 'bottom', h: 'left' },
   'fg-steps': { v: 'bottom', h: 'left' },
   'fg-rack-close': { v: 'bottom', h: 'left' },
-  // 單根廊柱（上有斗拱托住的橫梁一角）貼著右緣、從地面立到頂：只取一根柱子，不是兩柱一梁的門形（那個會像日本鳥居）
-  'fg-pillars': { v: 'full', h: 'right' },
+  // （廊柱 fg-pillars 已拿掉：兩柱一梁像日本鳥居；只取單柱，頂端的平直橫梁仍呈 T 字，複審員與控制者都認為像鳥居的一角，所以整件不用。）
 };
 
 /** 一張前景（含翻轉）實際貼的角落，例如 `top-right`、`bottom-left`、`full-left`。 */
@@ -106,9 +106,9 @@ export const CATEGORY_SCENES: Record<CourseCategory, Record<CourseAudience, Scen
     all: scene('bg-mid-gate', 'fig-dingzhou', ['fg-eave']),
   },
   combat: {
-    adult: scene('mid-dummy', 'fig-chengchui', ['fg-pillars']),
-    kid: scene('mid-dummy', 'fig-kid-defense-a', ['fg-pillars']),
-    all: scene('mid-dummy', 'fig-chengchui', ['fg-pillars']),
+    adult: scene('mid-dummy', 'fig-chengchui', ['fg-eave']),
+    kid: scene('mid-dummy', 'fig-kid-defense-a', [['fg-eave', 'flip']]),
+    all: scene('mid-dummy', 'fig-chengchui', ['fg-eave']),
   },
   weapon: {
     adult: scene('bg-mid-rack', 'fig-jian', ['fg-eave']),

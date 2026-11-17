@@ -173,6 +173,13 @@ describe('前景的錨點（FG_ANCHOR）', () => {
     ...Object.entries(CATEGORY_SCENES).flatMap(([category, byAudience]) => Object.entries(byAudience).map(([audience, spec]) => [`${category}/${audience}`, spec] as [string, SceneSpec])),
   ];
 
+  it('廊柱（fg-pillars）整件不用：頂端的平直橫梁呈 T 字，像日本鳥居的一角（設計 §4 反目標）；沒有場景引用、素材與錨點都不在', () => {
+    const used = allScenes.flatMap(([, spec]) => spec.fg.map((layer) => layer.asset));
+    expect(used.filter((asset) => /pillar/.test(asset))).toEqual([]);
+    expect(Object.keys(FG_ANCHOR).filter((asset) => /pillar/.test(asset))).toEqual([]);
+    expect(readdirSync(fileURLToPath(SILHOUETTES)).filter((file) => /pillar/.test(file))).toEqual([]);
+  });
+
   it('每一種前景素材都有錨點；翻轉把左右對調', () => {
     const used = new Set(allScenes.flatMap(([, spec]) => spec.fg.map((layer) => layer.asset)));
     for (const asset of used) expect(FG_ANCHOR[asset], asset).toBeTruthy();
