@@ -368,6 +368,54 @@ describe('renderAllStills：畫面品質（機械可驗的部分）', () => {
     expect(aspect).toBeLessThan(1.25);
   });
 
+  it('竹簡（scroll）與光點館徽（crest）的靜態圖是金色的：亮部 R > G > B、沒有朱紅（朱印才是紅的）', () => {
+    for (const name of ['scroll', 'crest']) {
+      const r = rasters.get(name)!;
+      let sr = 0;
+      let sg = 0;
+      let sb = 0;
+      let n = 0;
+      for (let i = 0; i < r.width * r.height; i++) {
+        if (luma(r, i) <= 60) continue;
+        sr += r.data[i * 3]!;
+        sg += r.data[i * 3 + 1]!;
+        sb += r.data[i * 3 + 2]!;
+        n++;
+      }
+      expect(n, `${name} 亮部像素`).toBeGreaterThan(1000);
+      expect(sr / n, name).toBeGreaterThan(sg / n);
+      expect(sg / n, name).toBeGreaterThan(sb / n);
+      expect(redPixels(r), `${name} 沒有朱紅`).toBeLessThan(100);
+    }
+  });
+
+  it('竹簡的靜態圖是橫的長方形（亮部外框寬高比 1.2–1.9）、置中；比光點館徽淡（亮度 > 100 的像素更少）', () => {
+    const scroll = rasters.get('scroll')!;
+    const { rows, columns } = litProfile(scroll, 50);
+    const across = litSpan(columns, 30)!;
+    const down = litSpan(rows, 30)!;
+    const aspect = (across.last - across.first + 1) / (down.last - down.first + 1);
+    expect(aspect).toBeGreaterThan(1.2);
+    expect(aspect).toBeLessThan(1.9);
+    const c = brightCentroid(scroll, 50);
+    expect(Math.abs(c.x - 0.5)).toBeLessThan(0.08);
+    expect(Math.abs(c.y - 0.5)).toBeLessThan(0.08);
+    expect(brightShare(scroll, 100)).toBeLessThan(brightShare(rasters.get('crest')!, 100));
+  });
+
+  it('光點館徽的靜態圖大致方正、置中（獅子）：亮部外框寬高比 0.9–1.3，質心在中央 ±10%', () => {
+    const crest = rasters.get('crest')!;
+    const { rows, columns } = litProfile(crest, 50);
+    const across = litSpan(columns, 30)!;
+    const down = litSpan(rows, 30)!;
+    const aspect = (across.last - across.first + 1) / (down.last - down.first + 1);
+    expect(aspect).toBeGreaterThan(0.9);
+    expect(aspect).toBeLessThan(1.3);
+    const c = brightCentroid(crest, 50);
+    expect(Math.abs(c.x - 0.5)).toBeLessThan(0.1);
+    expect(Math.abs(c.y - 0.5)).toBeLessThan(0.1);
+  });
+
   it('兵器是橫放的長條：亮部外框寬 ≥ 影像的 70%，且寬是高的 2 倍以上', () => {
     for (const name of ['jian', 'miaodao', 'spear']) {
       const r = rasters.get(name)!;

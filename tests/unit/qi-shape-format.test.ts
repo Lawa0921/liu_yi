@@ -181,7 +181,7 @@ describe('形體檔格式 QSH1 v1', () => {
     expect(() => encodeShape({ ...shape, kinds: new Uint8Array(7) })).toThrow();
   });
 
-  it('kindToW：0–99 → kind/99；STEEL..AURA → 2..6；SEAL → 7', () => {
+  it('kindToW：0–99 → kind/99；STEEL..AURA → 2..6；SEAL → 7；BAMBOO → 8；CREST → 9', () => {
     expect(kindToW(0)).toBe(0);
     expect(kindToW(50)).toBeCloseTo(0.505, 3);
     expect(kindToW(99)).toBe(1);
@@ -191,15 +191,17 @@ describe('形體檔格式 QSH1 v1', () => {
     expect(kindToW(KIND.DARK)).toBe(5);
     expect(kindToW(KIND.AURA)).toBe(6);
     expect(kindToW(KIND.SEAL)).toBe(7);
+    expect(kindToW(KIND.BAMBOO)).toBe(8);
+    expect(kindToW(KIND.CREST)).toBe(9);
   });
 
-  it('kindToW：超出定義的 kind（106、−1、非整數）throw', () => {
-    expect(() => kindToW(106)).toThrow(RangeError);
+  it('kindToW：超出定義的 kind（108、−1、非整數）throw', () => {
+    expect(() => kindToW(108)).toThrow(RangeError);
     expect(() => kindToW(-1)).toThrow(RangeError);
     expect(() => kindToW(1.5)).toThrow(RangeError);
   });
 
   it('KIND 常數值：人形 0–99 之外從 100 起', () => {
-    expect(KIND).toEqual({ STEEL: 100, BRASS: 101, RED: 102, DARK: 103, AURA: 104, SEAL: 105 });
+    expect(KIND).toEqual({ STEEL: 100, BRASS: 101, RED: 102, DARK: 103, AURA: 104, SEAL: 105, BAMBOO: 106, CREST: 107 });
   });
 });

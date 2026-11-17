@@ -44,7 +44,7 @@ npm run build:harness && npx playwright test --project=engine --workers=2  # dis
 - 色彩、字體、外框尺寸都在 `src/styles/tokens.css`；元件只用語意色變數（`--color-*`）。
 - 紋樣（回紋、窗櫺、海水紋、顆粒）、匾額、方印、進場效果在 `src/styles/ornament.css`；固定外框在 `src/styles/chrome.css` 與 `src/components/Frame.astro`。
 - 兵器、八方、擂台的線稿是自繪 SVG，在 `src/components/ornament/`（兵器線稿現在是 3D 兵器的退路）。
-- 首頁是「氣聚成人」：一張固定的 WebGL 畫布，光點隨捲動聚成人形、兵器與朱印（見下節）；其他頁的進場效果是 IntersectionObserver 加 CSS（`src/scripts/reveal.ts`）。已不使用 GSAP。
+- 首頁是「氣聚成人」：一張固定的 WebGL 畫布，光點隨捲動聚成人形、兵器、攤開的竹簡（收費課表）與燙金獅子館徽（預約）（見下節）；其他頁的進場效果是 IntersectionObserver 加 CSS（`src/scripts/reveal.ts`）。已不使用 GSAP。
 - 全站字型只有 TW-Kai 一種、字重 400（見〈字型〉）。
 
 ## 3D 兵器與特殊互動（第二版，設計文件 §15）
@@ -74,13 +74,13 @@ npm run build:harness && npx playwright test --project=engine --workers=2  # dis
 
 ### 素材產線
 
-- **形體檔與靜態圖是建置產物**（`src/assets/generated/qi/`，已忽略）：`integrations/qi-assets.ts` 在建置時由入庫的剪影、兵器快照與朱印遮罩產生，輸入雜湊不變就跳過；CI 不需要 Python、OpenAI 金鑰或字型原檔。
+- **形體檔與靜態圖是建置產物**（`src/assets/generated/qi/`，已忽略）：`integrations/qi-assets.ts` 在建置時由入庫的剪影、兵器快照、朱印遮罩與館徽圖產生（竹簡是程序化的幾何，沒有輸入檔，所以不含任何字），輸入雜湊不變就跳過；CI 不需要 Python、OpenAI 金鑰或字型原檔。
 - **剪影**（`src/assets/silhouettes/`）：本機工具 `tools/silhouettes/{gen.py,postprocess.py,prompts.json}` 以 OpenAI Images 生成、後處理並做機械品管（金鑰只在執行時從 `%APPDATA%/agent-sprite-forge/config.json` 讀取，不得寫進 repo 或輸出）。
   提示詞、raw 雜湊、請求數與 QA 結果記在 `provenance.json`；品管閘門是 `scripts/qi/silhouette-qa.ts`（`tests/unit/silhouette-assets.test.ts` 驗已入庫的圖）。raw PNG 不入庫。
   沒被首頁使用的剪影（`bg-*`、`mid-*`、`fg-*` 等）刻意保留。
 - **朱印遮罩**（`src/assets/seal/seal-liuyi.png`）：`tools/seal/render-seal.py` 以崇羲篆體渲出 512×512 的 alpha 遮罩。字型檔（CC BY-ND 3.0 TW）只放在本機 `~/.cache/liu_yi-fonts/`，絕不入庫（`tests/unit/seal-asset.test.ts` 會掃）。
 - **兵器快照**（`src/qi/data/weapons/*.geo`）：改了 `src/scripts/three/weapons.ts` 的造型後執行 `npm run qi:snapshot-weapons` 重新產生並入庫。
-- **燙金獅子館徽**（`src/assets/images/crest-lion.png`）：開場區用的透明底金色版。`scripts/crest/render-crest.ts` 由 `logo_large.jpg`（黑底米白線條）轉出——亮度當不透明度、換成古金色帶；改了來源或色帶後執行 `npm run crest:build` 重建並入庫（`tests/unit/crest-asset.test.ts` 會驗成品沒過期）。首頁用 `<Image>` 輸出響應式 webp。
+- **燙金獅子館徽**（`src/assets/images/crest-lion.png`）：開場區用的透明底金色版。`scripts/crest/render-crest.ts` 由 `logo_large.jpg`（黑底米白線條）轉出——亮度當不透明度、換成古金色帶；改了來源或色帶後執行 `npm run crest:build` 重建並入庫（`tests/unit/crest-asset.test.ts` 會驗成品沒過期）。首頁用 `<Image>` 輸出響應式 webp；預約段的光點館徽（`crest` 形體）也是由這張圖依亮度取樣（亮線多取、暗面少取）。
 - 本機 Python 工具一律用 `uv run --no-project --python 3.11 --with … python <腳本>` 執行，用法寫在各腳本檔頭。
 
 ## 字型

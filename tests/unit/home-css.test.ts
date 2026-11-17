@@ -123,25 +123,43 @@ describe('home.css 的退回與海報規則（Task 20）', () => {
   });
 });
 
-describe('home.css 的朱印點擊區規則（Task 21）', () => {
-  it('引擎在跑（html.js:not(.qi-static)）時 .seal-hit 預設 display:none，要等腳本標 data-placed 才顯示、定位在 --seal-* 上', () => {
-    const base = /html\.js:not\(\.qi-static\)\s+\.seal-hit\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+describe('home.css 的館徽點擊區規則（Task 21 的朱印點擊區，Task 25 改成館徽）', () => {
+  it('引擎在跑（html.js:not(.qi-static)）時 .crest-hit 預設 display:none，要等腳本標 data-placed 才顯示、定位在 --hit-* 上', () => {
+    const base = /html\.js:not\(\.qi-static\)\s+\.crest-hit\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
     expect(base).toMatch(/position\s*:\s*fixed/);
     expect(base).toMatch(/display\s*:\s*none/);
-    for (const name of ['--seal-x', '--seal-y', '--seal-w', '--seal-h']) expect(base).toContain(`var(${name}`);
-    expect(css).toMatch(/html\.js:not\(\.qi-static\)\s+\.seal-hit\[data-placed\]\s*\{[^}]*display\s*:\s*block/);
+    for (const name of ['--hit-x', '--hit-y', '--hit-w', '--hit-h']) expect(base).toContain(`var(${name}`);
+    expect(css).toMatch(/html\.js:not\(\.qi-static\)\s+\.crest-hit\[data-placed\]\s*\{[^}]*display\s*:\s*block/);
   });
 
-  it('靜態圖（其餘情況）時 .seal-hit 絕對定位在朱印靜態圖的盒子裡、對齊圖上的印，不是隱藏也不是 pointer-events:none', () => {
-    const rule = /(?:^|\})\s*\.seal-hit\s*\{([^}]*)\}/m.exec(css)?.[1] ?? '';
+  it('靜態圖（其餘情況）時 .crest-hit 絕對定位在館徽靜態圖的盒子裡、對齊圖上的館徽，不是隱藏也不是 pointer-events:none', () => {
+    const rule = /(?:^|\})\s*\.crest-hit\s*\{([^}]*)\}/m.exec(css)?.[1] ?? '';
     expect(rule).toMatch(/position\s*:\s*absolute/);
     expect(rule).toMatch(/inset\s*:/);
     expect(rule).not.toMatch(/display\s*:\s*none|pointer-events\s*:\s*none/);
-    expect(/\.seal-stage\s*\{([^}]*)\}/.exec(css)?.[1] ?? '').toMatch(/position\s*:\s*relative/);
+    expect(/\.crest-stage\s*\{([^}]*)\}/.exec(css)?.[1] ?? '').toMatch(/position\s*:\s*relative/);
   });
 
-  it('BookingBeat 把靜態圖與 .seal-hit 包在同一個 .seal-stage 裡（同一個座標系），.seal-hit 對讀屏與 Tab 隱藏', () => {
+  it('BookingBeat 把靜態圖與 .crest-hit 包在同一個 .crest-stage 裡（同一個座標系），.crest-hit 對讀屏與 Tab 隱藏', () => {
     const booking = readFileSync(new URL('../../src/components/home/BookingBeat.astro', import.meta.url), 'utf8');
-    expect(booking).toMatch(/<div class="seal-stage">\s*<Still name="seal" \/>\s*<a class="seal-hit"[^>]*tabindex="-1"[^>]*aria-hidden="true"/);
+    expect(booking).toMatch(/<div class="crest-stage">\s*<Still name="crest" \/>\s*<a class="crest-hit"[^>]*tabindex="-1"[^>]*aria-hidden="true"/);
+  });
+
+  it('按鈕旁的小朱印：aria-hidden 的純裝飾、不可點、約 56–72 px（4rem）、用朱印遮罩填 --color-seal；按鈕在小印之前（鍵盤順序不受影響）', () => {
+    const booking = readFileSync(new URL('../../src/components/home/BookingBeat.astro', import.meta.url), 'utf8');
+    expect(booking).toMatch(/<span class="booking__seal"[^>]*aria-hidden="true"><\/span>/);
+    expect(booking).toMatch(/<a class="button button--solid"[\s\S]*<span class="booking__seal"/);
+    expect(booking).toContain("import sealMask from '../../assets/seal/seal-liuyi.png'");
+    const rule = /\.booking__seal\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(rule).toMatch(/width\s*:\s*4rem/);
+    expect(rule).toMatch(/height\s*:\s*4rem/);
+    expect(rule).toMatch(/background\s*:\s*var\(--color-seal\)/);
+    expect(rule).toMatch(/mask\s*:\s*var\(--seal-mask\)/);
+    expect(rule).toMatch(/pointer-events\s*:\s*none/);
+  });
+
+  it('PricingBeat 有竹簡的靜態圖（<Still name="scroll" />），放在文字之外（與其他 beat 一樣在 .beat__panel 的第二欄）', () => {
+    const pricing = readFileSync(new URL('../../src/components/home/PricingBeat.astro', import.meta.url), 'utf8');
+    expect(pricing).toMatch(/<\/div>\s*<Still name="scroll" \/>\s*<\/div>\s*<\/section>/);
   });
 });

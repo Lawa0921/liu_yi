@@ -724,11 +724,11 @@ html:not([data-audience]) .beat--course {
 /* ── 預約 ─────────────────────────────────────────── */
 
 /*
- * 朱印的靜態圖與蓋在它上面的點擊區包在同一個盒子裡，兩者才有同一個座標系。
+ * 光點館徽（Task 25；原本是朱印）的靜態圖與蓋在它上面的點擊區包在同一個盒子裡，兩者才有同一個座標系。
  * 靜態圖是 4:3、高度不超過一段的可用高（與 .beat__still 的 max-height 同一把尺），所以盒子的寬度由高度反推：
  * 圖剛好填滿盒子，沒有 object-fit 留白，點擊區用百分比對圖就準。
  */
-.seal-stage {
+.crest-stage {
   position: relative;
   grid-column: 2;
   grid-row: 1;
@@ -736,36 +736,57 @@ html:not([data-audience]) .beat--course {
   width: min(100%, calc((var(--stage-height) - 6rem) * 4 / 3));
 }
 
-.seal-stage .beat__still {
+.crest-stage .beat__still {
   display: block;
 }
 
 /*
- * 蓋在朱印上的透明點擊區（<a>，aria-hidden、tabindex -1：鍵盤與讀屏用旁邊的按鈕）。
- * 靜態圖（沒有 JS、減少動態、沒有 WebGL）：對齊圖上的印。靜態圖產線（scripts/qi/render-stills.ts）把印置中、取 80% 圖高，
- * 加上光暈外擴一點，實測紅色外框是圖寬的 19.5%–80.5%、圖高的 9.3%–90.5%（e2e 量圖上的紅色像素驗證）。
+ * 蓋在光點館徽上的透明點擊區（<a>，aria-hidden、tabindex -1：鍵盤與讀屏用旁邊的按鈕）。
+ * 靜態圖（沒有 JS、減少動態、沒有 WebGL）：對齊圖上的館徽。靜態圖產線（scripts/qi/render-stills.ts）把館徽置中、取 80% 圖高，
+ * 加上光暈外擴一點；inset 是量圖上亮點（亮度 > 100）外框得到的：寬占 17.0%–82.8%、高占 9.1%–90.3%（e2e 同樣量圖驗證）。
  */
-.seal-hit {
+.crest-hit {
   position: absolute;
-  inset: 9.5% 19.5%;
+  inset: 9.4% 17.1%;
   cursor: pointer;
 }
 
 /*
- * 引擎在跑：朱印畫在光點裡，沒有印的矩形（光點還沒聚合、或不在預約段）就不可點——不是一塊空白的隱形按鈕。
- * 引擎量到矩形後，腳本寫 --seal-*（視窗座標）並標 data-placed，這時才顯示、定位在印上。
+ * 引擎在跑：館徽畫在光點裡，沒有館徽的矩形（光點還沒聚合、或不在預約段）就不可點——不是一塊空白的隱形按鈕。
+ * 引擎量到矩形後，腳本寫 --hit-*（視窗座標）並標 data-placed，這時才顯示、定位在館徽上。
  * 退回靜態圖（html.qi-static）後這組規則不再適用，上面對齊靜態圖的規則接手。
  */
-html.js:not(.qi-static) .seal-hit {
+html.js:not(.qi-static) .crest-hit {
   position: fixed;
-  inset: var(--seal-y, 0) auto auto var(--seal-x, 0);
-  width: var(--seal-w, 0);
-  height: var(--seal-h, 0);
+  inset: var(--hit-y, 0) auto auto var(--hit-x, 0);
+  width: var(--hit-w, 0);
+  height: var(--hit-h, 0);
   display: none;
 }
 
-html.js:not(.qi-static) .seal-hit[data-placed] {
+html.js:not(.qi-static) .crest-hit[data-placed] {
   display: block;
+}
+
+/*
+ * 按鈕旁的小型靜態朱印（純裝飾，aria-hidden）：用朱印遮罩（512×512 的 alpha，朱文「六藝」）當 mask，顏色填 --color-seal，
+ * 邊緣的毛邊與全站其他朱印（.seal）同一個濾鏡（#seal-rough）。大小 4rem（64px，需求 56–72px）。
+ */
+.booking__action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.booking__seal {
+  flex: none;
+  width: 4rem;
+  height: 4rem;
+  background: var(--color-seal);
+  -webkit-mask: var(--seal-mask) center / contain no-repeat;
+  mask: var(--seal-mask) center / contain no-repeat;
+  pointer-events: none;
 }
 
 /* ── 大人｜小孩切換鈕 ─────────────────────────────── */
@@ -913,7 +934,7 @@ html[data-audience='kid'] [data-audience-option='kid'] {
     max-height: 38svh;
   }
 
-  .seal-stage {
+  .crest-stage {
     grid-column: 1;
     width: min(100%, calc(38svh * 4 / 3));
   }

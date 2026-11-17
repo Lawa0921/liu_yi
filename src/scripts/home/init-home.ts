@@ -287,41 +287,41 @@ export async function initHome(): Promise<void> {
     stage.playIntro({ skip: true });
   };
 
-  // ── 朱印（Task 21）─────────────────────────────────────────────
-  // 預約段的印是畫在光點裡的；`.seal-hit` 是蓋在印上的透明連結，只有引擎量得到印（光點聚合之後，`getSealRect()` 非 null）、
-  // 而且整個印的矩形在垂直方向落在預約段（`.beat--booking`）之內才定位並顯示；之前、以及離開預約段之後都不可點
+  // ── 光點館徽（Task 21 的朱印，Task 25 改成館徽）──────────────────────
+  // 預約段的館徽是畫在光點裡的；`.crest-hit` 是蓋在館徽上的透明連結，只有引擎量得到館徽（光點聚合之後，`getCrestRect()` 非 null）、
+  // 而且整個館徽的矩形在垂直方向落在預約段（`.beat--booking`）之內才定位並顯示；之前、以及離開預約段之後都不可點
   // （home.css：`display: none`，不是一塊空白的隱形按鈕）。位置寫成 CSS 變數、取整數像素，值沒變不寫。
-  // 為什麼要自己判斷「在預約段內」：頁尾在 main 外面，捲過最後一個 beat 後 scatter 恆為 0、姿勢仍是 seal，引擎照樣量得到印；
-  // 但畫布是 fixed 的，`.seal-hit` 若留著就會蓋在頁尾的 QR 與「用 LINE 加入」上，把一般連結變成開 #line-dialog。
+  // 為什麼要自己判斷「在預約段內」：頁尾在 main 外面，捲過最後一個 beat 後 scatter 恆為 0、姿勢仍是 crest，引擎照樣量得到館徽；
+  // 但畫布是 fixed 的，`.crest-hit` 若留著就會蓋在頁尾的 QR 與「用 LINE 加入」上，把一般連結變成開 #line-dialog。
   // 退回靜態圖後 home.css 改用另一組規則（對齊靜態圖），這些變數就沒人讀了。
-  const sealHit = document.querySelector<HTMLElement>('.seal-hit');
+  const crestHit = document.querySelector<HTMLElement>('.crest-hit');
   const bookingBeat = document.querySelector<HTMLElement>('.beat--booking');
-  let sealKey = '';
-  const placeSeal = (): void => {
-    if (!sealHit) return;
-    let rect = stage.getSealRect();
+  let crestKey = '';
+  const placeCrest = (): void => {
+    if (!crestHit) return;
+    let rect = stage.getCrestRect();
     if (rect && bookingBeat) {
       const section = bookingBeat.getBoundingClientRect();
-      if (rect.y < section.top || rect.y + rect.h > section.bottom) rect = null; // 印不是整個在預約段內（含頁尾）
+      if (rect.y < section.top || rect.y + rect.h > section.bottom) rect = null; // 館徽不是整個在預約段內（含頁尾）
     } else {
       rect = null; // 沒有預約段就沒有地方可放
     }
     const key = rect ? [rect.x, rect.y, rect.w, rect.h].map(Math.round).join(',') : '';
-    if (key === sealKey) return;
-    sealKey = key;
+    if (key === crestKey) return;
+    crestKey = key;
     if (!rect) {
-      delete sealHit.dataset.placed;
+      delete crestHit.dataset.placed;
       return;
     }
     const [x, y, w, h] = key.split(',');
-    sealHit.style.setProperty('--seal-x', `${x}px`);
-    sealHit.style.setProperty('--seal-y', `${y}px`);
-    sealHit.style.setProperty('--seal-w', `${w}px`);
-    sealHit.style.setProperty('--seal-h', `${h}px`);
-    sealHit.dataset.placed = '';
+    crestHit.style.setProperty('--hit-x', `${x}px`);
+    crestHit.style.setProperty('--hit-y', `${y}px`);
+    crestHit.style.setProperty('--hit-w', `${w}px`);
+    crestHit.style.setProperty('--hit-h', `${h}px`);
+    crestHit.dataset.placed = '';
   };
   teardowns.push(() => {
-    if (sealHit) delete sealHit.dataset.placed;
+    if (crestHit) delete crestHit.dataset.placed;
   });
 
   // ── 每一格 ───────────────────────────────────────────────────
@@ -361,7 +361,7 @@ export async function initHome(): Promise<void> {
     stage.setScatter(scatter);
     stage.setScrollSpeed(speed);
     setAttr('qiScatter', scatter.toFixed(2));
-    placeSeal();
+    placeCrest();
   };
 
   // 每個 rAF 都跑（引擎自己也是）。先排下一格、再算這一格（try/finally）：tick 丟錯時錯誤照常冒出，但迴圈不會永久停擺。

@@ -11,7 +11,7 @@
  *     36 u32 保留（0）
  *   其後（平面化）：u16 x[count]、u16 y[count]、u16 z[count]（依 min／max 線性量化到 0–65535）、u8 kinds[count]
  *
- * `kind`：0–99 是人形「靠近輪廓的程度」（99＝輪廓帶）；100 以上是兵器與朱印的種類。
+ * `kind`：0–99 是人形「靠近輪廓的程度」（99＝輪廓帶）；100 以上是兵器、朱印、竹簡（`BAMBOO`，比人形淡）與館徽（`CREST`，金）的種類。
  * 環境煙（D14）不進檔，由執行時程序化產生。
  */
 
@@ -19,7 +19,7 @@
 export const SHAPE_COUNT = 16384;
 
 /** 非人形的種類；0–99 保留給人形。 */
-export const KIND = { STEEL: 100, BRASS: 101, RED: 102, DARK: 103, AURA: 104, SEAL: 105 } as const;
+export const KIND = { STEEL: 100, BRASS: 101, RED: 102, DARK: 103, AURA: 104, SEAL: 105, BAMBOO: 106, CREST: 107 } as const;
 
 export interface Shape {
   count: number;
@@ -105,9 +105,9 @@ export function decodeShape(b: Uint8Array): Shape {
   return { count, positions, kinds, min, max };
 }
 
-/** kind → 著色器用的 w：人形 0–99 → 0–1；STEEL..AURA → 2..6；SEAL → 7。 */
+/** kind → 著色器用的 w：人形 0–99 → 0–1；STEEL..AURA → 2..6；SEAL → 7；BAMBOO → 8；CREST → 9。 */
 export function kindToW(kind: number): number {
-  if (!Number.isInteger(kind) || kind < 0 || kind > KIND.SEAL) throw new RangeError(`Undefined kind: ${kind}`);
+  if (!Number.isInteger(kind) || kind < 0 || kind > KIND.CREST) throw new RangeError(`Undefined kind: ${kind}`);
   if (kind <= 99) return kind / 99;
   return kind - 98;
 }

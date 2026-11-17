@@ -2,7 +2,7 @@
  * 光點：讀位置貼圖，近大遠小、加色混合。`uMirror = 1` 時畫地面倒影（搬自試作）。
  *
  * `w`（種類，見 `shapes/format.ts` 的 `kindToW`）：-1 環境煙；0–1 人形（靠近輪廓的程度）；2 鋼；3 銅件；4 朱紅（纓穗）；
- * 5 暗色（柄、桿）；6 兵器四周的氣；7 朱印。色票只有金／米白／朱紅（反目標：沒有彩色特效）。
+ * 5 暗色（柄、桿）；6 兵器四周的氣；7 朱印；8 竹簡的竹片（比人形淡）；9 光點館徽（金）。色票只有金／米白／朱紅（反目標：沒有彩色特效）。
  *
  * 拖尾（Task 16）：頂點著色器把速度投影到螢幕，輸出方向 `vDir` 與橢圓長寬比 `vAspect`；沿速度方向的拉長倍數是
  * `min(streakLength(速度), uStreak)`（`uStreak` 由舞台依換招衝量與開場吸氣的包絡決定；平時是 1，所有點都是圓的）。
@@ -89,6 +89,7 @@ void main(){
   float speed=clamp(length(vel)*${f(STREAK.speedScale)},0.0,1.0);
   float big=mix(0.55,1.45,seed);
   bool spark=fract(seed*97.13)<0.012;
+  if(kind>7.5) spark=false; // bamboo and crest stay gold: no vermilion sparks
 
   // gold to paper white; outlines and fast particles are brighter
   vec3 c=mix(uGold,uPaper,clamp(fract(seed*13.7)*0.55+(kind>=0.0&&kind<=1.0?kind*0.45:0.0)+speed*0.15,0.0,1.0));
@@ -99,7 +100,9 @@ void main(){
   else if(kind>3.5&&kind<4.5){c=uSeal*1.4;a=0.5*dense;big*=${f(THICK_KIND_SCALE)};}
   else if(kind>4.5&&kind<5.5){c=uGold*0.85;a=0.6;big*=${f(THICK_KIND_SCALE)};}
   else if(kind>5.5&&kind<6.5){c=mix(uGold,uPaper,fract(seed*7.3)*0.5);a=0.16*dense;}
-  else if(kind>6.5){c=uSeal*1.4;a=0.75;}
+  else if(kind>6.5&&kind<7.5){c=uSeal*1.4;a=0.75;}
+  else if(kind>7.5&&kind<8.5){c=mix(uGold*0.9,uPaper,fract(seed*7.3)*0.25);a=0.3;}
+  else if(kind>8.5){c=mix(uGold,uPaper,fract(seed*7.3)*0.3);a=0.6;}
   else if(kind<-0.5){a=0.35;big*=0.9;}
   if(spark){c=uSeal*1.8+vec3(0.15,0.04,0.0);a=1.0;big*=1.35;}
 

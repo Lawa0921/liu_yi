@@ -12,7 +12,7 @@ import {
 
 const AUDIENCES: Audience[] = ['adult', 'kid'];
 
-/** 計畫規定的十六個姿勢（依型別宣告順序）。 */
+/** 十八個姿勢（依型別宣告順序）：計畫的十六個，加上 Task 25 的 scroll（竹簡）與 crest（光點館徽）。 */
 const ALL_POSES: PoseId[] = [
   'lift',
   'land',
@@ -26,6 +26,8 @@ const ALL_POSES: PoseId[] = [
   'salute',
   'flow',
   'seal',
+  'scroll',
+  'crest',
   'kid-wushu',
   'kid-defense-a',
   'kid-defense-b',
@@ -68,8 +70,8 @@ describe('POSE_BY_BEAT', () => {
       'weapon-c': 'spear',
       others: 'others',
       coaches: 'salute',
-      pricing: 'flow',
-      booking: 'seal',
+      pricing: 'scroll',
+      booking: 'crest',
     });
   });
 
@@ -85,16 +87,23 @@ describe('POSE_BY_BEAT', () => {
     }
   });
 
-  it('每個出現的 PoseId 都有 SHAPES 配方（flow 例外：程序化、無配方）', () => {
+  it('每個出現的 PoseId 都有 SHAPES 配方；flow（程序化、無配方）已不屬於任何 beat，只給入館閘門當背景', () => {
     for (const audience of AUDIENCES) {
       for (const beat of BEATS) {
         const pose = POSE_BY_BEAT[audience][beat];
-        if (pose === 'flow') {
-          expect(SHAPES.flow, 'flow 不該有配方').toBeUndefined();
-          continue;
-        }
+        expect(pose, `${audience}/${beat} 不該是 flow`).not.toBe('flow');
         expect(SHAPES[pose], `${audience}/${beat} → ${pose}`).toBeDefined();
       }
+    }
+    expect(SHAPES.flow, 'flow 不該有配方').toBeUndefined();
+    expect(BURSTS.flow, 'flow 仍是合法姿勢（setPose 需要衝量表）').toBeDefined();
+  });
+
+  it('收費課表是竹簡（scroll）、預約是光點館徽（crest）；朱印（seal）不再屬於任何 beat', () => {
+    for (const audience of AUDIENCES) {
+      expect(POSE_BY_BEAT[audience].pricing).toBe('scroll');
+      expect(POSE_BY_BEAT[audience].booking).toBe('crest');
+      expect(Object.values(POSE_BY_BEAT[audience])).not.toContain('seal');
     }
   });
 
@@ -118,12 +127,12 @@ describe('poseFor', () => {
   it('同一個 beat 在大人與小孩可以給不同姿勢', () => {
     expect(poseFor('fist', 'adult')).toBe('dingzhou');
     expect(poseFor('fist', 'kid')).toBe('kid-wushu');
-    expect(poseFor('booking', 'kid')).toBe('seal');
+    expect(poseFor('booking', 'kid')).toBe('crest');
   });
 });
 
 describe('BURSTS', () => {
-  it('涵蓋全部 16 個 PoseId，且沒有多餘的鍵', () => {
+  it('涵蓋全部 18 個 PoseId，且沒有多餘的鍵', () => {
     expect(Object.keys(BURSTS).sort()).toEqual([...ALL_POSES].sort());
   });
 
@@ -158,6 +167,12 @@ describe('BURSTS', () => {
     }
     expect(BURSTS.flow).toEqual({ dir: [1, 0, 0], power: 1.0, mode: 0 });
     expect(BURSTS.seal).toEqual({ dir: [0, -1, 0], power: 2.0, mode: 3 });
+  });
+
+  it('Task 25：scroll 攤開（左右分開 mode 1、力道輕）；crest 與朱印一樣向內收（mode 3）', () => {
+    expect(BURSTS.scroll.mode).toBe(1);
+    expect(BURSTS.scroll.power).toBeLessThanOrEqual(2);
+    expect(BURSTS.crest).toEqual({ dir: [0, -1, 0], power: 2.0, mode: 3 });
   });
 
   it('kid-* 沿用 chengchui 的 mode 1／力道 3.0', () => {

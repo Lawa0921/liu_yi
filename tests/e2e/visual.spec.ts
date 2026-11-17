@@ -200,7 +200,8 @@ function dilate(mask: Uint8Array, width: number, height: number, r: number): Uin
   return out;
 }
 
-async function analyze(png: Buffer): Promise<Analysis> {
+/** `litThreshold`：算「亮點」（形體外框的依據）的亮度門檻，預設 100；很淡的形體（竹簡）改用較低的值，否則量到的是零星的亮環境煙。`bright` 欄位永遠是亮度 > 100 的占比。 */
+async function analyze(png: Buffer, litThreshold = 100): Promise<Analysis> {
   const { data, info } = await sharp(png).removeAlpha().raw().toBuffer({ resolveWithObject: true });
   const { width, height } = info;
   const lit = new Uint8Array(width * height);
@@ -225,7 +226,7 @@ async function analyze(png: Buffer): Promise<Analysis> {
         redBox.top = Math.min(redBox.top, y);
         redBox.bottom = Math.max(redBox.bottom, y + 1);
       }
-      if (isBright || redPixel) lit[y * width + x] = 1;
+      if (luma(r, g, b) > litThreshold || redPixel) lit[y * width + x] = 1;
     }
   }
 
@@ -353,11 +354,11 @@ interface Measured {
 }
 
 /** 截圖（完整視窗存證、canvas 單獨存證並分析），回傳亮點外框（視窗座標）。 */
-async function shoot(page: Page, name: string): Promise<Measured> {
+async function shoot(page: Page, name: string, litThreshold = 100): Promise<Measured> {
   save(shotName(name), await page.screenshot());
   const { png, rect } = await captureCanvas(page);
   save(`${shotName(name)}-canvas`, png);
-  const analysis = await analyze(png);
+  const analysis = await analyze(png, litThreshold);
   expect(analysis.lit, `${name}：canvas 上有亮點（不是空畫面）`).not.toBeNull();
   const lit = analysis.lit!;
   const figure = { left: rect.left + lit.left, right: rect.left + lit.right, top: rect.top + lit.top, bottom: rect.top + lit.bottom };
@@ -591,20 +592,25 @@ for (const device of DEVICES) {
       expect(overlapRatio, `亮點外框與 DOM 文字矩形重疊 ≤ 文字面積的 5%：${note}`).toBeLessThanOrEqual(0.05);
     });
 
-    test('flow：亮度 > 100 的像素 ≤ 4%、文字區域清晰', async ({ page }) => {
+    test('scroll（收費課表的竹簡）：亮點外框與文字矩形重疊 ≤ 5%、文字區域亮度 > 100 的像素 ≤ 4%、外框是橫的長方形、完整在畫布內', async ({ page }) => {
       await open(page, device);
-      await settlePose(page, 'pricing', 'flow');
-      save(shotName(`flow-${device.slug}`), await page.screenshot());
-      const { png, rect } = await captureCanvas(page);
-      save(shotName(`flow-${device.slug}-canvas`), png);
-      const analysis = await analyze(png);
-      // 文字區域：該段文字矩形（裁在 canvas 內）底下，canvas 上亮度 > 100 的像素比例
+      await settlePose(page, 'pricing', 'scroll');
+      // 竹簡淡（亮度 > 100 的像素很少），外框改以亮度 > 35 的光點量
+      const measured = await shoot(page, `scroll-${device.slug}`, 35);
+      const { analysis, rect, figure } = measured;
+      const texts = await textRects(page, beatText('pricing'));
+      const metrics = metricsOf(measured, device, texts, 'scroll');
+      // 位置：完整在畫布內（四邊留 ≥ 8 px）、桌機中心 x ∈ [0.50W, 0.80W]、手機底 < 0.70H 且中心在上 60%、與文字重疊 ≤ 5%
+      expectPlacement(metrics, device);
+      // 外框比例：竹簡是橫的長方形（寬 ÷ 高 1.2–1.9，兩端略捲所以略窄於攤平時的 1.6）
+      const aspect = (figure.right - figure.left) / (figure.bottom - figure.top);
+      // 文字區域：該段文字矩形（裁在 canvas 內）底下，canvas 上亮度 > 100 的像素比例（竹簡淡到不影響收費導引文字的對比）
       const canvasBox: Box = { left: rect.left, right: rect.left + rect.width, top: rect.top, bottom: rect.top + rect.height };
-      const texts = (await textRects(page, beatText('pricing'))).filter((t) => overlapArea(t, canvasBox) > 0);
+      const inCanvas = texts.filter((t) => overlapArea(t, canvasBox) > 0);
       let inText = 0;
       let inTextBright = 0;
-      const { data, info } = await sharp(png).removeAlpha().raw().toBuffer({ resolveWithObject: true });
-      for (const t of texts) {
+      const { data, info } = await sharp((await captureCanvas(page)).png).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+      for (const t of inCanvas) {
         const x0 = Math.max(0, Math.floor(t.left - rect.left));
         const x1 = Math.min(info.width, Math.ceil(t.right - rect.left));
         const y0 = Math.max(0, Math.floor(t.top - rect.top));
@@ -619,40 +625,50 @@ for (const device of DEVICES) {
       }
       const underText = inText > 0 ? inTextBright / inText : 0;
       test.info().annotations.push({
-        type: 'flow',
-        description: `canvas 亮度 > 100 的像素占 ${pct(analysis.bright)}（有內容的像素占 ${pct(analysis.covered)}）；文字矩形（${texts.length} 個、${inText} px）底下占 ${pct(underText)}`,
+        type: 'scroll',
+        description: `外框寬高比 ${aspect.toFixed(2)}；canvas 亮度 > 100 的像素占 ${pct(analysis.bright)}（有內容的像素占 ${pct(analysis.covered)}）；文字矩形（${inCanvas.length} 個、${inText} px）底下占 ${pct(underText)}；紅 ${analysis.red} 像素`,
       });
+      expect(aspect, `竹簡外框寬高比 1.2–1.9：${metrics.note}`).toBeGreaterThan(1.2);
+      expect(aspect, `竹簡外框寬高比 1.2–1.9：${metrics.note}`).toBeLessThan(1.9);
       expect(inText, '量得到文字區域').toBeGreaterThan(0);
-      expect(analysis.covered, '氣流有畫出來（不是空畫面造成的假通過）').toBeGreaterThan(0.0005);
-      expect(analysis.bright, 'canvas 亮度 > 100 的像素 ≤ 4%').toBeLessThanOrEqual(0.04);
+      expect(analysis.covered, '竹簡有畫出來（不是空畫面造成的假通過）').toBeGreaterThan(0.005);
       expect(underText, '文字區域底下亮度 > 100 的像素 ≤ 4%（文字清晰）').toBeLessThanOrEqual(0.04);
     });
 
-    test('seal：朱印矩形中心與亮點外框中心距離 ≤ 8% W、紅色像素 ≥ 300、預約按鈕不與印重疊', async ({ page }) => {
+    test('crest（預約的光點館徽）：館徽矩形中心與亮點外框中心距離 ≤ 8% W、亮點外框在矩形內、是金色（不是朱紅）、預約按鈕不與館徽重疊', async ({ page }) => {
       await open(page, device);
-      await settlePose(page, 'booking', 'seal');
-      // 印要「聚合」夠久才量得到矩形（引擎的 getSealRect 條件）
+      await settlePose(page, 'booking', 'crest');
+      // 館徽要「聚合」夠久才量得到矩形（引擎的 getCrestRect 條件）
       await run(page, 1500);
-      const seal = await page.evaluate(() => (window as unknown as W).__qi.debug.sealRect());
-      expect(seal, '聚合後量得到朱印矩形').not.toBeNull();
-      const { analysis, figure } = await shoot(page, `seal-${device.slug}`);
-      const sealBox: Box = { left: seal!.x, right: seal!.x + seal!.w, top: seal!.y, bottom: seal!.y + seal!.h };
-      const sealCenter = { x: (sealBox.left + sealBox.right) / 2, y: (sealBox.top + sealBox.bottom) / 2 };
+      const crest = await page.evaluate(() => (window as unknown as W).__qi.debug.crestRect());
+      expect(crest, '聚合後量得到館徽矩形').not.toBeNull();
+      const { analysis, figure } = await shoot(page, `crest-${device.slug}`);
+      const crestBox: Box = { left: crest!.x, right: crest!.x + crest!.w, top: crest!.y, bottom: crest!.y + crest!.h };
+      const crestCenter = { x: (crestBox.left + crestBox.right) / 2, y: (crestBox.top + crestBox.bottom) / 2 };
       const figureCenter = { x: (figure.left + figure.right) / 2, y: (figure.top + figure.bottom) / 2 };
-      const distance = Math.hypot(sealCenter.x - figureCenter.x, sealCenter.y - figureCenter.y);
+      const distance = Math.hypot(crestCenter.x - figureCenter.x, crestCenter.y - figureCenter.y);
       const button = await page.locator('#booking a.button--solid').boundingBox();
       expect(button, '預約按鈕可見').not.toBeNull();
       const buttonBox: Box = { left: button!.x, right: button!.x + button!.width, top: button!.y, bottom: button!.y + button!.height };
-      const buttonOverlap = overlapArea(buttonBox, sealBox);
+      const buttonOverlap = overlapArea(buttonBox, crestBox);
+      const texts = await textRects(page, beatText('booking'));
+      const textArea = texts.reduce((sum, t) => sum + area(t), 0);
+      const textOverlap = textArea > 0 ? texts.reduce((sum, t) => sum + overlapArea(figure, t), 0) / textArea : 0;
+      const slack = Math.max(8, 0.03 * (crestBox.right - crestBox.left));
       test.info().annotations.push({
-        type: 'seal',
+        type: 'crest',
         description:
-          `朱印矩形 ${JSON.stringify(sealBox)}；亮點外框 ${JSON.stringify(figure)}；中心距 ${f(distance)} px（${pct(distance / device.viewport.width)}W）；` +
-          `紅 ${analysis.red} 像素；按鈕 ${JSON.stringify(buttonBox)}、與印重疊 ${f(buttonOverlap)} px²`,
+          `館徽矩形 ${JSON.stringify(crestBox)}；亮點外框 ${JSON.stringify(figure)}；中心距 ${f(distance)} px（${pct(distance / device.viewport.width)}W）；` +
+          `紅 ${analysis.red} 像素；亮度 > 100 的像素占 ${pct(analysis.bright)}；按鈕 ${JSON.stringify(buttonBox)}、與館徽重疊 ${f(buttonOverlap)} px²；與文字重疊 ${pct(textOverlap)}`,
       });
-      expect(distance / device.viewport.width, '朱印矩形中心與亮點外框中心距離 ≤ 8% W').toBeLessThanOrEqual(0.08);
-      expect(analysis.red, '紅色像素 ≥ 300').toBeGreaterThanOrEqual(300);
-      expect(buttonOverlap, '預約按鈕不與印重疊').toBe(0);
+      expect(distance / device.viewport.width, '館徽矩形中心與亮點外框中心距離 ≤ 8% W').toBeLessThanOrEqual(0.08);
+      expect(figure.left, '亮點外框在矩形內（左）').toBeGreaterThanOrEqual(crestBox.left - slack);
+      expect(figure.right, '亮點外框在矩形內（右）').toBeLessThanOrEqual(crestBox.right + slack);
+      expect(figure.top, '亮點外框在矩形內（上）').toBeGreaterThanOrEqual(crestBox.top - slack);
+      expect(figure.bottom, '亮點外框在矩形內（下）').toBeLessThanOrEqual(crestBox.bottom + slack);
+      expect(analysis.red, '館徽是金色，紅色像素 < 40').toBeLessThan(40);
+      expect(buttonOverlap, '預約按鈕不與館徽重疊').toBe(0);
+      expect(textOverlap, '亮點外框與 DOM 文字矩形重疊 ≤ 文字面積的 5%').toBeLessThanOrEqual(0.05);
     });
   });
 }
@@ -696,17 +712,13 @@ async function checkStills(page: Page, audience: 'adult' | 'kid', device: Device
     await expect(section, `${beat} 段存在`).toHaveCount(1);
     await section.scrollIntoViewIfNeeded();
     await scrollToBeat(page, beat);
-    // 開場的靜態圖是海報；收費課表（flow）是程序化的氣流，沒有形體也沒有靜態圖（設計 D10：flow 無 .bin），它的內容全是文字
+    // 開場的靜態圖是海報；收費課表是竹簡（scroll）的靜態圖、預約是光點館徽（crest）的靜態圖，各段都至少有一張可見的圖
     const stills =
       beat === 'opening'
         ? page.locator('.opening__poster img')
         : section.locator('img.beat__still').filter({ visible: true });
-    if (beat === 'pricing') {
-      await expect(section.locator('img.beat__still'), 'pricing（flow）沒有靜態圖').toHaveCount(0);
-      await expect(section.locator('h2'), 'pricing 的標題可見').toBeVisible();
-    } else {
-      expect(await stills.count(), `${audience}／${beat}：至少一張可見的靜態圖`).toBeGreaterThan(0);
-    }
+    if (beat === 'pricing') await expect(section.locator('h2'), 'pricing 的標題可見').toBeVisible();
+    expect(await stills.count(), `${audience}／${beat}：至少一張可見的靜態圖`).toBeGreaterThan(0);
     for (let i = 0; i < (await stills.count()); i++) {
       const still = stills.nth(i);
       await expect(still, `${audience}／${beat} #${i} 可見`).toBeVisible();

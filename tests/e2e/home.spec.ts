@@ -120,7 +120,9 @@ for (const device of DEVICES) {
       await expect(button).toHaveText('預約體驗');
       await expect(button).toHaveAttribute('href', '#line');
       await expect(button).toHaveAttribute('data-line-open', '');
-      await expect(booking.locator('.seal-hit')).toHaveCount(1);
+      await expect(booking.locator('.crest-hit')).toHaveCount(1);
+      await expect(booking.locator('.booking__seal'), '按鈕旁的小朱印（純裝飾）').toHaveCount(1);
+      await expect(booking.locator('.booking__seal')).toHaveAttribute('aria-hidden', 'true');
 
       await button.scrollIntoViewIfNeeded();
       await button.click();

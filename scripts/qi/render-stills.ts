@@ -1,7 +1,7 @@
 /**
  * 靜態圖產線（D19）：在建置時由 Node 的 `sharp` 從 `.bin` 形體檔渲出首屏用的 WebP，不依賴 headless 瀏覽器。
  * 靜態圖是 three 還沒到之前顯示的畫面（也是「減少動態」「沒有 WebGL2」的退回畫面），所以要像引擎的終態：
- * 金色光點、亮輪廓、內部有流動感；朱紅只用在兵器的纓、朱印與零星的火星。
+ * 金色光點、亮輪廓、內部有流動感；朱紅只用在兵器的纓、朱印與零星的火星。竹簡（BAMBOO）比人形淡，館徽（CREST）是金。
  *
  * 渲染（`renderStill`）：
  *   1. 取景：形體的 xy 外框置中、等比放大到佔滿影像的 80% 高或 88% 寬（先到者為準）；暗底 `#0b0a09`。
@@ -282,6 +282,10 @@ function pointLook(kind: number, tone: number, veinValue: number): { color: Vec3
       return { color: [C_GOLD[0] * 0.85, C_GOLD[1] * 0.85, C_GOLD[2] * 0.85], alpha: 0.6, size: 1 };
     case KIND.SEAL:
       return { color: [C_SEAL[0] * 1.25, C_SEAL[1] * 1.25, C_SEAL[2] * 1.25], alpha: 0.6, size: 1.25 };
+    case KIND.BAMBOO: // 竹簡的竹片：比人形淡（收費段要讓資訊浮在上面），略偏暗金
+      return { color: mixColor([C_GOLD[0] * 0.9, C_GOLD[1] * 0.9, C_GOLD[2] * 0.9], C_PAPER, tone * 0.25), alpha: 0.1, size: 1 };
+    case KIND.CREST: // 光點館徽：金，只帶一點米白的高光
+      return { color: mixColor(C_GOLD, C_PAPER, tone * 0.3), alpha: 0.36, size: 1 };
     default: // AURA
       return { color: mixColor(C_GOLD, C_PAPER, tone * 0.5), alpha: 0.16, size: 0.9 };
   }

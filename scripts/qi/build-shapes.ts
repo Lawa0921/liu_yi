@@ -2,7 +2,7 @@
  * 形體產線（D10、D11）：依 `src/qi/config/shapes.ts` 的配方，在建置時把每個形體取樣成 `<id>.bin`（v1，固定 16 384 點），
  * 另寫 `shapes.json`（`[{ id, bytes, sha256 }]`）與 `.inputs-hash`。輸出在 `src/assets/generated/qi/shapes/`（已忽略，不進 git）。
  *
- * 輸入雜湊 = 配方用到的剪影 PNG、朱印遮罩 PNG、兵器 `.geo` 快照，加上 `config/{figures,shapes}.ts`、`shapes/*.ts`、
+ * 輸入雜湊 = 配方用到的剪影 PNG、朱印遮罩 PNG、館徽圖 PNG、兵器 `.geo` 快照（竹簡是程序化的，沒有輸入檔），加上 `config/{figures,shapes}.ts`、`shapes/*.ts`、
  * 本腳本與 `hash.ts`、`staged-output.ts` 的原始碼，以及形體檔格式版本。雜湊沒變、檔案齊全就跳過（不重寫任何檔）。
  * 本腳本自己也進雜湊：朱印取樣、合成排列的邏輯寫在這裡，改了它產物就該重建。
  * 「檔案齊全」包含大小：每個 `.bin` 必須恰為 `shapeFileBytes(SHAPE_COUNT)`，被截斷的檔會觸發重建。
@@ -19,6 +19,8 @@ import { join } from 'node:path';
 import sharp from 'sharp';
 import { FIGURES, figureScale } from '../../src/qi/config/figures';
 import { SEAL_CENTER_Y, SEAL_WORLD_SIZE, SHAPES, type ShapeRecipe } from '../../src/qi/config/shapes';
+import { sampleCrest } from '../../src/qi/shapes/sample-crest';
+import { sampleScroll } from '../../src/qi/shapes/sample-scroll';
 import { encodeShape, KIND, SHAPE_COUNT, SHAPE_FORMAT_VERSION, shapeFileBytes, type Shape } from '../../src/qi/shapes/format';
 import { OPAQUE } from '../../src/qi/shapes/head';
 import { rng } from '../../src/qi/shapes/rng';
@@ -29,6 +31,8 @@ import { hashInputs, listFiles, sha256 } from './hash';
 import { commitStaged, hashMatches, sizeOf } from './staged-output';
 
 const SEAL_MASK = 'src/assets/seal/seal-liuyi.png';
+/** 光點館徽的取樣來源：Task 24 的透明底金色館徽（`npm run crest:build` 由 logo_large.jpg 轉出）。 */
+const CREST_IMAGE = 'src/assets/images/crest-lion.png';
 /** 朱印的深度：z 在 ±這個值內（人形約 ±0.3，印是薄薄一片）。 */
 const SEAL_HALF_DEPTH = 0.02;
 const MANIFEST = 'shapes.json';
@@ -54,6 +58,10 @@ function recipeInputs(recipe: ShapeRecipe): string[] {
       return [`src/qi/data/weapons/${recipe.name}.geo`];
     case 'seal':
       return [SEAL_MASK];
+    case 'scroll':
+      return []; // 程序化：沒有輸入檔，所以不可能帶字
+    case 'crest':
+      return [CREST_IMAGE];
     case 'compose':
       return recipe.parts.map((part) => resolveFigure(part.figure).file);
   }
@@ -175,6 +183,10 @@ async function buildShape(root: string, id: string, recipe: ShapeRecipe): Promis
     }
     case 'seal':
       return sampleSeal(await loadMask(root, SEAL_MASK), { count, seed: seedOf(id) });
+    case 'scroll':
+      return sampleScroll({ count, seed: seedOf(id) });
+    case 'crest':
+      return sampleCrest(await loadMask(root, CREST_IMAGE), { count, seed: seedOf(id) });
     case 'compose': {
       const figures = await Promise.all(
         recipe.parts.map(async (part) => {

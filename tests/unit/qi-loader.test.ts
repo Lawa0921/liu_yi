@@ -202,9 +202,9 @@ describe('prefetchPlan（目前＋前後各 2 個 beat）', () => {
     expect([...prefetchPlan(0, 'adult', false)].sort()).toEqual(['chengchui', 'dingzhou', 'land']);
   });
 
-  it('beat 9、小孩（視窗 beat 7–10）：含 others、salute、seal，不含 flow', () => {
+  it('beat 9、小孩（視窗 beat 7–10）：含 others、salute、scroll、crest，不含 flow（flow 只給入館閘門，沒有形體檔）', () => {
     const plan = prefetchPlan(9, 'kid', false);
-    expect([...plan].sort()).toEqual(['others', 'salute', 'seal']);
+    expect([...plan].sort()).toEqual(['crest', 'others', 'salute', 'scroll']);
     expect(plan).not.toContain('flow');
   });
 
@@ -216,9 +216,9 @@ describe('prefetchPlan（目前＋前後各 2 個 beat）', () => {
     expect([...prefetchPlan(5, 'adult', false)].sort()).toEqual(['jian', 'kao', 'miaodao', 'others', 'spear']);
   });
 
-  it('目前這一格排最前面（先載最近的）；目前是 flow 時跳過它', () => {
+  it('目前這一格排最前面（先載最近的）', () => {
     expect(prefetchPlan(1, 'adult', false)[0]).toBe('dingzhou');
-    expect(prefetchPlan(9, 'adult', false)[0]).toBe('seal'); // beat 9 是 flow，不預取，最近的是下一格
+    expect(prefetchPlan(9, 'adult', false)[0]).toBe('scroll'); // beat 9（收費課表）是竹簡
   });
 
   it('beatIndex 超出範圍時夾到 0..最後一個 beat（不丟錯）', () => {
