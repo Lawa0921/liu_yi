@@ -108,8 +108,10 @@ export interface QiStage {
    * 沒有演出（減少動態、已在演）時不會呼叫；`dispose` 也不呼叫。
    * `onLand`（Task 24，首頁用來在落地衝擊波的瞬間「擦」出館徽）：開場走到落地（約 2.7 秒）的那一格呼叫一次，在 `onEnd` 之前；
    * 落地之前就結束（略過、被打斷、形體載不到）不呼叫，沒有演出時也不呼叫。
+   * `onStart`（Task 25，首頁用來在「開場一開始」就解除館徽的逾時保險）：形體都載好、計時真的開始（`uIntroT` 從 0 起算）的那一刻呼叫一次；
+   * 還在等形體載入（pending）時不呼叫，被取消、略過、形體載不到就永遠不呼叫，沒有演出時也不呼叫。
    */
-  playIntro(opts?: { skip?: boolean; onEnd?: () => void; onLand?: () => void }): void;
+  playIntro(opts?: { skip?: boolean; onStart?: () => void; onEnd?: () => void; onLand?: () => void }): void;
   /**
    * 朱印在螢幕上的矩形（CSS 像素，與滑鼠座標同一個空間；首頁用來把 `.seal-hit` 定位到印上）。
    * 光點還沒聚成印就回 `null`：姿勢不是 `seal`、散開量超過 `SEAL_SCATTER_MAX`、或聚合後還沒安定滿 `SEAL_SETTLE_S`
@@ -319,6 +321,7 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
   let introToken = 0;
   let introExhaled = false;
   let introLanded = false;
+  let introOnStart: (() => void) | null = null; // `playIntro` 的 `onStart`：這一次開場計時開始時呼叫一次
   let introOnEnd: (() => void) | null = null; // `playIntro` 的 `onEnd`：這一次開場結束時呼叫一次
   let introOnLand: (() => void) | null = null; // `playIntro` 的 `onLand`：這一次開場落地（衝擊波）時呼叫一次
   let sealCalm = 0; // 姿勢是 seal 且散開量夠低，已經持續幾模擬秒（`getSealRect` 的「聚合」條件）
@@ -437,6 +440,7 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
     introToken++;
     introPending = false;
     introOnLand = null; // 還沒落地就結束：不補呼叫
+    introOnStart = null; // 還沒開始計時（pending）就被取消：不補呼叫
     if (introT >= 0) {
       introT = -1;
       if (pose === 'lift' && shapes.has('land')) apply('land', makeTarget('land'), false);
@@ -807,6 +811,7 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
       }
       if (!sim || introT >= 0 || introPending) return; // 減少動態沒有演出；演出中再呼叫不重來
       introPending = true;
+      introOnStart = opts?.onStart ?? null;
       introOnEnd = opts?.onEnd ?? null;
       introOnLand = opts?.onLand ?? null;
       const token = ++introToken;
@@ -818,10 +823,14 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
           introT = 0;
           introExhaled = false;
           introLanded = false;
+          const started = introOnStart;
+          introOnStart = null;
+          started?.();
         },
         () => {
           if (token !== introToken) return;
           introPending = false; // 形體載不到就不演（頁面照常、停在目前姿勢）
+          introOnStart = null;
           notifyIntroEnd();
         },
       );

@@ -292,6 +292,48 @@ test.describe('開場結束通知 onEnd（桌機，tier=min）', () => {
     expect(await marks(), '落地前被別的姿勢打斷：只有 onEnd，舊時間軸之後也不會補呼叫').toEqual(['full:land', 'full:end', 'skip:end', 'cut:end']);
   });
 
+  /** 計時真的開始（uIntroT 從 0 起算）通知 onStart（Task 25：首頁用來在「開場一開始」就解除館徽的逾時保險）。 */
+  test('onStart：形體都載好時 playIntro 當場呼叫一次（uIntroT = 0）；等形體載入時還沒呼叫，載好才呼叫；被取消或 skip 就不呼叫', async ({ page }) => {
+    await open(page);
+    await settleLand(page);
+    const marks = () => page.evaluate(() => (window as unknown as { __starts?: string[] }).__starts ?? []);
+    const play = (tag: string) =>
+      page.evaluate((name) => {
+        const w = window as unknown as { __starts?: string[] };
+        w.__starts ??= [];
+        stageOf().playIntro({ onStart: () => w.__starts!.push(`${name}:start:${stageOf().debug.uniforms().uIntroT}`), onEnd: () => w.__starts!.push(`${name}:end`) });
+      }, tag);
+
+    await play('full');
+    expect(await marks(), '形體都載好了：計時開始的同一刻呼叫（那時 uIntroT 剛歸零）').toEqual(['full:start:0']);
+    await run(page, 4300);
+    expect(await marks(), '演完：start 只有一次，之後是 end').toEqual(['full:start:0', 'full:end']);
+
+    await play('skip');
+    await run(page, 800);
+    await page.evaluate(() => stageOf().playIntro({ skip: true }));
+    await run(page, 3000);
+    expect(await marks(), 'start 已呼叫過；skip 之後只多一個 end，不會再有 start').toEqual(['full:start:0', 'full:end', 'skip:start:0', 'skip:end']);
+  });
+
+  test('onStart：等 lift 載入的 pending 期間不呼叫；被別的姿勢取消的開場永遠不呼叫（之後 lift 載好也不補）', async ({ page }) => {
+    await open(page);
+    await setPose(page, 'land', false); // lift 還沒載過：playIntro 要等它
+    const outcome = await page.evaluate(async () => {
+      const w = window as unknown as { __starts?: string[] };
+      w.__starts = [];
+      const stage = stageOf();
+      stage.playIntro({ onStart: () => w.__starts!.push('start'), onEnd: () => w.__starts!.push('end') });
+      const during = [...w.__starts]; // pending：還沒開始
+      await stage.setPose('dingzhou'); // 同一刻取消
+      return { during, after: [...w.__starts] };
+    });
+    expect(outcome.during, 'pending 期間還沒開始').toEqual([]);
+    expect(outcome.after, '被取消：只有 end').toEqual(['end']);
+    await run(page, 3500);
+    expect(await page.evaluate(() => (window as unknown as { __starts?: string[] }).__starts), '之後 lift 載好也不會補 start').toEqual(['end']);
+  });
+
   test('開場還在等形體載入時被別的姿勢取消：呼叫一次，之後 lift 載好也不會再呼叫', async ({ page }) => {
     await open(page);
     await setPose(page, 'land', false); // lift 還沒載過：playIntro 要等它
@@ -475,13 +517,13 @@ test.describe('大槍桿與紅纓（1440×900，tier=min）', () => {
 test.describe('減少動態', () => {
   test.use({ viewport: { width: 1280, height: 720 }, reducedMotion: 'reduce' });
 
-  test('playIntro 的 onEnd、onLand 都不會被呼叫（沒有演出）', async ({ page }) => {
+  test('playIntro 的 onStart、onEnd、onLand 都不會被呼叫（沒有演出）', async ({ page }) => {
     await open(page);
     await setPose(page, 'land');
     await page.evaluate(() => {
       const w = window as unknown as { __ends?: string[] };
       w.__ends = [];
-      stageOf().playIntro({ onEnd: () => w.__ends!.push('called'), onLand: () => w.__ends!.push('landed') });
+      stageOf().playIntro({ onStart: () => w.__ends!.push('started'), onEnd: () => w.__ends!.push('called'), onLand: () => w.__ends!.push('landed') });
     });
     await run(page, 1000);
     expect(await page.evaluate(() => (window as unknown as { __ends?: string[] }).__ends)).toEqual([]);

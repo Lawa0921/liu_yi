@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { CREST_FAILSAFE_MS, SHEEN_MAX, SHEEN_MIN, sheenPoint } from '../../src/scripts/home/crest-sheen';
+import { CREST_FAILSAFE_MS, crestFailsafeMs, SHEEN_MAX, SHEEN_MIN, sheenPoint } from '../../src/scripts/home/crest-sheen';
 import { INTRO_STORAGE_KEY } from '../../src/scripts/home/intro-gate';
 
 // 館徽掃光的換算（Task 24）：指標位置 → 館徽盒子內的百分比（寫進 --sheen-x／--sheen-y）。接線與樣子由 e2e（home-crest.spec）驗。
@@ -41,6 +41,30 @@ describe('館徽掃光不是 background-clip:text 的漸層字（全站守門）
   it('掃光用漸層遮罩（mask-image）蓋在 logo 上，不是混色模式', () => {
     expect(crestCss).toMatch(/mask-image\s*:[^;]*gradient/);
     expect(crestCss).not.toMatch(/mix-blend-mode/);
+  });
+});
+
+describe('crestFailsafeMs：?qi-crest-failsafe=<ms|off> 注入逾時保險', () => {
+  it('沒帶參數、空字串、只帶別的參數：預設 7000', () => {
+    expect(CREST_FAILSAFE_MS).toBe(7000);
+    expect(crestFailsafeMs('')).toBe(7000);
+    expect(crestFailsafeMs('?')).toBe(7000);
+    expect(crestFailsafeMs('?qi-tier=min&qi-debug=1')).toBe(7000);
+  });
+
+  it('off：回 null（不設逾時保險）', () => {
+    expect(crestFailsafeMs('?qi-crest-failsafe=off')).toBeNull();
+    expect(crestFailsafeMs('?qi-tier=min&qi-crest-failsafe=off&qi-debug=1')).toBeNull();
+  });
+
+  it('非負整數毫秒：照用（含 0）', () => {
+    expect(crestFailsafeMs('?qi-crest-failsafe=1500')).toBe(1500);
+    expect(crestFailsafeMs('?qi-tier=min&qi-crest-failsafe=250')).toBe(250);
+    expect(crestFailsafeMs('?qi-crest-failsafe=0')).toBe(0);
+  });
+
+  it.each(['', 'abc', 'OFF', '-5', '1.5', '1e3', '0x10', ' 12', '12 ', '+12', '99999999999', 'NaN', 'Infinity'])('非法值 %j：退回預設 7000', (value) => {
+    expect(crestFailsafeMs(`?qi-crest-failsafe=${encodeURIComponent(value)}`)).toBe(7000);
   });
 });
 

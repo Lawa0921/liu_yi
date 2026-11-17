@@ -8,6 +8,24 @@
 /** 館徽進場前一直是擦掉的（home.css），要等開場落地或提早收尾才露出；引擎或形體載入卡住時，這麼久（毫秒）之後強制以終態露出，不讓館徽永遠不見。 */
 export const CREST_FAILSAFE_MS = 7000;
 
+/** 網址參數 `?qi-crest-failsafe=<ms|off>` 的最大值（毫秒）：超過就當成非法值。 */
+const FAILSAFE_MAX_MS = 600_000;
+
+/**
+ * 逾時保險的毫秒數（可由網址參數注入，讓測試不必全域吞掉 7 秒的計時器）：
+ *   - 沒帶參數、或值不合法（不是非負整數、超過上限、大小寫不同的 OFF…）：預設 `CREST_FAILSAFE_MS`；
+ *   - `off`：回 `null`，不設逾時保險；
+ *   - 非負整數字串（含 0）：照用。
+ * `search` 是 `location.search`；純函式，不碰 DOM。
+ */
+export function crestFailsafeMs(search: string): number | null {
+  const value = new URLSearchParams(search).get('qi-crest-failsafe');
+  if (value === 'off') return null;
+  if (value === null || !/^\d{1,9}$/.test(value)) return CREST_FAILSAFE_MS;
+  const ms = Number(value);
+  return ms <= FAILSAFE_MAX_MS ? ms : CREST_FAILSAFE_MS;
+}
+
 export interface CrestBox {
   left: number;
   top: number;

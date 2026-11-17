@@ -25,7 +25,7 @@ import { resolveShapeUrl } from '../../qi/shapes/urls';
 import type { QiDebug, QiStage } from '../../qi/engine/qi-stage';
 import { currentAudience, observeAudience } from './audience-sync';
 import { readBeatRects } from './beats';
-import { CREST_FAILSAFE_MS, initCrestSheen, loadCrestNow } from './crest-sheen';
+import { crestFailsafeMs, initCrestSheen, loadCrestNow } from './crest-sheen';
 import { textInkRight, textInkTop } from './text-extent';
 import { enterStatic, onEnterStatic } from './fallback';
 import { introSeen, markIntroSeen } from './intro-gate';
@@ -80,12 +80,14 @@ export async function initHome(): Promise<void> {
   let alive = true;
   let engine: QiStage | undefined;
   let raf = 0;
+  let crestTimer: ReturnType<typeof setTimeout> | undefined; // 館徽的逾時保險（見下方 revealCrest）；收尾時要清掉
   const teardowns: (() => void)[] = []; // 觀察者之類，收尾時一起停
   const shutdown = (): void => {
     if (!alive) return;
     alive = false;
     cancelAnimationFrame(raf); // 停掉每格迴圈
     raf = 0;
+    clearTimeout(crestTimer); // 退回靜態圖（館徽由 CSS 直接露出）後不再讓遲來的計時器去標 data-qi-crest
     for (const stop of teardowns) stop();
     teardowns.length = 0;
     engine?.dispose(); // 也釋放 GL context
@@ -135,14 +137,21 @@ export async function initHome(): Promise<void> {
   //             演完但沒落地過，以及引擎或形體載入卡住時的逾時保險。
   // 先到先得：已經標過就不改——落地擦出到一半不能被改成 'shown' 打斷，逾時之後遲來的落地也不能讓已露出的館徽再擦一次。
   // 退回靜態圖時 CSS 直接讓它一直在，不需要這個屬性。
-  let crestTimer: ReturnType<typeof setTimeout> | undefined;
-  const revealCrest = (mode: 'in' | 'shown'): void => {
+  // 逾時保險（引擎或形體卡住時館徽不能永遠不見）：預設 7 秒，網址參數 ?qi-crest-failsafe=<ms|off> 可注入（測試用，見 crest-sheen.ts）；
+  // 「開場一開始」（引擎說計時真的起算，`onStart`）就解除——開場自己會在落地、結束或被略過時露出館徽，慢的引擎不能讓保險搶在落地之前把館徽放出來；
+  // 收尾（shutdown）時也會清掉。
+  const failsafeMs = crestFailsafeMs(location.search);
+  const disarmCrestFailsafe = (): void => {
     clearTimeout(crestTimer);
+    crestTimer = undefined;
+  };
+  const revealCrest = (mode: 'in' | 'shown'): void => {
+    disarmCrestFailsafe();
     if (root.dataset.qiCrest !== undefined) return;
     setAttr('qiCrest', mode);
   };
   if (!willPlayIntro) revealCrest('shown');
-  else crestTimer = setTimeout(() => revealCrest('shown'), CREST_FAILSAFE_MS); // 引擎或形體卡住時，館徽不能永遠不見
+  else if (failsafeMs !== null) crestTimer = setTimeout(() => revealCrest('shown'), failsafeMs);
 
   // ── 形體載入與預取（引擎一載入完成就用得到）──────────────────────
   const loader = createShapeLoader({ fetch: fetchBytes, resolveUrl: resolveShapeUrl });
@@ -439,6 +448,7 @@ export async function initHome(): Promise<void> {
     markIntroSeen(session);
     setIntro('playing');
     stage.playIntro({
+      onStart: disarmCrestFailsafe,
       onLand: () => {
         if (alive) revealCrest('in'); // 落地的衝擊波：館徽由下往上擦出
       },

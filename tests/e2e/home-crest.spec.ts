@@ -13,6 +13,8 @@ import { figureBoxes, overlap, totalBytes, trackTransfers, type Box } from './he
 test.describe.configure({ mode: 'default', timeout: 120_000 });
 
 const HOME = './?qi-tier=min&qi-debug=1';
+/** 時間軸類的測試（假時鐘、pauseAt 一口氣跳一小時）不靠逾時保險：用 ?qi-crest-failsafe=off 關掉它，不必再全域吞掉計時器。逾時保險自己有專門的測試。 */
+const HOME_NO_FAILSAFE = `${HOME}&qi-crest-failsafe=off`;
 const T0 = new Date('2026-01-01T08:00:00');
 const T1 = new Date('2026-01-01T09:00:00');
 const READY = { timeout: 30_000 };
@@ -52,16 +54,9 @@ interface OpenOptions {
 async function open(page: Page, options: OpenOptions = {}): Promise<void> {
   watch(page);
   if (options.intro !== 'fresh') await page.addInitScript(() => sessionStorage.setItem('liuyi:qi-intro', '1'));
-  if (options.clock) {
-    await page.clock.install({ time: T0 });
-    // pauseAt(T1) 會一口氣跳過一小時、把到期的計時器全部觸發，包括館徽的逾時保險；時間軸測試要看的是「不靠逾時」的行為，
-    // 所以把那一個計時器吞掉（逾時保險自己有專門的測試，用真時鐘）。
-    await page.addInitScript((ms) => {
-      const original = window.setTimeout;
-      window.setTimeout = ((handler: TimerHandler, delay?: number, ...rest: unknown[]) => (delay === ms ? 0 : original(handler, delay, ...rest))) as typeof window.setTimeout;
-    }, CREST_FAILSAFE_MS);
-  }
-  await page.goto(HOME);
+  if (options.clock) await page.clock.install({ time: T0 });
+  // pauseAt(T1) 會一口氣跳過一小時、把到期的計時器全部觸發，包括館徽的逾時保險；時間軸測試要看的是「不靠逾時」的行為，所以關掉它。
+  await page.goto(options.clock ? HOME_NO_FAILSAFE : HOME);
   await expect(html(page)).toHaveAttribute('data-qi-ready', 'true', READY);
   if (options.clock) await page.clock.pauseAt(T1);
 }
@@ -500,6 +495,74 @@ test.describe('進場：開場演出時在落地的衝擊波擦出', () => {
     await expect(html(page)).toHaveAttribute('data-qi-crest', 'shown');
     expect(await crestAnimations(page), '強制露出沒有擦出動畫').not.toEqual(expect.arrayContaining(['crest-wipe']));
     await expect(html(page)).not.toHaveAttribute('data-qi-ready', /.*/); // 引擎到最後都沒好
+  });
+
+  test('?qi-crest-failsafe=<ms> 可注入：卡住的引擎在指定的毫秒後（不是 7 秒）以終態露出館徽', async ({ page }) => {
+    watch(page);
+    await page.route(/\.bin(\?|$)/, () => {
+      // 不回應、不放行：請求一直掛著
+    });
+    const startedAt = Date.now();
+    await page.goto(`${HOME}&qi-crest-failsafe=1200`);
+    expect(await clipTop(page), '一開始是擦掉的').toBe(100);
+    await expect.poll(() => crestLuma(page), { timeout: 5000, intervals: [100], message: '注入的 1.2 秒到了館徽就要可見' }).toBeGreaterThan(LUMA_VISIBLE);
+    expect(Date.now() - startedAt, '遠早於預設的 7 秒').toBeLessThan(CREST_FAILSAFE_MS - 2000);
+    await expect(html(page)).toHaveAttribute('data-qi-crest', 'shown');
+    await expect(html(page)).not.toHaveAttribute('data-qi-ready', /.*/);
+  });
+
+  test('?qi-crest-failsafe=off：保險關閉，卡住的引擎不會自己把館徽放出來', async ({ page }) => {
+    watch(page);
+    await page.route(/\.bin(\?|$)/, () => {
+      // 不回應、不放行
+    });
+    await page.goto(`${HOME}&qi-crest-failsafe=off`);
+    await page.waitForTimeout(2500);
+    await expect(html(page)).not.toHaveAttribute('data-qi-crest', /.*/);
+    expect(await clipTop(page), '一直是擦掉的').toBe(100);
+  });
+
+  test('非法值（abc）退回預設：2.5 秒時還沒露出（預設是 7 秒）', async ({ page }) => {
+    watch(page);
+    await page.route(/\.bin(\?|$)/, () => {
+      // 不回應、不放行
+    });
+    await page.goto(`${HOME}&qi-crest-failsafe=abc`);
+    await page.waitForTimeout(2500);
+    await expect(html(page)).not.toHaveAttribute('data-qi-crest', /.*/);
+  });
+
+  test('開場一開始（引擎計時起算）就解除保險：保險時間比落地早，館徽也不會搶在落地之前露出，之後照常擦出', async ({ page }) => {
+    watch(page);
+    await page.goto(`${HOME}&qi-crest-failsafe=600`);
+    await expect(html(page)).toHaveAttribute('data-qi-ready', 'true', READY);
+    await expect(html(page)).toHaveAttribute('data-qi-intro', 'playing');
+    await page.waitForFunction(() => (window as unknown as W).__qi.debug.uniforms().uIntroT! >= 0, undefined, READY); // 計時真的起算
+    await page.waitForTimeout(1500); // 比保險（0.6 秒）久，但還沒到落地（2.7 s）
+    expect(await page.evaluate(() => (window as unknown as W).__qi.debug.uniforms().uIntroT!), '前提：還沒落地').toBeLessThan(2.6);
+    await expect(html(page), '保險已解除，沒有搶先把館徽放出來').not.toHaveAttribute('data-qi-crest', /.*/);
+    await expect(html(page)).toHaveAttribute('data-qi-crest', 'in', READY); // 落地才擦出
+  });
+
+  test('收尾（退回靜態圖）時清掉保險：之後保險的時間到了也不會去標 data-qi-crest', async ({ page }) => {
+    watch(page);
+    await page.route(/\.bin(\?|$)/, () => {
+      // 不回應、不放行：引擎掛上了但第一個形體永遠載不到，保險一直在等
+    });
+    await page.goto(`${HOME}&qi-crest-failsafe=1500`);
+    // 引擎掛上後 WebGL context 遺失 → 退回靜態圖（shutdown）；在掛上之前送的事件沒有人聽，所以重複送到成功
+    await expect
+      .poll(
+        async () => {
+          await page.evaluate(() => document.querySelector('canvas[data-qi-canvas]')!.dispatchEvent(new Event('webglcontextlost')));
+          return html(page).getAttribute('data-qi-mode');
+        },
+        { timeout: 20_000, intervals: [100] },
+      )
+      .toBe('static');
+    await page.waitForTimeout(2500); // 超過 1.5 秒
+    await expect(html(page), '計時器已清掉').not.toHaveAttribute('data-qi-crest', /.*/);
+    expect(await crestOf(page).evaluate((el) => getComputedStyle(el).clipPath), '靜態圖由 CSS 直接露出').toBe('none');
   });
 
   test('開場演到一半 WebGL context 遺失：退回靜態圖，館徽立刻露出終態（不擦出）', async ({ page }) => {
