@@ -156,21 +156,49 @@ for (const size of TEXT_SIZES) {
   });
 }
 
-// 大槍要「丈二」，畫面上要夠長：1440×900 下可見長度（光點外框的寬）≥ 700px。
-// 左界若用整個文字欄的盒子，這裡只剩約 540–600px；改用實際文字右緣就留得住（槍尾離字約 24px）。
-test.describe('大槍長度：1440×900', () => {
+// 大槍要「丈二」，畫面上要夠長，而且（Task 27）是拳師拿著它：整體外框是「人加兵器」。1440×900 下外框的寬 ≥ 700px（量到 762px，不比舊規則寬鬆），
+// 高 ≥ 250px（量到 312px：人不是一個小黑點，整體仍醒目）。左界若用整個文字欄的盒子，這裡只剩約 540–600px；改用實際文字右緣就留得住。
+// 持械的人比單獨一把槍多了身體，所以槍尾在人身後、整體外框的左端是槍頭；比例由剪影決定（`config/armed.ts`），不再依視窗換槍長與傾角。
+test.describe('大槍（持械）整體外框：1440×900', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
-  test('聚合後光點外框的寬 ≥ 700px（而且仍在文字右緣之右、導覽之左）', async ({ page }) => {
+  test('聚合後光點外框（人加兵器）：寬 ≥ 700px、高 ≥ 250px，而且仍在文字右緣之右、導覽之左', async ({ page }) => {
     await open(page);
     await settlePose(page, 'weapon-c', 'spear');
     expect(await page.evaluate(() => (window as unknown as W).__qi.debug.meanError()), '已聚合').toBeLessThan(0.05);
     const extent = await page.evaluate(() => (window as unknown as W).__qi.debug.extent());
     const inkRight = await textInkRight(page, 'weapon-c');
     const rail = (await page.locator('nav.home-rail').boundingBox())!;
-    expect(extent.right - extent.left, `大槍可見長度（左 ${extent.left.toFixed(0)}、右 ${extent.right.toFixed(0)}）`).toBeGreaterThanOrEqual(700);
+    expect(extent.right - extent.left, `大槍加拳師的整體外框寬（左 ${extent.left.toFixed(0)}、右 ${extent.right.toFixed(0)}）`).toBeGreaterThanOrEqual(700);
+    expect(extent.bottom - extent.top, `整體外框高（上 ${extent.top.toFixed(0)}、下 ${extent.bottom.toFixed(0)}）：人要看得清楚`).toBeGreaterThanOrEqual(250);
     expect(extent.left, '仍在實際文字右緣之右').toBeGreaterThanOrEqual(inkRight);
     expect(extent.right, '仍在導覽（含光暈）之左').toBeLessThanOrEqual(rail.x - HALO_PX);
+  });
+
+  // 小孩版（使用者：苗刀和大槍的區塊沒有小孩版）：比大人矮一截、兵器也短一些，但仍要醒目，且不壓字、不碰導覽。
+  // 實測（1440×900，extent）：小孩持刀 605×287、小孩持槍 654×297（大人苗刀 738×367、大槍 769×334）；門檻取約八成五。
+  // 苗刀第 2 輪從「直立高舉」改成低弓步前指（原本像日本劍道的架勢），外框變成又寬又矮。
+  test('小孩持刀、持槍（切到小孩）：聚合後外框夠大，仍在文字右緣之右、導覽之左', async ({ page }) => {
+    await open(page);
+    await settlePose(page, 'weapon-b', 'miaodao');
+    await page.getByRole('button', { name: '小孩' }).click();
+    const rail = (await page.locator('nav.home-rail').boundingBox())!;
+    for (const [beat, pose, minWidth, minHeight] of [
+      ['weapon-b', 'kid-miaodao', 510, 240],
+      ['weapon-c', 'kid-spear', 560, 250],
+    ] as const) {
+      await scrollToBeat(page, beat);
+      await page.clock.runFor(200);
+      await expect(page.locator('html')).toHaveAttribute('data-qi-pose', pose, READY);
+      await page.clock.runFor(3500);
+      expect(await page.evaluate(() => (window as unknown as W).__qi.debug.meanError()), `${pose} 已聚合`).toBeLessThan(0.05);
+      const extent = await page.evaluate(() => (window as unknown as W).__qi.debug.extent());
+      const inkRight = await textInkRight(page, beat);
+      expect(extent.right - extent.left, `${pose} 外框寬（左 ${extent.left.toFixed(0)}、右 ${extent.right.toFixed(0)}）`).toBeGreaterThanOrEqual(minWidth);
+      expect(extent.bottom - extent.top, `${pose} 外框高（上 ${extent.top.toFixed(0)}、下 ${extent.bottom.toFixed(0)}）`).toBeGreaterThanOrEqual(minHeight);
+      expect(extent.left, `${pose}：仍在實際文字右緣之右`).toBeGreaterThanOrEqual(inkRight);
+      expect(extent.right, `${pose}：仍在導覽（含光暈）之左`).toBeLessThanOrEqual(rail.x - HALO_PX);
+    }
   });
 });
 
@@ -224,13 +252,16 @@ test.describe('兵器左右界重新量', () => {
     }
   });
 
-  test('切換對象（大人→小孩→大人）後，大槍那一段的左端仍在文字右緣之右', async ({ page }) => {
+  test('切換對象（大人→小孩→大人）後，大槍那一段（小孩是 kid-spear）的左端仍在文字右緣之右', async ({ page }) => {
     await open(page);
     await settlePose(page, 'weapon-c', 'spear');
-    for (const label of ['小孩', '大人']) {
+    for (const [label, pose] of [
+      ['小孩', 'kid-spear'],
+      ['大人', 'spear'],
+    ] as const) {
       await page.getByRole('button', { name: label }).click();
       await page.clock.runFor(200);
-      await expect(page.locator('html')).toHaveAttribute('data-qi-pose', 'spear', READY);
+      await expect(page.locator('html')).toHaveAttribute('data-qi-pose', pose, READY);
       await page.clock.runFor(3500);
       const inkRight = await textInkRight(page, 'weapon-c');
       const extent = await page.evaluate(() => (window as unknown as W).__qi.debug.extent());

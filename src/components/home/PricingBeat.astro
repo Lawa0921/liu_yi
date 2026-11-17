@@ -1,6 +1,8 @@
 ---
-// 收費與課表（beat: pricing）：光點退成背景低亮度的氣，資訊清楚浮在上面。
+// 收費與課表（beat: pricing）：光點聚成一卷攤開的竹簡（簿冊、紀錄的意象，不是錢幣），亮度比人形低——光點退成背景的氣，資訊清楚浮在上面。
+// 竹簡放在文字之外（橫向在右、直向在上）；沒有任何字。靜態圖（減少動態、沒有 WebGL、沒有 JS）就是那一卷竹簡。
 // 不放任何金額或時段：收費與課表目前只有業主的海報圖，沿用「不轉成文字，避免抄錯」的規定（設計 §7）。
+import Still from './Still.astro';
 import { url } from '../../lib/url';
 import { COPY } from '../../qi/config/copy';
 ---
@@ -19,5 +21,6 @@ import { COPY } from '../../qi/config/copy';
         <a class="text-link beat__link" href={url('/facility/')}>看場地</a>
       </p>
     </div>
+    <Still name="scroll" />
   </div>
 </section>

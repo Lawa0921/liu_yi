@@ -2,7 +2,7 @@
  * 光點：讀位置貼圖，近大遠小、加色混合。`uMirror = 1` 時畫地面倒影（搬自試作）。
  *
  * `w`（種類，見 `shapes/format.ts` 的 `kindToW`）：-1 環境煙；0–1 人形（靠近輪廓的程度）；2 鋼；3 銅件；4 朱紅（纓穗）；
- * 5 暗色（柄、桿）；6 兵器四周的氣；7 朱印。色票只有金／米白／朱紅（反目標：沒有彩色特效）。
+ * 5 暗色（柄、桿）；6 兵器四周的氣；7 朱印；8 竹簡的竹片（比人形淡）；9 光點館徽（金）。色票只有金／米白／朱紅（反目標：沒有彩色特效）。
  *
  * 拖尾（Task 16）：頂點著色器把速度投影到螢幕，輸出方向 `vDir` 與橢圓長寬比 `vAspect`；沿速度方向的拉長倍數是
  * `min(streakLength(速度), uStreak)`（`uStreak` 由舞台依換招衝量與開場吸氣的包絡決定；平時是 1，所有點都是圓的）。
@@ -24,6 +24,11 @@ import { HASH } from './noise';
  * 那種細而均勻的顆粒。只是畫出來的位置，不影響模擬與目標。
  */
 export const GRAIN = 0.02;
+/**
+ * 光點館徽（kind > 8.5，`KIND.CREST`）的顆粒：0＝不抖。館徽是細線條，GRAIN 的 ±0.01 會把線條抖散成一片糊（Task 25 審查；形體檔的重複點另有 `expand.ts` 的 `CREST_JITTER`）。
+ * 其他種類不變。
+ */
+export const CREST_GRAIN = 0;
 /** 地面倒影的亮度（試作 0.16；半解析度時代的倒影只剩約 3 成，這裡對回試作的觀感）。 */
 export const REFLECTION = 0.2;
 /**
@@ -80,8 +85,9 @@ ${HASH}
 void main(){
   vec4 p=texture2D(tPos,ref);
   vec3 vel=texture2D(tVel,ref).xyz;
-  vec3 pos=p.xyz+(hash32(ref*613.7+seed)-0.5)*${GRAIN.toFixed(4)};
   float kind=p.w;
+  float grain=kind>8.5?${CREST_GRAIN.toFixed(4)}:${GRAIN.toFixed(4)};
+  vec3 pos=p.xyz+(hash32(ref*613.7+seed)-0.5)*grain;
   if(uMirror>0.5){pos.y=-pos.y;vel.y=-vel.y;}
   vec4 mv=modelViewMatrix*vec4(pos,1.0);
   gl_Position=projectionMatrix*mv;
@@ -89,6 +95,7 @@ void main(){
   float speed=clamp(length(vel)*${f(STREAK.speedScale)},0.0,1.0);
   float big=mix(0.55,1.45,seed);
   bool spark=fract(seed*97.13)<0.012;
+  if(kind>7.5) spark=false; // bamboo and crest stay gold: no vermilion sparks
 
   // gold to paper white; outlines and fast particles are brighter
   vec3 c=mix(uGold,uPaper,clamp(fract(seed*13.7)*0.55+(kind>=0.0&&kind<=1.0?kind*0.45:0.0)+speed*0.15,0.0,1.0));
@@ -99,7 +106,9 @@ void main(){
   else if(kind>3.5&&kind<4.5){c=uSeal*1.4;a=0.5*dense;big*=${f(THICK_KIND_SCALE)};}
   else if(kind>4.5&&kind<5.5){c=uGold*0.85;a=0.6;big*=${f(THICK_KIND_SCALE)};}
   else if(kind>5.5&&kind<6.5){c=mix(uGold,uPaper,fract(seed*7.3)*0.5);a=0.16*dense;}
-  else if(kind>6.5){c=uSeal*1.4;a=0.75;}
+  else if(kind>6.5&&kind<7.5){c=uSeal*1.4;a=0.75;}
+  else if(kind>7.5&&kind<8.5){c=mix(uGold*0.9,uPaper,fract(seed*7.3)*0.25);a=0.3;}
+  else if(kind>8.5){c=mix(uGold,uPaper,fract(seed*7.3)*0.3);a=0.6;}
   else if(kind<-0.5){a=0.35;big*=0.9;}
   if(spark){c=uSeal*1.8+vec3(0.15,0.04,0.0);a=1.0;big*=1.35;}
 

@@ -5,6 +5,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import Plaque from '../components/Plaque.astro';
 import interior1 from '../assets/images/facility-interior-1.jpg';
 import interior2 from '../assets/images/facility-interior-2.jpg';
+import { PAGE_SCENES } from '../lib/scene/config';
 import { BOOKING_ANCHOR } from '../lib/site';
 
 const photos = [
@@ -13,7 +14,7 @@ const photos = [
 ];
 ---
 
-<BaseLayout title="場地" description="六藝武術工作室的訓練場地：寬敞明亮，配備鏡面牆與地墊。" ogImage={interior1}>
+<BaseLayout title="場地" description="六藝武術工作室的訓練場地：寬敞明亮，配備鏡面牆與地墊。" ogImage={interior1} scene={{ kind: 'facility', spec: PAGE_SCENES.facility }}>
   <section class="section section--flush-top" aria-labelledby="page-title">
     <div class="container">
       <div class="page-head">

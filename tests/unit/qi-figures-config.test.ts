@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
+import { ARMED } from '../../src/qi/config/armed';
 import { SILHOUETTES_READY } from '../../src/qi/config/silhouettes';
 import { FIGURES, figureScale, WORLD_UNIT_PER_LAND_PX, type FigureDef } from '../../src/qi/config/figures';
 import { SHAPE_COUNT } from '../../src/qi/shapes/format';
@@ -49,14 +50,13 @@ describe('FIGURES 設定', () => {
   it('SILHOUETTES_READY 的每個檔名恰被一個 FIGURES[*].src 使用，沒有多的也沒有少的', () => {
     const used = entries.map(([, d]) => d.src);
     expect(new Set(used).size).toBe(used.length);
-    expect([...used].sort()).toEqual([...SILHOUETTES_READY].sort());
-    expect(SILHOUETTES_READY.length).toBe(10);
+    // 持械的三張（劍、苗刀、大槍）與小孩持劍的剪影由 config/armed.ts 使用，不在 FIGURES 裡（Task 27）
+    expect([...used, ...Object.values(ARMED).map((d) => d.src)].sort()).toEqual([...SILHOUETTES_READY].sort());
+    expect(SILHOUETTES_READY.length).toBe(15);
   });
 
-  it('鍵 = id；十個形體 id 齊全；audience 合法；headPx 為正整數', () => {
-    expect(Object.keys(FIGURES).sort()).toEqual(
-      ['chengchui', 'dingzhou', 'kao', 'kid-defense-a', 'kid-defense-b', 'kid-weapon', 'kid-wushu', 'land', 'lift', 'salute'].sort(),
-    );
+  it('鍵 = id；九個形體 id 齊全（小孩持劍改在 ARMED）；audience 合法；headPx 為正整數', () => {
+    expect(Object.keys(FIGURES).sort()).toEqual(['chengchui', 'dingzhou', 'kao', 'kid-defense-a', 'kid-defense-b', 'kid-wushu', 'land', 'lift', 'salute'].sort());
     for (const [key, d] of entries) {
       expect(d.id).toBe(key);
       expect(['adult', 'kid', 'both']).toContain(d.audience);
@@ -74,7 +74,7 @@ describe('FIGURES 設定', () => {
     expect(FIGURES['kid-wushu']!.src).toBe('fig-kid-wushu');
     expect(FIGURES['kid-defense-a']!.src).toBe('fig-kid-defense-a');
     expect(FIGURES['kid-defense-b']!.src).toBe('fig-kid-defense-b');
-    expect(FIGURES['kid-weapon']!.src).toBe('fig-kid-weapon');
+    expect(FIGURES['kid-weapon']).toBeUndefined(); // 持械形體，見 config/armed.ts
   });
 
   it('試作的 FIGURE_SCALE 原值搬進 scaleOverride（D12）：lift 1.02、land 1、dingzhou 1.25、chengchui 1.18、kao 1.12', () => {

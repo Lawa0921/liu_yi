@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { groundVertex } from '../../src/qi/engine/shaders/ground';
-import { COVERAGE_REFERENCE_PX_PER_UNIT, coverageOf, DENSE_POWER, denseFade, POINT_PX, pointsFragment, pointsVertex } from '../../src/qi/engine/shaders/points';
+import { COVERAGE_REFERENCE_PX_PER_UNIT, coverageOf, CREST_GRAIN, DENSE_POWER, denseFade, GRAIN, POINT_PX, pointsFragment, pointsVertex } from '../../src/qi/engine/shaders/points';
 import { velocityShader } from '../../src/qi/engine/shaders/velocity';
 import {
   CAMERA_SHAKE,
@@ -270,6 +270,17 @@ describe('著色器與這裡的公式同步（GLSL 是字串，改了常數要�
     expect(pointsVertex).toContain(`(stretch-1.0)*${f(STREAK.aspect)}`);
     expect(pointsFragment).toContain('dot(q,vDir)');
     expect(pointsFragment).toContain('vAspect');
+  });
+
+  it('顆粒（GRAIN）只對非 CREST 生效：館徽（kind > 8.5）的顆粒是 CREST_GRAIN（0），kind 在算位置之前就讀好（Task 25 審查：館徽被抖散會糊成一片）', () => {
+    expect(GRAIN).toBe(0.02);
+    expect(CREST_GRAIN).toBe(0);
+    expect(pointsVertex).toContain(`float grain=kind>8.5?${CREST_GRAIN.toFixed(4)}:${GRAIN.toFixed(4)};`);
+    expect(pointsVertex).toContain('(hash32(ref*613.7+seed)-0.5)*grain');
+    // kind 在 pos 之前宣告（pos 要用 grain，grain 要用 kind），而且只宣告一次
+    expect(pointsVertex.indexOf('float kind=p.w;')).toBeGreaterThan(-1);
+    expect(pointsVertex.indexOf('float kind=p.w;')).toBeLessThan(pointsVertex.indexOf('vec3 pos='));
+    expect(pointsVertex.split('float kind=').length - 1).toBe(1);
   });
 
   it('地面著色器用 SHOCK.amp0 把圈的亮度換算成 0–1，並輸出共用片段著色器要的 vDir、vAspect', () => {

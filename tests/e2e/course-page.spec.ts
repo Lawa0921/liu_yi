@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { COACHES, PUBLISHED_COURSES, UNPUBLISHED_COURSE_SLUGS } from './helpers';
 
 for (const course of PUBLISHED_COURSES) {

@@ -224,11 +224,11 @@ test.describe('光點引擎核心（桌機，tier=min）', () => {
     expect(await meanError(page)).toBeLessThan(0.05);
   });
 
-  test('每個姿勢都畫得出來並聚得回目標（含朱印的向內收衝量、收費段的氣流）', async ({ page }) => {
+  test('每個姿勢都畫得出來並聚得回目標（含入館閘門的氣流、朱印的向內收衝量、收費段的竹簡、預約段的光點館徽）', async ({ page }) => {
     await open(page);
     const poses = [
-      'lift', 'land', 'dingzhou', 'chengchui', 'kao', 'jian', 'miaodao', 'spear', 'others', 'salute', 'flow', 'seal',
-      'kid-wushu', 'kid-defense-a', 'kid-defense-b', 'kid-weapon',
+      'lift', 'land', 'dingzhou', 'chengchui', 'kao', 'jian', 'miaodao', 'spear', 'others', 'salute', 'flow', 'seal', 'scroll', 'crest',
+      'kid-wushu', 'kid-defense-a', 'kid-defense-b', 'kid-weapon', 'kid-miaodao', 'kid-spear',
     ] as const;
     for (const pose of poses) {
       await setPose(page, pose);
@@ -236,10 +236,15 @@ test.describe('光點引擎核心（桌機，tier=min）', () => {
       expect(await meanError(page), `${pose} 沒有聚回目標`).toBeLessThan(0.05);
       expect((await snapshot(page)).covered, `${pose} 畫面是空的`).toBeGreaterThanOrEqual(0.01);
     }
-    // 朱印是朱紅色
+    // 朱印是朱紅色；光點館徽與竹簡是金色（沒有朱紅）
     await setPose(page, 'seal');
     await run(page, 2500);
     expect((await snapshot(page)).red).toBeGreaterThan(1000);
+    for (const pose of ['crest', 'scroll'] as const) {
+      await setPose(page, pose);
+      await run(page, 2500);
+      expect((await snapshot(page)).red, `${pose} 不該有朱紅`).toBeLessThan(40);
+    }
   });
 
   test('朱印的衝量是向內收：衝量那一格過後，平均速度的徑向分量為正（往中心）；震腳（模式 2）則是往外', async ({ page }) => {

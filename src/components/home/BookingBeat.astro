@@ -1,12 +1,18 @@
 ---
-// 預約（beat: booking）：光點收進一顆朱印，印就是「LINE 預約」按鈕（設計 §2）。
-// 印是畫在光點裡的，所以 .seal-hit 是蓋在印上的透明點擊區（滑鼠與觸控可點，鍵盤與讀屏用旁邊的按鈕）：
-//   - 引擎在跑：光點聚成印之後，腳本（init-home.ts 的 placeSeal）才把它定位到引擎量到的印的矩形並顯示；在那之前它不可點。
-//   - 靜態圖（減少動態、沒有 WebGL、沒有 JS）：朱印是靜態圖，.seal-hit 對齊圖上的印（所以兩者包在同一個 .seal-stage 裡）。
+// 預約（beat: booking）：光點聚成燙金獅子館徽，館徽就是「LINE 預約」按鈕（設計 §2；Task 25 把原本的朱印光點換成館徽）。
+// 館徽是畫在光點裡的，所以 .crest-hit 是蓋在館徽上的透明點擊區（滑鼠與觸控可點，鍵盤與讀屏用旁邊的按鈕）：
+//   - 引擎在跑：光點聚成館徽之後，腳本（init-home.ts 的 placeCrest）才把它定位到引擎量到的館徽矩形並顯示；在那之前它不可點。
+//   - 靜態圖（減少動態、沒有 WebGL、沒有 JS）：館徽是靜態圖，.crest-hit 對齊圖上的館徽（所以兩者包在同一個 .crest-stage 裡）。
+// 朱印沒有消失：縮成「預約體驗」按鈕旁的一枚小型靜態紅印（用既有的朱印遮罩 seal-liuyi.png，約 64 px），純裝飾，不可點、不進無障礙樹。
 // 按鈕文字沿用 BOOKING_LABEL，點了開啟既有的 #line-dialog；沒有 JS 時退回頁尾的 LINE QR（#line）。
+import { getImage } from 'astro:assets';
 import Still from './Still.astro';
+import sealMask from '../../assets/seal/seal-liuyi.png';
 import { BOOKING_ANCHOR, BOOKING_LABEL } from '../../lib/site';
 import { COPY } from '../../qi/config/copy';
+
+// 小印的遮罩：512×512 的 alpha 遮罩，這裡只要 64 px 的顯示（2 倍密度 144 寬）。顏色由 CSS 的 --color-seal 填，所以只吃 alpha。
+const seal = await getImage({ src: sealMask, width: 144, format: 'webp' });
 ---
 
 <section id="booking" class="beat beat--plain beat--booking" data-beat="booking" aria-labelledby="booking-heading">
@@ -14,13 +20,14 @@ import { COPY } from '../../qi/config/copy';
     <div class="beat__text">
       <h2 id="booking-heading" class="beat__heading">預約</h2>
       <p class="beat__lead">{COPY.booking.lead}</p>
-      <p class="beat__more">
+      <p class="beat__more booking__action">
         <a class="button button--solid" href={BOOKING_ANCHOR} data-line-open>{BOOKING_LABEL}</a>
+        <span class="booking__seal" style={`--seal-mask: url(${seal.src})`} aria-hidden="true"></span>
       </p>
     </div>
-    <div class="seal-stage">
-      <Still name="seal" />
-      <a class="seal-hit" href={BOOKING_ANCHOR} data-line-open tabindex="-1" aria-hidden="true"></a>
+    <div class="crest-stage">
+      <Still name="crest" />
+      <a class="crest-hit" href={BOOKING_ANCHOR} data-line-open tabindex="-1" aria-hidden="true"></a>
     </div>
   </div>
 </section>

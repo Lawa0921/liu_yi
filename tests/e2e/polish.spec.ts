@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import { AUDIENCE_STORAGE_KEY, COACHES, basePath } from './helpers';
 
 // 驗收後補的行為：手機不外溢、切換對象不跳動、LINE 連結、職稱不斷行、404 的 meta、海報放大後看得清楚、標題層級。

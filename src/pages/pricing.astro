@@ -8,6 +8,7 @@ import pricingTable from '../assets/images/pricing-table.png';
 import vip from '../assets/images/vip.png';
 import memberPolicy from '../assets/images/member-policy.png';
 import refundPolicy from '../assets/images/refund-policy.png';
+import { PAGE_SCENES } from '../lib/scene/config';
 import { BOOKING_ANCHOR } from '../lib/site';
 
 const DETAIL = '詳細內容請見圖片或洽 LINE。';
@@ -19,7 +20,7 @@ const posters = [
 ];
 ---
 
-<BaseLayout title="收費" description="六藝武術工作室的收費方案、VIP 會員、會員須知與退費說明。" ogImage={pricingTable}>
+<BaseLayout title="收費" description="六藝武術工作室的收費方案、VIP 會員、會員須知與退費說明。" ogImage={pricingTable} scene={{ kind: 'pricing', spec: PAGE_SCENES.pricing }}>
   <section class="section section--flush-top" aria-labelledby="page-title">
     <div class="container">
       <div class="page-head">

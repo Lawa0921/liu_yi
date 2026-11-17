@@ -48,7 +48,7 @@ describe('首頁文案的結構', () => {
   });
 
   it('小孩的四式也有文案（備用，課程內文缺首句時用）', () => {
-    for (const key of ['kid-wushu', 'kid-defense-a', 'kid-defense-b', 'kid-weapon']) {
+    for (const key of ['kid-wushu', 'kid-defense-a', 'kid-defense-b', 'kid-weapon', 'kid-miaodao', 'kid-spear']) {
       expect(COPY.moves[key]?.lines[0], key).toBeTruthy();
     }
   });
@@ -77,5 +77,7 @@ describe('首頁文案的結構', () => {
     expect(COPY.moves['kid-defense-a']!.no).toBe(BEAT_NO['combat-a']);
     expect(COPY.moves['kid-defense-b']!.no).toBe(BEAT_NO['combat-b']);
     expect(COPY.moves['kid-weapon']!.no).toBe(BEAT_NO['weapon-a']);
+    expect(COPY.moves['kid-miaodao']!.no).toBe(BEAT_NO['weapon-b']);
+    expect(COPY.moves['kid-spear']!.no).toBe(BEAT_NO['weapon-c']);
   });
 });

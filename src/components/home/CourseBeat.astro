@@ -39,7 +39,9 @@ interface Move {
 function moveFor(audience: Audience, course: Course): Move | undefined {
   if (weapon) {
     const item = course.data.subItems[weapon.index];
-    return item ? { no: BEAT_NO[beat as keyof typeof BEAT_NO], name: item.name, lines: [COPY.weapons[weapon.kind]] } : undefined;
+    // 小孩版（Task 27 追加）：兵器三段都有小孩持械的姿勢與一句小孩語氣的說明（COPY.moves 的 kid-weapon／kid-miaodao／kid-spear）；名稱仍是課程子項的名稱
+    const line = audience === 'kid' ? COPY.moves[poseFor(beat, 'kid')]?.lines[0] : undefined;
+    return item ? { no: BEAT_NO[beat as keyof typeof BEAT_NO], name: item.name, lines: [line ?? COPY.weapons[weapon.kind]] } : undefined;
   }
   const copy = COPY.moves[poseFor(beat, audience)];
   if (!copy) return undefined;

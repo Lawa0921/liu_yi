@@ -19,7 +19,8 @@
     "test:e2e": "npm run build && npm run build:root && npm run build:harness && playwright test",
     "test:e2e:only": "playwright test",
     "fonts:subset": "tsx scripts/fonts/cli.ts",
-    "qi:snapshot-weapons": "tsx scripts/qi/snapshot-weapons.ts"
+    "qi:snapshot-weapons": "tsx scripts/qi/snapshot-weapons.ts",
+    "crest:build": "tsx scripts/crest/cli.ts"
   },
   "dependencies": {
     "@astrojs/sitemap": "^3.7.5",

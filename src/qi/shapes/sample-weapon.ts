@@ -5,7 +5,7 @@
  *   - 單位形（D13）：長軸 +x、鋒尖朝 +x、置中、全長 1。快照是長軸 +Y 的原座標，這裡轉 −90°（繞 Z）：(x, y, z) → (y, −x, z)，
  *     再依「全部頂點在長軸上的實際範圍」縮成長度 1 並置中。用實際範圍而不是 `tip − butt`：劍穗的結會比劍首多出約 2%，
  *     長度要把它算進去，非 AURA 點的 x 範圍才會剛好是 1。
- *   - 表面占 30%（SURFACE_SHARE）；其餘是貼著兵器的氣（kind = AURA）。
+ *   - 表面預設占 30%（SURFACE_SHARE；持械形體 `sample-armed.ts` 可用 `surfaceShare` 要更多，兵器才不會被氣蓋掉）；其餘是貼著兵器的氣（kind = AURA）。
  *   - 每個零件（快照裡同一種 cls 只能有一個零件，重複會直接 throw）的點數 ∝ 面積^0.6 × 種類加權
  *     （鋼 ×1.8、銅 ×1、紅纓 ×0.7、暗色 ×1.4）。面積開 0.6 次方：刃面大、纓穗細，直接按面積分配穗會幾乎看不到。
  *   - 補強（試作的兩個已知缺點）：
@@ -85,8 +85,10 @@ function apportion(weights: number[], total: number): number[] {
   return out;
 }
 
-export function sampleWeapon(s: WeaponSnapshot, opts: { count: number; seed: number }): Shape {
+export function sampleWeapon(s: WeaponSnapshot, opts: { count: number; seed: number; surfaceShare?: number }): Shape {
   const { count, seed } = opts;
+  const surfaceShare = opts.surfaceShare ?? SURFACE_SHARE;
+  if (!(surfaceShare > 0 && surfaceShare < 1)) throw new RangeError(`surfaceShare 必須在 0 與 1 之間（不含）：${surfaceShare}`);
   if (!Number.isInteger(count) || count < MIN_COUNT) throw new RangeError(`count 必須是 ≥ ${MIN_COUNT} 的整數：${count}`);
   if (!(s.tip > s.butt)) throw new RangeError(`快照的 tip（${s.tip}）必須大於 butt（${s.butt}）`);
   if (s.parts.length === 0) throw new RangeError('快照沒有零件');
@@ -156,7 +158,7 @@ export function sampleWeapon(s: WeaponSnapshot, opts: { count: number; seed: num
   const anchors = [anchorOf(true), anchorOf(false)];
 
   // ── 配額：每個零件分到幾個表面點 ───────────────────────────────
-  const surface = Math.round(count * SURFACE_SHARE);
+  const surface = Math.round(count * surfaceShare);
   const budget = surface - ANCHORS;
   const weights = parts.map((p) => (p.area > 0 ? Math.pow(p.area, AREA_POWER) * BOOST[p.cls] : 0));
   const redIndex = parts.flatMap((p, k) => (p.cls === 4 && weights[k]! > 0 ? [k] : []));

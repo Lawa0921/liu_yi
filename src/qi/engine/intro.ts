@@ -25,7 +25,8 @@ export interface IntroState {
 }
 
 const EXHALE_AT = 0.6;
-const INHALE_AT = 1.0;
+/** 吸氣開始的時間（秒）。從氣流（入館閘門的背景）起演時直接從這裡起算：不接續 land、不散開（`playIntro({ fromAmbient })`）。 */
+export const INHALE_AT = 1.0;
 const HOLD_AT = 2.0;
 const LAND_AT = 2.7;
 const DONE_AT = 3.4;

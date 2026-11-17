@@ -257,6 +257,159 @@ test.describe('開場結束通知 onEnd（桌機，tier=min）', () => {
     expect(await ends(page)).toEqual(['done', 'skipped', 'interrupted']);
   });
 
+  /** 落地（2.7 s）通知 onLand（Task 24：首頁用來在衝擊波的瞬間「擦」出館徽）。 */
+  test('onLand：落地那一格呼叫一次、早於 onEnd；落地前被 skip 或打斷就不呼叫', async ({ page }) => {
+    await open(page);
+    await settleLand(page);
+    const marks = () => page.evaluate(() => (window as unknown as { __marks?: string[] }).__marks ?? []);
+    const play = (tag: string) =>
+      page.evaluate((name) => {
+        const w = window as unknown as { __marks?: string[] };
+        w.__marks ??= [];
+        stageOf().playIntro({ onLand: () => w.__marks!.push(`${name}:land`), onEnd: () => w.__marks!.push(`${name}:end`) });
+      }, tag);
+
+    await play('full');
+    await run(page, 2500);
+    expect(await marks(), '2.5 s：還沒落地').toEqual([]);
+    await run(page, 400);
+    expect(await marks(), '2.9 s：已落地、還沒結束').toEqual(['full:land']);
+    await run(page, 800);
+    expect(await marks(), '演完：onLand 在 onEnd 之前，各一次').toEqual(['full:land', 'full:end']);
+    await run(page, 1000);
+    expect(await marks(), '之後不再呼叫').toEqual(['full:land', 'full:end']);
+
+    await play('skip');
+    await run(page, 1500);
+    await page.evaluate(() => stageOf().playIntro({ skip: true }));
+    await run(page, 4000);
+    expect(await marks(), '落地前 skip：只有 onEnd').toEqual(['full:land', 'full:end', 'skip:end']);
+
+    await play('cut');
+    await run(page, 1500);
+    await setPose(page, 'dingzhou');
+    await run(page, 4000);
+    expect(await marks(), '落地前被別的姿勢打斷：只有 onEnd，舊時間軸之後也不會補呼叫').toEqual(['full:land', 'full:end', 'skip:end', 'cut:end']);
+  });
+
+  /** 計時真的開始（uIntroT 從 0 起算）通知 onStart（Task 25：首頁用來在「開場一開始」就解除館徽的逾時保險）。 */
+  test('onStart：形體都載好時 playIntro 當場呼叫一次（uIntroT = 0）；等形體載入時還沒呼叫，載好才呼叫；被取消或 skip 就不呼叫', async ({ page }) => {
+    await open(page);
+    await settleLand(page);
+    const marks = () => page.evaluate(() => (window as unknown as { __starts?: string[] }).__starts ?? []);
+    const play = (tag: string) =>
+      page.evaluate((name) => {
+        const w = window as unknown as { __starts?: string[] };
+        w.__starts ??= [];
+        stageOf().playIntro({ onStart: () => w.__starts!.push(`${name}:start:${stageOf().debug.uniforms().uIntroT}`), onEnd: () => w.__starts!.push(`${name}:end`) });
+      }, tag);
+
+    await play('full');
+    expect(await marks(), '形體都載好了：計時開始的同一刻呼叫（那時 uIntroT 剛歸零）').toEqual(['full:start:0']);
+    await run(page, 4300);
+    expect(await marks(), '演完：start 只有一次，之後是 end').toEqual(['full:start:0', 'full:end']);
+
+    await play('skip');
+    await run(page, 800);
+    await page.evaluate(() => stageOf().playIntro({ skip: true }));
+    await run(page, 3000);
+    expect(await marks(), 'start 已呼叫過；skip 之後只多一個 end，不會再有 start').toEqual(['full:start:0', 'full:end', 'skip:start:0', 'skip:end']);
+  });
+
+  /** 入館閘門（Task 25）：光點在氣流（flow）裡飄，按下「入館」才從吸氣起演（不接續 land、不散開）。 */
+  test('fromAmbient：從氣流起演——計時從吸氣（1.0 s）起算、第一格目標就換成 lift（不經過 land、不重播散開）、落地仍在 2.7 s，約 2.4 s 演完、最後聚回 land', async ({ page }) => {
+    await open(page);
+    await setPose(page, 'land', false);
+    await setPose(page, 'lift', false);
+    await setPose(page, 'flow', false);
+    await run(page, 2500);
+    expect(await poseOf(page)).toBe('flow');
+    const marks = () => page.evaluate(() => (window as unknown as { __marks?: string[] }).__marks ?? []);
+    await page.evaluate(() => {
+      const w = window as unknown as { __marks?: string[] };
+      w.__marks = [];
+      stageOf().playIntro({
+        fromAmbient: true,
+        onStart: () => w.__marks!.push(`start:${stageOf().debug.uniforms().uIntroT}`),
+        onLand: () => w.__marks!.push('land'),
+        onEnd: () => w.__marks!.push('end'),
+      });
+    });
+    expect(await marks(), '形體都載好：當場起算，從吸氣（1）開始').toEqual(['start:1']);
+    expect((await uniforms(page)).uIntroT).toBe(1);
+
+    await run(page, 16); // 第一格：吸氣的目標是 lift，姿勢從 flow 直接換過去（沒有先接 land）
+    expect(await poseOf(page)).toBe('lift');
+    expect((await uniforms(page)).uShockT, '還沒落地').toBe(-1);
+
+    await run(page, 1500); // 約 2.5 s 的時間軸
+    expect(await poseOf(page)).toBe('lift');
+    expect(await marks()).toEqual(['start:1']);
+    await run(page, 400); // 約 2.9 s：落地
+    expect(await marks(), '落地仍在 2.7 s').toEqual(['start:1', 'land']);
+    expect(await poseOf(page)).toBe('land');
+    await run(page, 600); // 約 3.5 s：演完（比接續 land 的 3.4 s 時間軸早結束 1 秒，因為跳過了接手與散開）
+    expect(await marks()).toEqual(['start:1', 'land', 'end']);
+    expect((await uniforms(page)).uIntroT).toBe(-1);
+    await run(page, 2000);
+    expect(await meanError(page), '光點從遠處飛進來，最後聚回 land').toBeLessThan(0.05);
+  });
+
+  test('fromAmbient 中途 skip：立刻收尾、停在 land；之後 playIntro 預設（接續 land）仍從 0 起算', async ({ page }) => {
+    await open(page);
+    await setPose(page, 'land', false);
+    await setPose(page, 'lift', false);
+    await setPose(page, 'flow', false);
+    await run(page, 1000);
+    await page.evaluate(() => stageOf().playIntro({ fromAmbient: true }));
+    await run(page, 500);
+    await page.evaluate(() => stageOf().playIntro({ skip: true }));
+    expect((await uniforms(page)).uIntroT).toBe(-1);
+    expect(await poseOf(page), 'skip 之後停在 land').toBe('land');
+    await run(page, 3000);
+    expect(await meanError(page)).toBeLessThan(0.05);
+    await page.evaluate(() => stageOf().playIntro());
+    expect((await uniforms(page)).uIntroT, '預設 playIntro 從 0 起算').toBe(0);
+  });
+
+  test('fromAmbient 計時一起算、第一格還沒畫就 skip（姿勢還是 flow）：收回 land，不停在氣流（Task 25 審查）', async ({ page }) => {
+    await open(page);
+    await setPose(page, 'land', false);
+    await setPose(page, 'lift', false);
+    await setPose(page, 'flow', false);
+    await run(page, 1000);
+    const state = await page.evaluate(async () => {
+      const stage = stageOf();
+      stage.playIntro({ fromAmbient: true });
+      for (let i = 0; i < 20; i++) await Promise.resolve(); // 形體都載好：計時起算（還沒有任何一格 rAF）
+      const before = { introT: stage.debug!.uniforms().uIntroT, pose: stage.debug!.pose() };
+      stage.playIntro({ skip: true });
+      return { before, after: { introT: stage.debug!.uniforms().uIntroT, pose: stage.debug!.pose() } };
+    });
+    expect(state.before, '前提：計時已起算（1.0）、姿勢還是 flow').toEqual({ introT: 1, pose: 'flow' });
+    expect(state.after, 'skip：計時歸零、姿勢收回 land').toEqual({ introT: -1, pose: 'land' });
+    await run(page, 3000);
+    expect(await meanError(page), '光點聚成 land').toBeLessThan(0.05);
+  });
+
+  test('onStart：等 lift 載入的 pending 期間不呼叫；被別的姿勢取消的開場永遠不呼叫（之後 lift 載好也不補）', async ({ page }) => {
+    await open(page);
+    await setPose(page, 'land', false); // lift 還沒載過：playIntro 要等它
+    const outcome = await page.evaluate(async () => {
+      const w = window as unknown as { __starts?: string[] };
+      w.__starts = [];
+      const stage = stageOf();
+      stage.playIntro({ onStart: () => w.__starts!.push('start'), onEnd: () => w.__starts!.push('end') });
+      const during = [...w.__starts]; // pending：還沒開始
+      await stage.setPose('dingzhou'); // 同一刻取消
+      return { during, after: [...w.__starts] };
+    });
+    expect(outcome.during, 'pending 期間還沒開始').toEqual([]);
+    expect(outcome.after, '被取消：只有 end').toEqual(['end']);
+    await run(page, 3500);
+    expect(await page.evaluate(() => (window as unknown as { __starts?: string[] }).__starts), '之後 lift 載好也不會補 start').toEqual(['end']);
+  });
+
   test('開場還在等形體載入時被別的姿勢取消：呼叫一次，之後 lift 載好也不會再呼叫', async ({ page }) => {
     await open(page);
     await setPose(page, 'land', false); // lift 還沒載過：playIntro 要等它
@@ -440,13 +593,13 @@ test.describe('大槍桿與紅纓（1440×900，tier=min）', () => {
 test.describe('減少動態', () => {
   test.use({ viewport: { width: 1280, height: 720 }, reducedMotion: 'reduce' });
 
-  test('playIntro 的 onEnd 不會被呼叫（沒有演出）', async ({ page }) => {
+  test('playIntro 的 onStart、onEnd、onLand 都不會被呼叫（沒有演出）', async ({ page }) => {
     await open(page);
     await setPose(page, 'land');
     await page.evaluate(() => {
       const w = window as unknown as { __ends?: string[] };
       w.__ends = [];
-      stageOf().playIntro({ onEnd: () => w.__ends!.push('called') });
+      stageOf().playIntro({ onStart: () => w.__ends!.push('started'), onEnd: () => w.__ends!.push('called'), onLand: () => w.__ends!.push('landed') });
     });
     await run(page, 1000);
     expect(await page.evaluate(() => (window as unknown as { __ends?: string[] }).__ends)).toEqual([]);

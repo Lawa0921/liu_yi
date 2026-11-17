@@ -2,7 +2,7 @@
  * 形體產線（D10、D11）：依 `src/qi/config/shapes.ts` 的配方，在建置時把每個形體取樣成 `<id>.bin`（v1，固定 16 384 點），
  * 另寫 `shapes.json`（`[{ id, bytes, sha256 }]`）與 `.inputs-hash`。輸出在 `src/assets/generated/qi/shapes/`（已忽略，不進 git）。
  *
- * 輸入雜湊 = 配方用到的剪影 PNG、朱印遮罩 PNG、兵器 `.geo` 快照，加上 `config/{figures,shapes}.ts`、`shapes/*.ts`、
+ * 輸入雜湊 = 配方用到的剪影 PNG、朱印遮罩 PNG、館徽圖 PNG、兵器 `.geo` 快照（竹簡是程序化的，沒有輸入檔），加上 `config/{figures,shapes,armed}.ts`、`shapes/*.ts`、
  * 本腳本與 `hash.ts`、`staged-output.ts` 的原始碼，以及形體檔格式版本。雜湊沒變、檔案齊全就跳過（不重寫任何檔）。
  * 本腳本自己也進雜湊：朱印取樣、合成排列的邏輯寫在這裡，改了它產物就該重建。
  * 「檔案齊全」包含大小：每個 `.bin` 必須恰為 `shapeFileBytes(SHAPE_COUNT)`，被截斷的檔會觸發重建。
@@ -17,18 +17,23 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import sharp from 'sharp';
+import { ARMED } from '../../src/qi/config/armed';
 import { FIGURES, figureScale } from '../../src/qi/config/figures';
 import { SEAL_CENTER_Y, SEAL_WORLD_SIZE, SHAPES, type ShapeRecipe } from '../../src/qi/config/shapes';
+import { sampleCrest } from '../../src/qi/shapes/sample-crest';
+import { sampleScroll } from '../../src/qi/shapes/sample-scroll';
 import { encodeShape, KIND, SHAPE_COUNT, SHAPE_FORMAT_VERSION, shapeFileBytes, type Shape } from '../../src/qi/shapes/format';
 import { OPAQUE } from '../../src/qi/shapes/head';
 import { rng } from '../../src/qi/shapes/rng';
 import { sampleFigure, type FigureImage } from '../../src/qi/shapes/sample-figure';
-import { sampleWeapon } from '../../src/qi/shapes/sample-weapon';
+import { sampleArmed } from '../../src/qi/shapes/sample-armed';
 import { decodeSnapshot } from '../../src/qi/shapes/weapon-snapshot';
 import { hashInputs, listFiles, sha256 } from './hash';
 import { commitStaged, hashMatches, sizeOf } from './staged-output';
 
 const SEAL_MASK = 'src/assets/seal/seal-liuyi.png';
+/** 光點館徽的取樣來源：Task 24 的透明底金色館徽（`npm run crest:build` 由 logo_large.jpg 轉出）。 */
+const CREST_IMAGE = 'src/assets/images/crest-lion.png';
 /** 朱印的深度：z 在 ±這個值內（人形約 ±0.3，印是薄薄一片）。 */
 const SEAL_HALF_DEPTH = 0.02;
 const MANIFEST = 'shapes.json';
@@ -38,6 +43,13 @@ function resolveFigure(figure: string): { file: string; scale: number } {
   const def = FIGURES[figure];
   if (!def) throw new Error(`配方引用了不存在的人形 ${figure}（FIGURES 沒有這個鍵）`);
   return { file: `src/assets/silhouettes/${def.src}.png`, scale: figureScale(def, FIGURES.land!) };
+}
+
+/** 持械形體引用的設定（`ARMED`）；配方指到不存在的鍵就失敗。 */
+function armedDef(armed: string): (typeof ARMED)[keyof typeof ARMED] {
+  const def = (ARMED as Record<string, (typeof ARMED)[keyof typeof ARMED] | undefined>)[armed];
+  if (!def) throw new Error(`配方引用了不存在的持械設定 ${armed}（ARMED 沒有這個鍵）`);
+  return def;
 }
 
 /** 失敗訊息一律帶形體 id（sharp、解碼器丟的錯本身不會說是哪個形體），原始錯誤放在 cause。 */
@@ -50,10 +62,16 @@ function recipeInputs(recipe: ShapeRecipe): string[] {
   switch (recipe.kind) {
     case 'figure':
       return [resolveFigure(recipe.figure).file];
-    case 'weapon':
-      return [`src/qi/data/weapons/${recipe.name}.geo`];
+    case 'armed': {
+      const def = armedDef(recipe.armed);
+      return [`src/assets/silhouettes/${def.src}.png`, `src/qi/data/weapons/${def.weapon}.geo`];
+    }
     case 'seal':
       return [SEAL_MASK];
+    case 'scroll':
+      return []; // 程序化：沒有輸入檔，所以不可能帶字
+    case 'crest':
+      return [CREST_IMAGE];
     case 'compose':
       return recipe.parts.map((part) => resolveFigure(part.figure).file);
   }
@@ -72,6 +90,7 @@ function allInputs(root: string): string[] {
     ...assets,
     'src/qi/config/figures.ts',
     'src/qi/config/shapes.ts',
+    'src/qi/config/armed.ts',
     ...listFiles(root, 'src/qi/shapes', '.ts'),
     'scripts/qi/build-shapes.ts',
     'scripts/qi/hash.ts',
@@ -168,13 +187,20 @@ async function buildShape(root: string, id: string, recipe: ShapeRecipe): Promis
       const { file, scale } = resolveFigure(recipe.figure);
       return sampleFigure(await loadMask(root, file), scale, { count, seed: seedOf(id) });
     }
-    case 'weapon': {
-      const snapshot = decodeSnapshot(new Uint8Array(readFileSync(join(root, `src/qi/data/weapons/${recipe.name}.geo`))));
-      if (snapshot.name !== recipe.name) throw new Error(`快照內的兵器名稱是 ${snapshot.name}，不是 ${recipe.name}`);
-      return sampleWeapon(snapshot, { count, seed: seedOf(id) });
+    case 'armed': {
+      const def = armedDef(recipe.armed);
+      const snapshot = decodeSnapshot(new Uint8Array(readFileSync(join(root, `src/qi/data/weapons/${def.weapon}.geo`))));
+      if (snapshot.name !== def.weapon) throw new Error(`快照內的兵器名稱是 ${snapshot.name}，不是 ${def.weapon}`);
+      const mask = await loadMask(root, `src/assets/silhouettes/${def.src}.png`);
+      // 比例：頭部對齊落地那張（與 `figureScale` 同一條規則；持械剪影的頭高是看圖量的，見 config/armed.ts）
+      return sampleArmed(mask, FIGURES.land!.headPx / def.headPx, snapshot, def.spec, { count, seed: seedOf(id) });
     }
     case 'seal':
       return sampleSeal(await loadMask(root, SEAL_MASK), { count, seed: seedOf(id) });
+    case 'scroll':
+      return sampleScroll({ count, seed: seedOf(id) });
+    case 'crest':
+      return sampleCrest(await loadMask(root, CREST_IMAGE), { count, seed: seedOf(id) });
     case 'compose': {
       const figures = await Promise.all(
         recipe.parts.map(async (part) => {

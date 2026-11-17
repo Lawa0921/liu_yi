@@ -46,7 +46,7 @@ export const FIGURES: Record<string, FigureDef> = {
   'kid-wushu': { id: 'kid-wushu', src: 'fig-kid-wushu', headPx: 158, audience: 'kid' },
   'kid-defense-a': { id: 'kid-defense-a', src: 'fig-kid-defense-a', headPx: 202, audience: 'kid' },
   'kid-defense-b': { id: 'kid-defense-b', src: 'fig-kid-defense-b', headPx: 177, audience: 'kid' },
-  'kid-weapon': { id: 'kid-weapon', src: 'fig-kid-weapon', headPx: 171, audience: 'kid' },
+  // 小孩持劍（fig-kid-weapon）是持械形體，比例與兵器的擺放在 `config/armed.ts`（headPx 171 是這裡原本的量測值）。
 };
 
 /** 這張圖要用的 scale（相對於落地那張）：有 `scaleOverride` 用它，否則頭部對齊。 */

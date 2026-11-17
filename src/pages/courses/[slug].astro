@@ -13,6 +13,7 @@ import Bafang from '../../components/ornament/Bafang.astro';
 import Leitai from '../../components/ornament/Leitai.astro';
 import { coachesOfCourse, getPublishedCoaches, getPublishedCourses, type Course } from '../../lib/content';
 import { AUDIENCE_LABEL, CATEGORY_GLYPH, CATEGORY_LABEL } from '../../lib/courses';
+import { sceneForCourse } from '../../lib/scene/config';
 import { BOOKING_ANCHOR, BOOKING_LABEL } from '../../lib/site';
 import { url } from '../../lib/url';
 
@@ -36,7 +37,7 @@ const glyph = category === 'other' ? undefined : CATEGORY_GLYPH[category];
 const WEAPON_KIND: Record<string, 'jian' | 'miaodao' | 'spear'> = { 中國劍: 'jian', 苗刀: 'miaodao', 大槍: 'spear' };
 ---
 
-<BaseLayout title={title} description={`${title}：${summary}`} ogImage={photos[0]?.src} ogType="article">
+<BaseLayout title={title} description={`${title}：${summary}`} ogImage={photos[0]?.src} ogType="article" scene={{ kind: 'course', spec: sceneForCourse({ id: course.id, category, audience }) }}>
   <article class="course">
     <header class="course-head">
       <div class="course-head__text">

@@ -21,3 +21,23 @@ export function textInkRight(root: ParentNode): number | undefined {
   }
   return right === -Infinity ? undefined : right;
 }
+
+/**
+ * `root` 底下所有文字節點的最小 top（視窗座標，CSS 像素）；沒有任何可見文字回 `undefined`。
+ * 直向版面的文字在下、光點在上，合成形體（others）要擺在這條線之上（引擎端 `textTop`，`engine/others-layout.ts`）。
+ */
+export function textInkTop(root: ParentNode): number | undefined {
+  let top = Infinity;
+  const range = document.createRange();
+  for (const column of root.querySelectorAll('.beat__text')) {
+    const walker = document.createTreeWalker(column, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (!node.textContent?.trim()) continue;
+      range.selectNodeContents(node);
+      for (const rect of range.getClientRects()) {
+        if (rect.width > 0) top = Math.min(top, rect.top);
+      }
+    }
+  }
+  return top === Infinity ? undefined : top;
+}

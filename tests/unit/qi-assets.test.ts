@@ -23,6 +23,8 @@ function copyRoot(): string {
   const dir = mkdtempSync(join(tmpdir(), 'qi-assets-'));
   tmpDirs.push(dir);
   for (const rel of ['src/qi', 'src/assets/seal', 'scripts/qi']) cpSync(join(ROOT, rel), join(dir, rel), { recursive: true });
+  mkdirSync(join(dir, 'src/assets/images'), { recursive: true });
+  cpSync(join(ROOT, 'src/assets/images/crest-lion.png'), join(dir, 'src/assets/images/crest-lion.png')); // 館徽圖（crest 形體的來源）
   mkdirSync(join(dir, 'src/assets/silhouettes'), { recursive: true });
   for (const name of readdirSync(join(ROOT, 'src/assets/silhouettes'))) {
     if (name.endsWith('.png')) cpSync(join(ROOT, 'src/assets/silhouettes', name), join(dir, 'src/assets/silhouettes', name));

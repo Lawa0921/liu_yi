@@ -6,7 +6,8 @@
  *     它們的位置，`expandTargets` 與 `flowTargets` 只是把它們原樣寫進各自的貼圖，換招時煙不會被拉進人形。
  *     煙格的 w ＝ −1（著色器據此畫成低亮度的飄煙）。
  *   - 其餘格子依序（索引由小到大）領形體的第 0、1、2…個取樣：N ≥ 格數就是取前綴（形體檔已打散序，前綴是同一個比例的縮影）；
- *     不夠就循環重複，重複的點（第 N 個起）在世界座標加每軸 ±0.006 的抖動（D10），好讓重疊的光點散成一層而不是疊成一個。
+ *     不夠就循環重複，重複的點（第 N 個起）在世界座標加每軸 ±`JITTER`（0.006）的抖動（D10），好讓重疊的光點散成一層而不是疊成一個；
+ *     細線條的光點館徽（`KIND.CREST`）只抖 `CREST_JITTER`（0.002），線條才不糊（每個點依自己的種類，亂數的取用數不變）。
  *     抖動只取決於「第幾個點」，不取決於姿勢，所以同一批光點換姿勢時的微動一致。
  *   - 兵器（D13）：形體檔存的是「長軸 +x、鋒尖朝 +x、置中、全長 1」的單位形；`Layout` 依視窗比例把它縮放、繞 z 轉、平移到位。
  *     抖動在 layout 之後加（世界單位），不會被兵器的 scale 放大。紅纓（RED）掛著、順著重力垂下：兵器傾斜時
@@ -52,17 +53,15 @@ const AMBIENT_SEED = 7;
 /** 煙的位置用另一條亂數序列（與 mask 的挑選分開），種子由 `seed` 衍生。 */
 const AMBIENT_PLACE_SALT = 0x9e3779b9;
 /** 重複點的抖動幅度（每軸 ±，世界單位；D10）。 */
-const JITTER = 0.006;
+export const JITTER = 0.006;
+/**
+ * 光點館徽（`KIND.CREST`）的重複點抖動：細線條的館徽（鬃毛、捲紋、浪紋）一條線只有一兩個點寬，
+ * 被 0.006 的抖動（加上著色器的顆粒）散開就糊成一片（Task 25 審查）。降到 0.002：重疊的點仍散成一層，但線條保持清楚。
+ * 其他形體不變。
+ */
+export const CREST_JITTER = 0.002;
+const CREST_W = kindToW(KIND.CREST);
 const JITTER_SEED = 0x6a17;
-
-/** 試作的兵器擺放（D13）：寬螢幕與窄螢幕各自的全長（世界單位）與傾角（弧度，鋒尖朝右上）。 */
-const WEAPON_LAYOUT: Record<'jian' | 'miaodao' | 'spear', { wide: [number, number]; narrow: [number, number] }> = {
-  jian: { wide: [2.9, 0.16], narrow: [1.9, 0.5] },
-  miaodao: { wide: [3.2, 0.22], narrow: [2.1, 0.55] },
-  spear: { wide: [3.8, 0.05], narrow: [2.3, 0.45] },
-};
-/** 兵器中點的世界高度（與人形身高一半同一帶）。 */
-const WEAPON_MID_HEIGHT = 1.05;
 
 /** 收費段的氣流範圍（世界單位）：每個軸都比環境煙（x ±5.8、y −0.2–3.4、z −5.4–3.8）寬。 */
 const FLOW_SEED = 0x0f10;
@@ -116,18 +115,18 @@ export function ambientField(count: number, seed: number = AMBIENT_SEED): Ambien
 }
 
 /**
- * 兵器的擺放（D13）：長度、傾角與中點高度依視窗寬窄（`wide`）取試作的數值。
- * `maxRight`／`minLeft`（寬版才有意義）：最右、最左的光點不得超出這個世界 x 範圍（見 `Layout.maxRight`、`Layout.minLeft`）；
- * 窄版（直向）沒有右緣導覽、文字在下方，不套用。兩個都給而窗太窄（< `WEAPON_MIN_SPAN`）時把 `minLeft` 往左放寬到剛好那麼寬。
+ * 持械形體（Task 27：拳師持械，`shapes/sample-armed.ts`）的擺放：形體檔存的就是「人與兵器已經合在一起」的世界座標（腳底在 y = 0、
+ * 兵器的方向與握法由剪影決定），所以不再依視窗換兵器的長度與傾角——`scale` 1、不旋轉、不平移，整個形體與其他人形同一把尺。
+ * 縮放只剩一件事：整體外框（人加兵器）要放得進 `minLeft`…`maxRight` 這個世界 x 的窗（見 `Layout.maxRight`、`Layout.minLeft`）。
+ * 橫向版面：右界避開右緣的段落導覽、左界避開該段文字（`engine/framing.ts`）；直向版面（文字在下）：窗就是畫布的左右緣（`portraitReachFor`）。
+ * 超過就以腳底（offset 在 y = 0）為中心等比例縮小，人仍站在地面線上；兩個都給而窗太窄（< `WEAPON_MIN_SPAN`）時把 `minLeft` 往左放寬到剛好那麼寬。
  */
-export function weaponLayout(name: 'jian' | 'miaodao' | 'spear', wide: boolean, maxRight?: number, minLeft?: number): Layout {
-  if (!Object.hasOwn(WEAPON_LAYOUT, name)) throw new RangeError(`Unknown weapon: ${String(name)}`);
-  if (maxRight !== undefined && !(Number.isFinite(maxRight) && maxRight > 0)) throw new RangeError(`Weapon maxRight must be a positive finite number: ${maxRight}`);
-  if (minLeft !== undefined && !Number.isFinite(minLeft)) throw new RangeError(`Weapon minLeft must be a finite number: ${minLeft}`);
-  const [scale, rotZ] = WEAPON_LAYOUT[name][wide ? 'wide' : 'narrow'];
-  const layout: Layout = { scale, rotZ, offset: [0, WEAPON_MID_HEIGHT, 0] };
-  if (wide && maxRight !== undefined) layout.maxRight = maxRight;
-  if (wide && minLeft !== undefined) layout.minLeft = maxRight !== undefined ? Math.min(minLeft, maxRight - WEAPON_MIN_SPAN) : minLeft;
+export function armedLayout(maxRight?: number, minLeft?: number): Layout {
+  if (maxRight !== undefined && !(Number.isFinite(maxRight) && maxRight > 0)) throw new RangeError(`Armed maxRight must be a positive finite number: ${maxRight}`);
+  if (minLeft !== undefined && !Number.isFinite(minLeft)) throw new RangeError(`Armed minLeft must be a finite number: ${minLeft}`);
+  const layout: Layout = { scale: 1, rotZ: 0, offset: [0, 0, 0] };
+  if (maxRight !== undefined) layout.maxRight = maxRight;
+  if (minLeft !== undefined) layout.minLeft = maxRight !== undefined ? Math.min(minLeft, maxRight - WEAPON_MIN_SPAN) : minLeft;
   return layout;
 }
 
@@ -238,9 +237,10 @@ export function expandTargets(shape: Shape, size: number, ambient: AmbientField,
     let y = base[k * 3 + 1]!;
     let z = base[k * 3 + 2]!;
     if (j >= count) {
-      x += (jitter() * 2 - 1) * JITTER;
-      y += (jitter() * 2 - 1) * JITTER;
-      z += (jitter() * 2 - 1) * JITTER;
+      const spread = w[k] === CREST_W ? CREST_JITTER : JITTER; // 每個點依自己的種類；亂數的取用數不變
+      x += (jitter() * 2 - 1) * spread;
+      y += (jitter() * 2 - 1) * spread;
+      z += (jitter() * 2 - 1) * spread;
     }
     out[i * 4] = x;
     out[i * 4 + 1] = y;

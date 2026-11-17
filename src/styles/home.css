@@ -44,6 +44,11 @@
   z-index: 0;
   display: block;
   pointer-events: none;
+  /*
+   * 光點是加色的光（黑底上加亮），所以畫布用 screen：畫布本身是不透明的純黑底，screen 對頁面底色是中性的（不會在底色上多出一塊更黑的矩形），亮的地方還是光點本來的顏色，
+   * 不必動引擎的著色器。景深層（Task 27，styles/depth.css）用 lighten 疊在畫布之上，只把比後面亮的地方提亮，所以光點與文字原樣透出。
+   */
+  mix-blend-mode: screen;
 }
 
 @supports (height: 100lvh) {
@@ -98,6 +103,15 @@ html.js:not(.qi-static) .beat__still {
   );
   --poster-x: calc(var(--frame-inset) + 0.63 * (100% - 2 * var(--frame-inset)));
   --poster-y: calc(var(--frame-top) + 0.512 * (var(--poster-vh) - var(--frame-top) - var(--frame-bottom)));
+  /*
+   * 館徽的大小（Task 24）：橫向版面隨視窗高（站名上方放得下，1440×900 約 126px 寬），圖的寬高比是 960:920（scripts/crest/render-crest.ts 的成品）。
+   * 站名字級取原本的大小與「扣掉館徽後放得下的最大值」中較小的：1440×900 時放得下，字級不變；較矮的視窗字級略縮。
+   * 太矮的橫向視窗（≤ 640px 高）不放館徽（見下方）。--sheen-x／--sheen-y 是掃光的位置（crest-sheen.ts 隨指標寫入）。
+   */
+  --crest-w: clamp(4.5rem, 14vh, 10rem);
+  --crest-h: calc(var(--crest-w) * 920 / 960);
+  --crest-gap: var(--space-4);
+  --title-size: min(8.5rem, 15.5vh, (var(--stage-height) - 2 * var(--space-6) - var(--crest-h) - var(--crest-gap)) / 4.24);
   position: relative;
   isolation: isolate;
   display: grid;
@@ -154,18 +168,30 @@ html[data-qi-ready] .opening__poster {
   }
 }
 
+/*
+ * 站名與館徽成一組（橫向：館徽在站名正上方、對齊站名那一欄的中線；直向：館徽掛在站名組的左邊、不占位，見下方直向區塊）。
+ * 這一組放在開場區的左側／正下方，與光點人形（海報與引擎外框）、略過鈕、往下捲提示都不重疊（home-crest.spec 的幾何檢查）。
+ */
+.opening__brand {
+  justify-self: start;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--crest-gap);
+}
+
 .opening__lockup {
   display: flex;
   flex-direction: row-reverse;
   align-items: flex-end;
-  justify-self: start;
   gap: clamp(var(--space-3), 1.4vw, var(--space-5));
 }
 
 .opening__title {
   margin: 0;
   writing-mode: vertical-rl;
-  font-size: min(8.5rem, 15.5vh);
+  /* 站名字級讓出館徽那一段高度（橫向版面館徽在站名上方）；沒有館徽（--crest-w: 0）時就是原本的 min(8.5rem, 15.5vh)。4.24em ＝ 4 字加字距的高。 */
+  font-size: var(--title-size);
   line-height: 1.1;
   letter-spacing: 0.06em;
   color: var(--color-text);
@@ -181,6 +207,256 @@ html[data-qi-ready] .opening__poster {
   letter-spacing: 0.5em;
   color: var(--color-accent-strong);
   white-space: nowrap;
+}
+
+/* ── 燙金獅子館徽（Task 24）──────────────────────────
+ * 兩層同一張透明底的金色圖：底層（.opening__crest-img）是燙金；上層（.opening__crest-sheen）是提亮的同一張，
+ * 用漸層遮罩只露出一道掃光（一團光核加一道斜的亮帶，位置 --sheen-x／--sheen-y）。透明底是真的透明，
+ * 所以散開的光點從它後面照常透出來，不需要混色模式。不用 background-clip:text（全站守門），也沒有外發光。
+ * 掃光：指標移動時跟著指標（桌機，crest-sheen.ts 寫 --sheen-x／--sheen-y 並標 data-pointer）；
+ * 沒有指標（觸控、滑鼠還沒動過）時緩慢自動掃過；減少動態時靜止（固定一道柔光、沒有動畫、腳本也不掛監聽）。
+ */
+@property --sheen-x {
+  syntax: '<percentage>';
+  inherits: true;
+  initial-value: 38%;
+}
+
+@property --sheen-y {
+  syntax: '<percentage>';
+  inherits: true;
+  initial-value: 42%;
+}
+
+.opening__crest {
+  position: relative;
+  width: var(--crest-w);
+  /* 橫向：與站名那一欄（h1，行高 1.1）的中線對齊；直向區塊會清掉它。 */
+  margin-inline-end: calc((1.1 * var(--title-size) - var(--crest-w)) / 2);
+  pointer-events: none;
+  transition:
+    --sheen-x 0.25s var(--ease-out),
+    --sheen-y 0.25s var(--ease-out);
+}
+
+.opening__crest .opening__crest-img,
+.opening__crest .opening__crest-sheen,
+.gate__crest .gate__crest-img,
+.gate__crest .gate__crest-sheen {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: none;
+}
+
+.opening__crest .opening__crest-sheen,
+.gate__crest .gate__crest-sheen {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  /* 提亮成香檳金的反光；遮罩只留光核與斜帶，其餘全透明。 */
+  filter: brightness(2.1) saturate(0.55);
+  -webkit-mask-image:
+    radial-gradient(circle at var(--sheen-x) var(--sheen-y), #000 0, transparent 26%),
+    linear-gradient(
+      104deg,
+      transparent calc(var(--sheen-x) - 13%),
+      #000 var(--sheen-x),
+      transparent calc(var(--sheen-x) + 13%)
+    );
+  mask-image:
+    radial-gradient(circle at var(--sheen-x) var(--sheen-y), #000 0, transparent 26%),
+    linear-gradient(
+      104deg,
+      transparent calc(var(--sheen-x) - 13%),
+      #000 var(--sheen-x),
+      transparent calc(var(--sheen-x) + 13%)
+    );
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* 沒有指標：每 9 秒由左往右掃過一次（前 45% 的時間），其餘時間停在畫面外；開頭延遲 1.4 秒，讓進場先演完。 */
+  .opening__crest .opening__crest-sheen,
+  .gate__crest .gate__crest-sheen {
+    animation: crest-sweep 9s var(--ease-in-out) 1.4s infinite both;
+  }
+
+  .opening__crest[data-pointer] .opening__crest-sheen,
+  .gate__crest[data-pointer] .gate__crest-sheen {
+    animation: none;
+  }
+
+  /* 進場：只有開場演出時落地的瞬間（html[data-qi-crest="in"]，init-home.ts 標）才由下往上擦出、並閃一下；
+   * 其餘情況（html[data-qi-crest="shown"]：再訪、略過、Esc、捲走、逾時保險）直接顯示終態，沒有動畫。
+   * 屬性還沒標之前（有 JS、引擎沒退回）是擦掉的；退回靜態圖、沒有 JS、減少動態都沒有這條，館徽一直在。 */
+  html.js:not(.qi-static):not([data-qi-crest]) .opening__crest {
+    clip-path: inset(100% 0 0 0);
+  }
+
+  html.js:not(.qi-static)[data-qi-crest='in'] .opening__crest {
+    animation: crest-wipe 0.9s var(--ease-out) both;
+  }
+
+  html.js:not(.qi-static)[data-qi-crest='in'] .opening__crest-img {
+    animation: crest-flash 1.1s var(--ease-out) both;
+  }
+}
+
+@keyframes crest-sweep {
+  0% {
+    --sheen-x: -50%;
+  }
+  45%,
+  100% {
+    --sheen-x: 160%;
+  }
+}
+
+@keyframes crest-wipe {
+  from {
+    clip-path: inset(100% 0 0 0);
+  }
+  to {
+    clip-path: inset(0);
+  }
+}
+
+@keyframes crest-flash {
+  from {
+    filter: brightness(1.9);
+  }
+  to {
+    filter: none;
+  }
+}
+
+/* ── 入館閘門（Task 25）──────────────────────────────
+ * 首次進站（<head> 的行內腳本標 html[data-gate="open"]）蓋一層全屏的黑底：中央是燙金獅子館徽（同一張圖、同樣的金屬掃光）、
+ * 四周緩緩飄浮的光點（引擎的氣流，畫布抬到背板之上）、下方一顆「入館」按鈕。沒有 html[data-gate]（無 JS、減少動態、沒有 WebGL、再訪、帶錨點…）整層不渲染。
+ * 疊放（由下而上）：背板 200（不透明黑底，擋住後面的首屏海報）→ 引擎畫布 201（光點飄在背板上）→ 對話框 202（館徽與按鈕）。
+ * 對話框本身透明、不接收指標事件，只有按鈕接收；館徽之下的光點因此看得到、不被一層黑擋住。
+ * 閘門期間不得捲動：overflow: hidden 於 html（scrollbar-gutter 保留捲軸的位置，開關閘門時版面不位移）；拿掉 data-gate 就還原，任何退出路徑都走同一個屬性。
+ * 淡出（data-gate="leaving"）≤ 600 ms：GATE_FADE_MS（scripts/home/gate.ts）與這裡是同一個數字。
+ */
+.gate,
+.gate-backdrop {
+  display: none;
+}
+
+html[data-gate] {
+  overflow: hidden;
+  scrollbar-gutter: stable;
+  overscroll-behavior: none;
+}
+
+html[data-gate] .gate-backdrop {
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: var(--color-bg);
+  touch-action: none;
+}
+
+html[data-gate] .home-canvas {
+  z-index: 201;
+}
+
+html[data-gate] .gate {
+  --gate-crest-w: clamp(9rem, 36vmin, 18rem);
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: clamp(var(--space-5), 5vh, var(--space-7));
+  position: fixed;
+  inset: 0;
+  z-index: 202;
+  padding: var(--space-6) var(--gutter);
+  pointer-events: none;
+  touch-action: none;
+}
+
+html[data-gate] .gate > .gate__enter {
+  pointer-events: auto;
+}
+
+html[data-gate='leaving'] .gate,
+html[data-gate='leaving'] .gate-backdrop {
+  opacity: 0;
+  transition: opacity 0.5s var(--ease-out);
+}
+
+html[data-gate='leaving'] .gate > .gate__enter {
+  pointer-events: none;
+}
+
+/* 館徽：圖是 960:920，等比縮放；載入後才淡入（scripts/home/gate.ts 標 data-ready），不讓圖突然跳出來。 */
+.gate__crest {
+  position: relative;
+  width: var(--gate-crest-w);
+  pointer-events: none;
+  opacity: 0;
+  transition:
+    opacity 0.8s var(--ease-out),
+    --sheen-x 0.25s var(--ease-out),
+    --sheen-y 0.25s var(--ease-out);
+}
+
+.gate__crest[data-ready] {
+  opacity: 1;
+}
+
+/* .gate .gate__enter：全站的 .button 在樣式表裡排在後面，同一個特異度會蓋掉這裡的字級與高度 */
+.gate .gate__enter {
+  min-width: 10rem;
+  min-height: 3.25rem;
+  font-size: var(--text-xl);
+  letter-spacing: 0.5em;
+  text-indent: 0.5em;
+}
+
+/* 「入館」按鈕在首頁腳本接手（scripts/home/gate.ts 標 data-ready）之前不可見、不可點：腳本沒到時按鈕不會是一顆點了沒反應的死按鈕。 */
+html[data-gate] .gate:not([data-ready]) .gate__enter {
+  visibility: hidden;
+}
+
+/* 閘門還擋著時，站名組先不演進場（淡出開始才演）：閘門後面的首屏不會在看不見的時候就演完。 */
+html[data-gate='open'] .opening__lockup > * {
+  animation: none;
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .gate .gate__enter {
+    animation: gate-breathe 3.2s var(--ease-in-out) infinite;
+  }
+
+  .gate .gate__enter:hover,
+  .gate .gate__enter:focus-visible {
+    animation: none;
+  }
+}
+
+@keyframes gate-breathe {
+  0%,
+  100% {
+    border-color: var(--color-accent);
+  }
+  50% {
+    border-color: var(--color-line);
+  }
+}
+
+/* 太矮的橫向視窗（≤ 640px 高，如 900×600 的小筆電、橫放手機）：站名上方沒有放館徽的地方，不放（站名字級也不讓出）。 */
+@media (not (max-aspect-ratio: 4/5)) and (max-height: 640px) {
+  .opening {
+    --crest-w: 0px;
+    --crest-gap: 0px;
+  }
+
+  .opening__crest {
+    display: none;
+  }
 }
 
 /* 往下捲提示：桌機的外框下緣已有「向下捲動」，所以只在手機顯示。 */
@@ -575,11 +851,11 @@ html:not([data-audience]) .beat--course {
 /* ── 預約 ─────────────────────────────────────────── */
 
 /*
- * 朱印的靜態圖與蓋在它上面的點擊區包在同一個盒子裡，兩者才有同一個座標系。
+ * 光點館徽（Task 25；原本是朱印）的靜態圖與蓋在它上面的點擊區包在同一個盒子裡，兩者才有同一個座標系。
  * 靜態圖是 4:3、高度不超過一段的可用高（與 .beat__still 的 max-height 同一把尺），所以盒子的寬度由高度反推：
  * 圖剛好填滿盒子，沒有 object-fit 留白，點擊區用百分比對圖就準。
  */
-.seal-stage {
+.crest-stage {
   position: relative;
   grid-column: 2;
   grid-row: 1;
@@ -587,36 +863,57 @@ html:not([data-audience]) .beat--course {
   width: min(100%, calc((var(--stage-height) - 6rem) * 4 / 3));
 }
 
-.seal-stage .beat__still {
+.crest-stage .beat__still {
   display: block;
 }
 
 /*
- * 蓋在朱印上的透明點擊區（<a>，aria-hidden、tabindex -1：鍵盤與讀屏用旁邊的按鈕）。
- * 靜態圖（沒有 JS、減少動態、沒有 WebGL）：對齊圖上的印。靜態圖產線（scripts/qi/render-stills.ts）把印置中、取 80% 圖高，
- * 加上光暈外擴一點，實測紅色外框是圖寬的 19.5%–80.5%、圖高的 9.3%–90.5%（e2e 量圖上的紅色像素驗證）。
+ * 蓋在光點館徽上的透明點擊區（<a>，aria-hidden、tabindex -1：鍵盤與讀屏用旁邊的按鈕）。
+ * 靜態圖（沒有 JS、減少動態、沒有 WebGL）：對齊圖上的館徽。靜態圖產線（scripts/qi/render-stills.ts）把館徽置中、取 80% 圖高，
+ * 加上光暈外擴一點；inset 是量圖上亮點（亮度 > 100）外框得到的：寬占 17.0%–82.8%、高占 9.1%–90.3%（e2e 同樣量圖驗證）。
  */
-.seal-hit {
+.crest-hit {
   position: absolute;
-  inset: 9.5% 19.5%;
+  inset: 9.4% 17.1%;
   cursor: pointer;
 }
 
 /*
- * 引擎在跑：朱印畫在光點裡，沒有印的矩形（光點還沒聚合、或不在預約段）就不可點——不是一塊空白的隱形按鈕。
- * 引擎量到矩形後，腳本寫 --seal-*（視窗座標）並標 data-placed，這時才顯示、定位在印上。
+ * 引擎在跑：館徽畫在光點裡，沒有館徽的矩形（光點還沒聚合、或不在預約段）就不可點——不是一塊空白的隱形按鈕。
+ * 引擎量到矩形後，腳本寫 --hit-*（視窗座標）並標 data-placed，這時才顯示、定位在館徽上。
  * 退回靜態圖（html.qi-static）後這組規則不再適用，上面對齊靜態圖的規則接手。
  */
-html.js:not(.qi-static) .seal-hit {
+html.js:not(.qi-static) .crest-hit {
   position: fixed;
-  inset: var(--seal-y, 0) auto auto var(--seal-x, 0);
-  width: var(--seal-w, 0);
-  height: var(--seal-h, 0);
+  inset: var(--hit-y, 0) auto auto var(--hit-x, 0);
+  width: var(--hit-w, 0);
+  height: var(--hit-h, 0);
   display: none;
 }
 
-html.js:not(.qi-static) .seal-hit[data-placed] {
+html.js:not(.qi-static) .crest-hit[data-placed] {
   display: block;
+}
+
+/*
+ * 按鈕旁的小型靜態朱印（純裝飾，aria-hidden）：用朱印遮罩（512×512 的 alpha，朱文「六藝」）當 mask，顏色填 --color-seal，
+ * 邊緣的毛邊與全站其他朱印（.seal）同一個濾鏡（#seal-rough）。大小 4rem（64px，需求 56–72px）。
+ */
+.booking__action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.booking__seal {
+  flex: none;
+  width: 4rem;
+  height: 4rem;
+  background: var(--color-seal);
+  -webkit-mask: var(--seal-mask) center / contain no-repeat;
+  mask: var(--seal-mask) center / contain no-repeat;
+  pointer-events: none;
 }
 
 /* ── 大人｜小孩切換鈕 ─────────────────────────────── */
@@ -712,9 +1009,27 @@ html[data-audience='kid'] [data-audience-option='kid'] {
     padding-block: var(--space-5) 6rem;
   }
 
-  /* 人形在正中央，站名與副標成一組置中放在它的下方。 */
-  .opening__lockup {
+  /*
+   * 人形在正中央，站名與副標成一組置中放在它的下方（位置與沒有館徽時完全一樣）；館徽掛在這一組的左邊、與它垂直置中——
+   * 不佔位：站名組若被館徽推向右邊，會偏離人形的中軸，也會和右下角的「略過」鈕相撞。
+   */
+  .opening {
+    --crest-w: clamp(4.5rem, 24.5vw, 7.5rem);
+    --crest-gap: var(--space-5);
+  }
+
+  .opening__brand {
     justify-self: center;
+    position: relative;
+    display: block;
+  }
+
+  .opening__crest {
+    position: absolute;
+    top: 50%;
+    right: calc(100% + var(--crest-gap));
+    margin-inline-end: 0;
+    transform: translateY(-50%);
   }
 
   .opening__title {
@@ -746,7 +1061,7 @@ html[data-audience='kid'] [data-audience-option='kid'] {
     max-height: 38svh;
   }
 
-  .seal-stage {
+  .crest-stage {
     grid-column: 1;
     width: min(100%, calc(38svh * 4 / 3));
   }
@@ -773,6 +1088,11 @@ html[data-audience='kid'] [data-audience-option='kid'] {
  * 仍置中在人形下方、不壓到人形。
  */
 @media (max-aspect-ratio: 4/5) and (max-height: 720px) {
+  .opening {
+    --crest-w: clamp(4rem, 19vw, 5rem);
+    --crest-gap: var(--space-4);
+  }
+
   .opening__lockup {
     flex-direction: column;
     align-items: center;
@@ -792,6 +1112,13 @@ html[data-audience='kid'] [data-audience-option='kid'] {
     border-top: var(--line) solid var(--color-line);
     letter-spacing: 0.3em;
     text-indent: 0.3em;
+  }
+}
+
+/* 太窄的直向螢幕（≤ 21rem，如 320px 寬的舊手機）：站名組左邊放不下館徽，不放。 */
+@media (max-aspect-ratio: 4/5) and (max-width: 21rem) {
+  .opening__crest {
+    display: none;
   }
 }
 

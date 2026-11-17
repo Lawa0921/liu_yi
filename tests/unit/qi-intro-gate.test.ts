@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { INTRO_STORAGE_KEY, introSeen, markIntroSeen } from '../../src/scripts/home/intro-gate';
+import { INTRO_STORAGE_KEY, introSeen, markIntroSeen, shouldShowGate, type GateEnv } from '../../src/scripts/home/intro-gate';
 
 /** 隱私模式／被封鎖的 storage：任何讀寫都丟例外。 */
 const blocked = {
@@ -47,5 +47,38 @@ describe('開場閘門（工作階段內只演一次）', () => {
   it('storage 讀寫都會丟例外：全部吞掉（introSeen 為假）', () => {
     expect(() => markIntroSeen(blocked)).not.toThrow();
     expect(introSeen(blocked)).toBe(false);
+  });
+});
+
+// ── 入館閘門要不要顯示（Task 25）──────────────────────────────────────
+/** 一般的首次訪客：有動態、有 WebGL、沒進過館、沒帶錨點、不是從站內其他頁來。 */
+const FIRST_VISIT: GateEnv = { reducedMotion: false, noWebgl: false, visited: false, hasHash: false, fromSite: false };
+
+describe('shouldShowGate：只有首次進站、可以演開場的訪客才擋', () => {
+  it('首次進站（有動態、有 WebGL、沒進過、沒錨點、不是站內來）：顯示', () => {
+    expect(shouldShowGate(FIRST_VISIT)).toBe(true);
+  });
+
+  it.each<[string, Partial<GateEnv>]>([
+    ['偏好減少動態', { reducedMotion: true }],
+    ['沒有 WebGL（含引擎掛不上的退回）', { noWebgl: true }],
+    ['這個工作階段進過館（再訪、按上一頁回來）', { visited: true }],
+    ['網址帶 #錨點（例如 #booking）直接前往', { hasHash: true }],
+    ['從站內其他頁進來', { fromSite: true }],
+  ])('%s：不擋', (_label, change) => {
+    expect(shouldShowGate({ ...FIRST_VISIT, ...change })).toBe(false);
+  });
+
+  it('五個條件的 32 種組合：恰有一種顯示（全部為假）', () => {
+    const keys: (keyof GateEnv)[] = ['reducedMotion', 'noWebgl', 'visited', 'hasHash', 'fromSite'];
+    let shown = 0;
+    for (let bits = 0; bits < 32; bits++) {
+      const env = Object.fromEntries(keys.map((key, i) => [key, (bits & (1 << i)) !== 0])) as unknown as GateEnv;
+      if (shouldShowGate(env)) {
+        shown++;
+        expect(bits).toBe(0);
+      }
+    }
+    expect(shown).toBe(1);
   });
 });

@@ -7,9 +7,11 @@ import sharp from 'sharp';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildAllShapes } from '../../scripts/qi/build-shapes';
 import { hashInputs } from '../../scripts/qi/hash';
+import { ARMED } from '../../src/qi/config/armed';
 import { FIGURES } from '../../src/qi/config/figures';
-import { SEAL_CENTER_Y, SEAL_WORLD_SIZE, SHAPES, WEAPON_NAMES } from '../../src/qi/config/shapes';
-import { decodeShape, KIND, SHAPE_COUNT, type Shape } from '../../src/qi/shapes/format';
+import { CREST_CENTER_Y, CREST_WORLD_WIDTH, SCROLL, SEAL_CENTER_Y, SEAL_WORLD_SIZE, SHAPES, WEAPON_NAMES } from '../../src/qi/config/shapes';
+import { arrangedSize, figureIndexOf, measureFigures } from '../../src/qi/shapes/arrange';
+import { decodeShape, KIND, kindToW, SHAPE_COUNT, type Shape } from '../../src/qi/shapes/format';
 import { decodeSnapshot, encodeSnapshot } from '../../src/qi/shapes/weapon-snapshot';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
@@ -17,6 +19,8 @@ const BIN_BYTES = 40 + 7 * SHAPE_COUNT;
 const IDS = Object.keys(SHAPES);
 /** 建置要吃的輸入都在這幾個目錄裡（剪影只複製 .png）。 */
 const INPUT_DIRS = ['src/qi', 'src/assets/seal', 'scripts/qi'];
+/** 另外要複製的單一檔案（館徽圖）。 */
+const INPUT_FILES = ['src/assets/images/crest-lion.png'];
 
 const tmpDirs: string[] = [];
 const tmp = (): string => {
@@ -32,6 +36,10 @@ afterAll(() => {
 function copyRoot(): string {
   const dir = tmp();
   for (const rel of INPUT_DIRS) cpSync(join(ROOT, rel), join(dir, rel), { recursive: true });
+  for (const rel of INPUT_FILES) {
+    mkdirSync(join(dir, rel, '..'), { recursive: true });
+    cpSync(join(ROOT, rel), join(dir, rel));
+  }
   mkdirSync(join(dir, 'src/assets/silhouettes'), { recursive: true });
   for (const name of readdirSync(join(ROOT, 'src/assets/silhouettes'))) {
     if (name.endsWith('.png')) cpSync(join(ROOT, 'src/assets/silhouettes', name), join(dir, 'src/assets/silhouettes', name));
@@ -67,11 +75,11 @@ beforeAll(async () => {
 }, 120_000);
 
 describe('SHAPES 配方', () => {
-  it('鍵恰為十五個形體 id，且等於 FIGURES ∪ 三件兵器 ∪ seal ∪ others', () => {
+  it('鍵恰為十九個形體 id，且等於 FIGURES ∪ 三件兵器 ∪ 小孩持劍、持刀、持槍 ∪ seal ∪ scroll ∪ crest ∪ others', () => {
     expect([...IDS].sort()).toEqual(
-      ['lift', 'land', 'dingzhou', 'chengchui', 'kao', 'jian', 'miaodao', 'spear', 'salute', 'seal', 'others', 'kid-wushu', 'kid-defense-a', 'kid-defense-b', 'kid-weapon'].sort(),
+      ['lift', 'land', 'dingzhou', 'chengchui', 'kao', 'jian', 'miaodao', 'spear', 'salute', 'seal', 'scroll', 'crest', 'others', 'kid-wushu', 'kid-defense-a', 'kid-defense-b', 'kid-weapon', 'kid-miaodao', 'kid-spear'].sort(),
     );
-    expect([...IDS].sort()).toEqual([...Object.keys(FIGURES), ...WEAPON_NAMES, 'seal', 'others'].sort());
+    expect([...IDS].sort()).toEqual([...Object.keys(FIGURES), ...WEAPON_NAMES, 'kid-weapon', 'kid-miaodao', 'kid-spear', 'seal', 'scroll', 'crest', 'others'].sort());
   });
 
   it('兵器名單與入庫的 .geo 檔一致（不 import weapons.ts）', () => {
@@ -79,10 +87,14 @@ describe('SHAPES 配方', () => {
     expect([...WEAPON_NAMES].sort()).toEqual(geo.sort());
   });
 
-  it('figure 配方的 figure 就是自己的 id；weapon 配方的 name 就是自己的 id', () => {
+  it('figure 配方的 figure 就是自己的 id；三件兵器與小孩持劍、持刀、持槍是 armed 配方（持械的人），ARMED 的鍵就是自己的 id', () => {
     for (const id of Object.keys(FIGURES)) expect(SHAPES[id]).toEqual({ kind: 'figure', figure: id });
-    for (const name of WEAPON_NAMES) expect(SHAPES[name]).toEqual({ kind: 'weapon', name });
+    const armedIds = [...WEAPON_NAMES, 'kid-weapon', 'kid-miaodao', 'kid-spear'];
+    for (const id of armedIds) expect(SHAPES[id], id).toEqual({ kind: 'armed', armed: id });
+    expect(Object.keys(ARMED).sort()).toEqual([...armedIds].sort());
     expect(SHAPES.seal).toEqual({ kind: 'seal' });
+    expect(SHAPES.scroll).toEqual({ kind: 'scroll' });
+    expect(SHAPES.crest).toEqual({ kind: 'crest' });
   });
 
   it('others＝land、dingzhou、chengchui、kao 四個小人形，縮成 0.38，由左到右排開', () => {
@@ -101,7 +113,7 @@ describe('SHAPES 配方', () => {
 });
 
 describe('buildAllShapes：第一次建置', () => {
-  it('不是跳過，built 列出全部十五個 id', () => {
+  it('不是跳過，built 列出全部十九個 id', () => {
     expect(first.skipped).toBe(false);
     expect([...first.built].sort()).toEqual([...IDS].sort());
   });
@@ -130,15 +142,21 @@ describe('buildAllShapes：第一次建置', () => {
     }
   });
 
-  it('種類合法：人形與 others 只有 0–99，兵器只有 100–104，seal 全是 SEAL', () => {
+  it('種類合法：人形與 others 只有 0–99，持械形體是人形（0–99）加兵器（100–104），seal 全是 SEAL，scroll 只有 BAMBOO／DARK，crest 全是 CREST', () => {
     for (const id of IDS) {
       const s = decode(OUT, id);
       const kinds = new Set(s.kinds);
       if (id in FIGURES || id === 'others') expect(Math.max(...kinds), id).toBeLessThanOrEqual(99);
       else if (id === 'seal') expect([...kinds]).toEqual([KIND.SEAL]);
+      else if (id === 'scroll') expect([...kinds].sort()).toEqual([KIND.DARK, KIND.BAMBOO].sort());
+      else if (id === 'crest') expect([...kinds]).toEqual([KIND.CREST]);
       else {
-        expect(Math.min(...kinds), id).toBeGreaterThanOrEqual(KIND.STEEL);
+        // 持械形體：人形的點（0–99）加兵器的點（STEEL…AURA）；沒有朱印、竹簡、館徽的種類
+        expect(id in ARMED, id).toBe(true);
+        expect(Math.min(...kinds), id).toBeLessThanOrEqual(99);
         expect(Math.max(...kinds), id).toBeLessThanOrEqual(KIND.AURA);
+        expect(kinds.has(KIND.STEEL) || kinds.has(KIND.DARK), `${id} 有兵器的點`).toBe(true);
+        for (const kind of kinds) expect(kind <= 99 || (kind >= KIND.STEEL && kind <= KIND.AURA), `${id} kind ${kind}`).toBe(true);
       }
     }
   });
@@ -157,9 +175,9 @@ describe('buildAllShapes：第一次建置', () => {
     expect(existsSync(join(OUT, '.staging'))).toBe(false);
   });
 
-  it('全部 .bin 合計 ≤ 1.9 MB', () => {
+  it('全部 .bin 合計 ≤ 2.3 MB（十九個，每個 114 728 B；使用者每頁只下載用到的幾個，整頁預算由 budget.spec 守住）', () => {
     const total = IDS.reduce((sum, id) => sum + statSync(join(OUT, `${id}.bin`)).size, 0);
-    expect(total).toBeLessThanOrEqual(1.9 * 1024 * 1024);
+    expect(total).toBeLessThanOrEqual(2.3 * 1024 * 1024);
   });
 
   it('人形的外框＝腳底在 y = 0、中線在 x = 0；lift 與 land 的世界身高接近 2', () => {
@@ -172,23 +190,66 @@ describe('buildAllShapes：第一次建置', () => {
     expect(height(decode(OUT, 'land'))).toBeLessThan(2.1);
   });
 
-  it('兵器：非 AURA 點的長軸 x 範圍剛好是長 1（D13 單位形）', () => {
-    for (const name of WEAPON_NAMES) {
-      const s = decode(OUT, name);
-      let lo = Infinity;
-      let hi = -Infinity;
+  it('持械形體：兵器的點比人形密、比人形亮（使用者：兵器部分的點較密、較亮）——每個佔用的 0.04 格裡，兵器表面的點數 ≥ 人形的 1.25 倍，平均 w ≥ 人形的 2 倍', () => {
+    const cell = 0.04;
+    for (const id of Object.keys(ARMED)) {
+      const s = decode(OUT, id);
+      const body = new Map<string, number>();
+      const weapon = new Map<string, number>();
+      let bodyW = 0;
+      let bodyN = 0;
+      let weaponW = 0;
+      let weaponN = 0;
       for (let i = 0; i < s.count; i++) {
-        if (s.kinds[i] === KIND.AURA) continue;
-        const x = s.positions[i * 3]!;
-        lo = Math.min(lo, x);
-        hi = Math.max(hi, x);
+        const kind = s.kinds[i]!;
+        const key = `${Math.floor(s.positions[i * 3]! / cell)},${Math.floor(s.positions[i * 3 + 1]! / cell)}`;
+        if (kind < 100) {
+          body.set(key, (body.get(key) ?? 0) + 1);
+          bodyW += kindToW(kind);
+          bodyN++;
+        } else if (kind !== KIND.AURA) {
+          weapon.set(key, (weapon.get(key) ?? 0) + 1);
+          weaponW += kindToW(kind);
+          weaponN++;
+        }
       }
-      expect(hi - lo, name).toBeCloseTo(1, 2);
+      const mean = (m: Map<string, number>) => [...m.values()].reduce((a, b) => a + b, 0) / m.size;
+      expect(mean(weapon) / mean(body), `${id} 兵器表面的點密度 ÷ 人形`).toBeGreaterThanOrEqual(1.25);
+      expect(weaponW / weaponN / (bodyW / bodyN), `${id} 兵器的平均 w ÷ 人形`).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it('持械形體：腳底在 y = 0（與其他人形同一把尺）、兵器的點占 weaponShare、整體（人加兵器）的外框高在 1.2–2.8 世界單位之間（兵器軸與剪影一致由 qi-armed.test、qi-armed-assets.test 驗）', () => {
+    for (const [id, def] of Object.entries(ARMED)) {
+      const s = decode(OUT, id);
+      expect(Math.abs(s.min[1]), `${id} 腳底`).toBeLessThan(0.02);
+      const weapon = Array.from({ length: s.count }, (_, i) => i).filter((i) => s.kinds[i]! >= KIND.STEEL);
+      expect(weapon.length / s.count, `${id} 兵器點占比`).toBeCloseTo(def.spec.weaponShare, 2);
+      expect(height(s), `${id} 世界身高（含兵器，人加兵器的外框高）`).toBeGreaterThan(1.2);
+      expect(height(s)).toBeLessThan(2.8);
     }
   });
 });
 
 describe('others（合成形體）', () => {
+  it('執行時排列（shapes/arrange.ts）：依配方中線分組量到四個人形，各自的外框互不相交，2×2 比橫排窄得多（直向畫布塞得下）', () => {
+    const recipe = SHAPES.others!;
+    if (recipe.kind !== 'compose') throw new Error('others 必須是 compose');
+    const s = decode(OUT, 'others');
+    const centers = recipe.parts.map((p) => p.x);
+    const boxes = measureFigures(s, centers);
+    expect(boxes).toHaveLength(4);
+    for (let k = 0; k < 3; k++) expect(boxes[k + 1]!.minX - boxes[k]!.maxX, `第 ${k} 與 ${k + 1} 個之間`).toBeGreaterThan(0.1);
+    for (const [k, box] of boxes.entries()) {
+      expect(box.minY, `第 ${k} 個的腳底`).toBeCloseTo(0, 1);
+      expect(figureIndexOf((box.minX + box.maxX) / 2, centers), `第 ${k} 個的中線落在自己的分組`).toBe(k);
+    }
+    const row = arrangedSize(boxes, { rows: [[0, 1, 2, 3]], scale: 1, gap: 0.25, rowGap: 0 });
+    const grid = arrangedSize(boxes, { rows: [[0, 1], [2, 3]], scale: 1, gap: 0.15, rowGap: 0.15 });
+    expect(grid.width).toBeLessThan(row.width * 0.6);
+    expect(grid.width).toBeLessThan(2.75); // 直向可視寬（framing.ts）
+  });
+
   it('總寬 ÷ 總高 ≥ 2.5，且高度是小人形（約 land 的 0.38 倍）', () => {
     const s = decode(OUT, 'others');
     expect(width(s) / height(s)).toBeGreaterThanOrEqual(2.5);
@@ -247,6 +308,62 @@ describe('others（合成形體）', () => {
       const fullZ = Math.max(Math.abs(full.min[2]), Math.abs(full.max[2]));
       expect(zMax, `${part.figure} 的 z`).toBeLessThan(fullZ * part.scale * 1.5);
     });
+  });
+});
+
+describe('scroll（竹簡：程序化，沒有任何輸入檔）', () => {
+  it('建置出來的 scroll 就是 sampleScroll 的結果：外框寬高比 1.2–1.9、置中、薄、兩端往鏡頭凸出', () => {
+    const s = decode(OUT, 'scroll');
+    expect(width(s) / height(s)).toBeGreaterThan(1.2);
+    expect(width(s) / height(s)).toBeLessThan(1.9);
+    expect((s.min[0] + s.max[0]) / 2).toBeCloseTo(0, 1);
+    expect((s.min[1] + s.max[1]) / 2).toBeCloseTo(SCROLL.centerY, 1);
+    expect(s.max[2]).toBeGreaterThan(0.15);
+    // 綁繩（DARK）約 9%
+    const dark = [...s.kinds].filter((k) => k === KIND.DARK).length / s.count;
+    expect(dark).toBeGreaterThan(0.05);
+    expect(dark).toBeLessThan(0.18);
+  });
+
+  it('改任何圖檔都不影響 scroll（它不吃輸入檔）：改館徽圖 → 只有 crest 改變', async () => {
+    const root = copyRoot();
+    const outDir = join(tmp(), 'shapes');
+    await buildAllShapes({ root, outDir });
+    const before = snapshot(outDir);
+    const file = join(root, 'src/assets/images/crest-lion.png');
+    const { data, info } = await sharp(file).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    // 左上角 40×40 塗成不透明：亮面多了一塊，取樣分布整個改變
+    for (let y = 0; y < 40; y++) for (let x = 0; x < 40; x++) data.set([255, 255, 255, 255], (y * info.width + x) * 4);
+    await sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } }).png().toFile(file);
+    expect((await buildAllShapes({ root, outDir })).skipped).toBe(false);
+    const after = snapshot(outDir);
+    expect(IDS.filter((id) => after[id] !== before[id])).toEqual(['crest']);
+  }, 120_000);
+});
+
+describe('crest（光點館徽：吃 crest-lion.png）', () => {
+  it('置中在 (0, CREST_CENTER_Y)、寬不超過 CREST_WORLD_WIDTH、外框寬高比接近館徽、很薄', () => {
+    const s = decode(OUT, 'crest');
+    expect(width(s)).toBeLessThanOrEqual(CREST_WORLD_WIDTH + 1e-3);
+    expect(width(s)).toBeGreaterThan(CREST_WORLD_WIDTH * 0.9);
+    expect(width(s) / height(s)).toBeGreaterThan(0.95);
+    expect(width(s) / height(s)).toBeLessThan(1.25);
+    expect(Math.abs((s.min[0] + s.max[0]) / 2)).toBeLessThan(0.1);
+    expect((s.min[1] + s.max[1]) / 2).toBeCloseTo(CREST_CENTER_Y, 0);
+    expect(s.max[2] - s.min[2]).toBeLessThan(0.1);
+  });
+
+  it('每個點都在館徽的亮線上（alpha ≥ 64）；亮線取樣：整體 alpha 平均高於整張圖不透明部分的平均', async () => {
+    const { data, info } = await sharp(join(ROOT, 'src/assets/images/crest-lion.png')).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    const unit = CREST_WORLD_WIDTH / info.width;
+    const s = decode(OUT, 'crest');
+    let weak = 0;
+    for (let i = 0; i < s.count; i++) {
+      const px = Math.min(info.width - 1, Math.max(0, Math.floor(s.positions[i * 3]! / unit + info.width / 2)));
+      const py = Math.min(info.height - 1, Math.max(0, Math.floor(info.height / 2 - (s.positions[i * 3 + 1]! - CREST_CENTER_Y) / unit)));
+      if (data[(py * info.width + px) * 4 + 3]! < 64) weak++;
+    }
+    expect(weak / s.count, '落在暗面或透明處的點（u16 量化的取整誤差容許 3%）').toBeLessThan(0.03);
   });
 });
 
@@ -331,7 +448,7 @@ describe('buildAllShapes：輸入雜湊與跳過', () => {
     expect(changed.sort()).toEqual(['kao', 'others']);
   }, 120_000);
 
-  it('改朱印遮罩 → 只有 seal 改變；改一個 .geo → 只有那件兵器改變', async () => {
+  it('改朱印遮罩 → 只有 seal 改變；改一個 .geo → 只有用它的兵器形體改變', async () => {
     const root = copyRoot();
     const outDir = join(tmp(), 'shapes');
     await buildAllShapes({ root, outDir });
@@ -353,7 +470,8 @@ describe('buildAllShapes：輸入雜湊與跳過', () => {
     writeFileSync(geo, encodeSnapshot({ ...snap, parts: snap.parts.slice(0, -1) }));
     expect((await buildAllShapes({ root, outDir })).skipped).toBe(false);
     const afterGeo = snapshot(outDir);
-    expect(IDS.filter((id) => afterGeo[id] !== afterSeal[id])).toEqual(['miaodao']);
+    // 苗刀的幾何是大人苗刀與小孩持刀共用的
+    expect(IDS.filter((id) => afterGeo[id] !== afterSeal[id]).sort()).toEqual(['kid-miaodao', 'miaodao']);
   }, 120_000);
 
   it('改取樣原始碼（shapes/*.ts、config/shapes.ts、建置腳本）→ 重建；只動註解時所有 .bin 逐位元不變（建置是確定性的）', async () => {

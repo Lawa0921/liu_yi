@@ -12,6 +12,7 @@ import Weapon from './ornament/Weapon.astro';
 import Bafang from './ornament/Bafang.astro';
 import Leitai from './ornament/Leitai.astro';
 import { AUDIENCE_LABEL, CATEGORY_GLYPH } from '../lib/courses';
+import { sceneForCourse } from '../lib/scene/config';
 import type { Course } from '../lib/content';
 import { url } from '../lib/url';
 
@@ -23,9 +24,11 @@ const { course } = Astro.props;
 const { title, summary, photos, category, audience } = course.data;
 const hasPhotos = photos.length > 0;
 const glyph = category === 'other' ? undefined : CATEGORY_GLYPH[category];
+// data-scene-card（Task 27）：課程總覽頁首的剪影場景讀它，滑過或聚焦這張卡時人物換成這門課的剪影（scripts/scene.ts）。
+const sceneSubject = sceneForCourse({ id: course.id, category, audience }).subject.asset;
 ---
 
-<article class:list={['course-card', 'cornered', hasPhotos ? 'course-card--photo' : 'course-card--text']} data-carousel-host>
+<article class:list={['course-card', 'cornered', hasPhotos ? 'course-card--photo' : 'course-card--text']} data-carousel-host data-scene-card={sceneSubject}>
   <a class="course-card__link" href={url(`/courses/${course.id}/`)}>
     <i class="cornered__tick"></i>
     <i class="cornered__tick"></i>

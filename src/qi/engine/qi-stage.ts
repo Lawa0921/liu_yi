@@ -17,21 +17,23 @@
  *   - 武器的擺放依視窗寬窄（D13）：寬窄翻轉時重展開武器的目標，姿勢不變。
  *   - 補強（Task 16）：換招拖尾（`uStreak`，由衝量的包絡決定）、落地演出（`playLanding`：雙圈衝擊波、白閃、鏡頭震）、
  *     開場演出（`playIntro`：吸氣流線，時間軸見 `intro.ts`）。這些都只在有模擬時才動（減少動態沒有）。
- *   - 朱印（Task 21）：`getSealRect` 量印的螢幕矩形（光點聚合後才有），首頁把 `.seal-hit` 定位上去。
+ *   - 光點館徽（Task 21 的朱印，Task 25 改成館徽）：`getCrestRect` 量館徽的螢幕矩形（光點聚合後才有），首頁把 `.crest-hit` 定位上去。
  * 注意：會被打進引擎 chunk，所以錯誤訊息只用英文。
  */
 
 import { DataTexture, FloatType, RGBAFormat, Vector3, WebGLRenderer } from 'three';
 import { BURSTS, type Burst, type PoseId } from '../config/poses';
-import { SEAL_CENTER_Y, SEAL_WORLD_SIZE, SHAPES } from '../config/shapes';
-import { ambientField, expandTargets, flowTargets, weaponLayout, type AmbientField } from '../shapes/expand';
+import { CREST_CENTER_Y, CREST_WORLD_HEIGHT, CREST_WORLD_WIDTH, SHAPES } from '../config/shapes';
+import { arrangeFigures, measureFigures } from '../shapes/arrange';
+import { ambientField, armedLayout, expandTargets, flowTargets, type AmbientField } from '../shapes/expand';
 import type { Shape } from '../shapes/format';
 import type { ShapeLoader } from '../shapes/loader';
 import { floatTargets } from './caps';
 import { burstSpeed, EXHALE, inhaleDamp, inhaleStreak, SNAP_DAMP_GAIN, streakLength } from './effects';
 import { forcesFor } from './forces';
-import { weaponLeftFor, weaponReachFor } from './framing';
-import { introState, type IntroState } from './intro';
+import { portraitReachFor, weaponLeftFor, weaponReachFor } from './framing';
+import { INHALE_AT, introState, type IntroState } from './intro';
+import { othersFit } from './others-layout';
 import { createPointer, type Pointer } from './pointer';
 import { createSim, zeroTexture, type Sim } from './sim';
 import { createStage, type Stage } from './stage';
@@ -75,6 +77,12 @@ export interface QiStageOptions {
    * 沒有文字（harness、直向、沒有那一段）回 `undefined`＝不限制。換到兵器姿勢、`resize`、`relayout()` 時都會再問一次。
    */
   textRight?: (pose: PoseId) => number | undefined;
+  /**
+   * 直向版面裡，這個姿勢那一段**實際文字**的上緣（從畫布上緣起算的 CSS 像素；那一段捲到視窗中央時的位置）。
+   * 合成形體（others 的四個小人形）在直向排成 2×2、縮進畫布寬度內並擺在這條線之上（`others-layout.ts`）。
+   * 沒有文字（harness、橫向、沒有那一段）回 `undefined`＝腳底落在其他姿勢的腳底線上。換姿勢、`resize`、`relayout()` 時都會再問一次。
+   */
+  textTop?: (pose: PoseId) => number | undefined;
 }
 
 export interface QiStage {
@@ -97,16 +105,23 @@ export interface QiStage {
    * 停在 `land`（正在演才有作用；也取消還在等形體載入的開場）。演出中（或等形體載入中）`setPose` 成別的姿勢也會立刻結束開場；
    * `setPose('land')` 則不打斷它（開場本來就停在 land）。減少動態沒有效果。
    * `onEnd`（Task 19，首頁用來收起「略過」鈕）：這一次開場結束時呼叫一次——演完、被略過、被別的姿勢打斷、或形體載不到而取消；
-   * 沒有演出（減少動態、已在演）時不會呼叫；`dispose` 也不呼叫。
+   * 沒有演出（減少動態、已在演）時不會呼叫；`dispose` 也不呼叫。參數 `failed` 在「形體載不到而取消」時為 true（Task 26）：
+   * 這時引擎的姿勢沒有動（閘門後面是氣流），呼叫端要重新要求目前段落的姿勢。
+   * `onLand`（Task 24，首頁用來在落地衝擊波的瞬間「擦」出館徽）：開場走到落地（約 2.7 秒）的那一格呼叫一次，在 `onEnd` 之前；
+   * 落地之前就結束（略過、被打斷、形體載不到）不呼叫，沒有演出時也不呼叫。
+   * `onStart`（Task 25，首頁用來在「開場一開始」就解除館徽的逾時保險）：形體都載好、計時真的開始（`uIntroT` 從開頭起算）的那一刻呼叫一次；
+   * 還在等形體載入（pending）時不呼叫，被取消、略過、形體載不到就永遠不呼叫，沒有演出時也不呼叫。
+   * `fromAmbient`（Task 25，入館閘門）：目前停在氣流（`flow`，光點在閘門後面飄）——不接續 `land` 的聚合態、不散開，時間軸直接從吸氣（`INHALE_AT`，1.0 秒）起算，
+   * 所以按下「入館」後約 2.4 秒演完（落地仍在 2.7 秒，與原本同一個時間點）。預設 false：接續 `land` 的聚合態（靜態圖交接）。
    */
-  playIntro(opts?: { skip?: boolean; onEnd?: () => void }): void;
+  playIntro(opts?: { skip?: boolean; fromAmbient?: boolean; onStart?: () => void; onEnd?: (result: { failed: boolean }) => void; onLand?: () => void }): void;
   /**
-   * 朱印在螢幕上的矩形（CSS 像素，與滑鼠座標同一個空間；首頁用來把 `.seal-hit` 定位到印上）。
-   * 光點還沒聚成印就回 `null`：姿勢不是 `seal`、散開量超過 `SEAL_SCATTER_MAX`、或聚合後還沒安定滿 `SEAL_SETTLE_S`
-   * （模擬秒；換姿勢、又散開之後重新計時）。減少動態沒有模擬，光點直接畫在目標上，所以姿勢是 `seal` 就有。
-   * 印隨視差與相機呼吸有一點點移動，所以每格重量；外框只含印本身（`SEAL_WORLD_SIZE` 見方），不含光暈。
+   * 光點館徽在螢幕上的矩形（CSS 像素，與滑鼠座標同一個空間；首頁用來把 `.crest-hit` 定位到館徽上）。
+   * 光點還沒聚成館徽就回 `null`：姿勢不是 `crest`、散開量超過 `CREST_SCATTER_MAX`、或聚合後還沒安定滿 `CREST_SETTLE_S`
+   * （模擬秒；換姿勢、又散開之後重新計時）。減少動態沒有模擬，光點直接畫在目標上，所以姿勢是 `crest` 就有。
+   * 館徽隨視差與相機呼吸有一點點移動，所以每格重量；外框只含館徽本身（`CREST_WORLD_WIDTH` × `CREST_WORLD_HEIGHT`），不含光暈。
    */
-  getSealRect(): Box | null;
+  getCrestRect(): Box | null;
   /** 只動相機與 render target，不重建模擬、不動姿勢。 */
   resize(w: number, h: number): void;
   /**
@@ -152,8 +167,8 @@ export interface QiDebug {
   feedFrameTime(ms: number): void;
   /** 人物本地座標的一點在螢幕上的位置（CSS 像素，與滑鼠座標同一個空間）；測試用來知道人形在哪裡。 */
   project(x: number, y: number, z: number): { x: number; y: number };
-  /** 同 `QiStage.getSealRect`（正式頁在 `stage.getSealRect()`；`?qi-debug=1` 才多這一個，e2e 用）。 */
-  sealRect(): Box | null;
+  /** 同 `QiStage.getCrestRect`（正式頁在 `stage.getCrestRect()`；`?qi-debug=1` 才多這一個，e2e 用）。 */
+  crestRect(): Box | null;
   /**
    * 非環境煙的光點目前在螢幕上的外框（CSS 像素，與 `project` 同一個空間；沒有任何光點就是全 0）。
    * 測試用它量兵器有沒有壓到頁面上的東西（右緣的段落導覽）：聚合後（`meanError()` 夠小）量，才是姿勢的外框而不是飛行中的光點。
@@ -165,7 +180,7 @@ export interface QiDebug {
 interface Target {
   texture: DataTexture;
   data: Float32Array;
-  /** 兵器的擺位條件（`weaponKey`）；其他姿勢是空字串。條件變了（視窗、文字）這個目標就過期，要重展開。 */
+  /** 擺位條件（`layoutKey`：兵器的左右界、合成形體的排列）；其他姿勢是空字串。條件變了（視窗、文字）這個目標就過期，要重展開。 */
   fit: string;
 }
 
@@ -182,12 +197,12 @@ const LANDING_SNAP = 0.5;
 /** 衝擊波只算到落地後這麼久（秒），之後地面回到平靜。 */
 const SHOCK_SECONDS = 3;
 /**
- * 朱印算「聚合」的條件（`getSealRect`）：散開量不超過 `SEAL_SCATTER_MAX`，且姿勢是 `seal`，並且這樣持續了 `SEAL_SETTLE_S` 模擬秒。
- * 光點從別的姿勢（或散開）飛回印上要一點時間：實測（min tier，彈簧與 tier 無關）從 flow 換成 seal，1.2 秒時光點與目標的平均距離
- * 還有 0.2（印寬 1.6），2 秒時約 0.03、3 秒時 0.008。所以取 2 秒；e2e 在矩形出現的那一刻量 `meanError()` 把關。
+ * 光點館徽算「聚合」的條件（`getCrestRect`）：散開量不超過 `CREST_SCATTER_MAX`，且姿勢是 `crest`，並且這樣持續了 `CREST_SETTLE_S` 模擬秒。
+ * 光點從別的姿勢（或散開）飛回館徽上要一點時間：實測（min tier，彈簧與 tier 無關）從 flow 換成 seal，1.2 秒時光點與目標的平均距離
+ * 還有 0.2（印寬 1.6），2 秒時約 0.03、3 秒時 0.008。館徽比朱印大一點（寬 2.0），沿用 2 秒；e2e 在矩形出現的那一刻量 `meanError()` 把關。
  */
-const SEAL_SCATTER_MAX = 0.1;
-const SEAL_SETTLE_S = 2;
+const CREST_SCATTER_MAX = 0.1;
+const CREST_SETTLE_S = 2;
 /** 人形的中心（讀回「往中心」用）。 */
 const CENTER = new Vector3(0, 1, 0);
 /** 手在畫面外（掌風碰不到任何光點）與靜止的速度。 */
@@ -237,8 +252,8 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
   const askPortrait = (): boolean => (o.portrait ? o.portrait() : isPortrait(cssWidth, cssHeight));
   let portrait = askPortrait();
   /**
-   * 兵器擺位的條件：直向用窄版長度；橫向用寬版長度，並依畫布大小留出右緣（段落導覽與槍頭光暈）的位置、
-   * 依「該段實際文字」的右緣讓出左邊（`weaponReachFor`、`weaponLeftFor`），所以橫向時畫布或文字一變，兵器的位置與長度也跟著變。
+   * 持械形體擺位的條件：橫向依畫布大小留出右緣（段落導覽與槍頭光暈）的位置、依「該段實際文字」的右緣讓出左邊（`weaponReachFor`、`weaponLeftFor`），
+   * 所以橫向時畫布或文字一變，形體的位置與大小也跟著變；直向用畫布的左右緣。
    * 字串鍵讓目標快取比較「擺位有沒有變」；每次換姿勢（換 beat）、`resize`、`relayout` 都重新量。
    */
   const weaponReach = (): number | undefined => (portrait ? undefined : weaponReachFor(cssWidth / cssHeight, cssWidth));
@@ -246,8 +261,33 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
     const textRight = portrait ? undefined : o.textRight?.(id);
     return textRight === undefined ? undefined : weaponLeftFor(cssWidth / cssHeight, cssWidth, textRight);
   };
-  const isWeapon = (id: PoseId): boolean => SHAPES[id]?.kind === 'weapon';
-  const weaponKey = (id: PoseId): string => (isWeapon(id) ? `${weaponReach()?.toFixed(4) ?? 'narrow'}|${weaponReachLeft(id)?.toFixed(4) ?? '-'}` : '');
+  /**
+   * 持械形體（Task 27：拳師持械，兵器三段與小孩的持劍）：整體外框（人加兵器）要放進 `armedWindow` 的左右界。橫向＝右緣避開段落導覽、左緣避開該段文字；
+   * 直向＝畫布的左右緣（`portraitReachFor`）。
+   */
+  const isWeapon = (id: PoseId): boolean => SHAPES[id]?.kind === 'armed';
+  const armedWindow = (id: PoseId): { right: number | undefined; left: number | undefined } => {
+    if (portrait) {
+      const reach = portraitReachFor(cssWidth / cssHeight);
+      return { right: reach.right, left: reach.left };
+    }
+    return { right: weaponReach(), left: weaponReachLeft(id) };
+  };
+  const weaponKey = (id: PoseId): string => {
+    if (!isWeapon(id)) return '';
+    const w = armedWindow(id);
+    return `${portrait ? 'portrait' : 'wide'}|${w.right?.toFixed(4) ?? '-'}|${w.left?.toFixed(4) ?? '-'}`;
+  };
+  /**
+   * 合成形體（others）的排列條件：橫向固定一種；直向依畫布大小與文字上緣（`textTop`）。
+   * 呼叫端量不到文字時是 undefined（`othersFit` 當作沒有）。
+   */
+  const isCompose = (id: PoseId): boolean => SHAPES[id]?.kind === 'compose';
+  const composeTextTop = (id: PoseId): number | undefined => (portrait ? o.textTop?.(id) : undefined);
+  const composeKey = (id: PoseId): string => (isCompose(id) ? (portrait ? `portrait|${cssWidth.toFixed(1)}x${cssHeight.toFixed(1)}|${composeTextTop(id)?.toFixed(1) ?? '-'}` : 'landscape') : '');
+  /** 擺位條件的鍵：兵器與合成形體會隨視窗與文字改變，其他姿勢是空字串。 */
+  const layoutKey = (id: PoseId): string => weaponKey(id) || composeKey(id);
+  const isLaidOut = (id: PoseId): boolean => isWeapon(id) || isCompose(id);
 
   // ── 一個 tier 的資源（setTier 時整組換掉）──────────────────────────
   let side = 0;
@@ -299,8 +339,10 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
   let introToken = 0;
   let introExhaled = false;
   let introLanded = false;
-  let introOnEnd: (() => void) | null = null; // `playIntro` 的 `onEnd`：這一次開場結束時呼叫一次
-  let sealCalm = 0; // 姿勢是 seal 且散開量夠低，已經持續幾模擬秒（`getSealRect` 的「聚合」條件）
+  let introOnStart: (() => void) | null = null; // `playIntro` 的 `onStart`：這一次開場計時開始時呼叫一次
+  let introOnEnd: ((result: { failed: boolean }) => void) | null = null; // `playIntro` 的 `onEnd`：這一次開場結束時呼叫一次
+  let introOnLand: (() => void) | null = null; // `playIntro` 的 `onLand`：這一次開場落地（衝擊波）時呼叫一次
+  let crestCalm = 0; // 姿勢是 crest 且散開量夠低，已經持續幾模擬秒（`getCrestRect` 的「聚合」條件）
   const impulse = { dir: new Vector3(), power: 0, mode: 0 };
   let pulses = 0;
   let virtualMs = 0;
@@ -320,7 +362,7 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
   };
 
   const makeTarget = (id: PoseId): Target => {
-    const fit = weaponKey(id);
+    const fit = layoutKey(id);
     const cached = targets.get(id);
     if (cached && cached.fit === fit) return cached;
     cached?.texture.dispose(); // 兵器擺位的條件變了：舊的過期
@@ -331,7 +373,16 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
       const shape = shapes.get(id);
       if (!shape) throw new Error(`Shape ${id} is not loaded`);
       const recipe = SHAPES[id];
-      data = expandTargets(shape, side, ambient, recipe?.kind === 'weapon' ? weaponLayout(recipe.name, !portrait, weaponReach(), weaponReachLeft(id)) : undefined);
+      if (recipe?.kind === 'compose') {
+        // 四個小人形：橫向一排放大一點，直向 2×2 縮進畫布寬度內並擺在文字上方（others-layout.ts）
+        const centers = recipe.parts.map((part) => part.x);
+        const boxes = measureFigures(shape, centers);
+        const placed = othersFit({ boxes, portrait, cssWidth, cssHeight, textTop: composeTextTop(id) });
+        data = expandTargets(arrangeFigures(shape, centers, boxes, placed.arrangement, placed.offset), side, ambient);
+      } else {
+        const reach = recipe?.kind === 'armed' ? armedWindow(id) : undefined;
+        data = expandTargets(shape, side, ambient, reach ? armedLayout(reach.right, reach.left) : undefined);
+      }
     }
     const texture = new DataTexture(data, side, side, RGBAFormat, FloatType);
     texture.needsUpdate = true;
@@ -341,16 +392,16 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
   };
 
   /**
-   * 兵器擺位的條件變了（視窗、文字）：過期的兵器目標丟掉；現在正擺著的就重展開並換過去（姿勢不變、不給衝量）。
+   * 擺位的條件變了（視窗、文字）：過期的兵器與合成形體目標丟掉；現在正擺著的就重展開並換過去（姿勢不變、不給衝量）。
    * 回傳有沒有動到目前畫面上的姿勢。
    */
   const refreshWeapons = (): boolean => {
     for (const [id, t] of [...targets]) {
-      if (!isWeapon(id) || t.fit === weaponKey(id)) continue;
+      if (!isLaidOut(id) || t.fit === layoutKey(id)) continue;
       t.texture.dispose();
       targets.delete(id);
     }
-    if (pose && isWeapon(pose) && !targets.has(pose) && shapes.has(pose)) {
+    if (pose && isLaidOut(pose) && !targets.has(pose) && shapes.has(pose)) {
       apply(pose, makeTarget(pose), false);
       return true;
     }
@@ -377,7 +428,7 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
   };
 
   const apply = (next: PoseId, made: Target, burst: boolean): void => {
-    if (next !== pose) sealCalm = 0; // 換了姿勢：光點要重新飛一趟
+    if (next !== pose) crestCalm = 0; // 換了姿勢：光點要重新飛一趟
     pose = next;
     target = made;
     if (sim) {
@@ -402,23 +453,29 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
     shockAt = time;
   };
 
-  /** 開場結束（演完、被略過、或演出中換了姿勢）：取消還在等形體的開場；停在 `lift` 的話回到 `land`（不給衝量）。 */
+  /**
+   * 開場結束（演完、被略過、或演出中換了姿勢）：取消還在等形體的開場；計時已起算而停在 `lift`（或從氣流起演、還沒換成 `lift`）的話回到 `land`（不給衝量）。
+   * 開場還在等形體（pending）時被取消，姿勢不會動（`land` 可能根本還沒載到）：呼叫端要自己重新要求姿勢（首頁的 `endIntro`）。
+   */
   const endIntro = (): void => {
     const wasActive = introT >= 0 || introPending;
     introToken++;
     introPending = false;
+    introOnLand = null; // 還沒落地就結束：不補呼叫
+    introOnStart = null; // 還沒開始計時（pending）就被取消：不補呼叫
     if (introT >= 0) {
       introT = -1;
-      if (pose === 'lift' && shapes.has('land')) apply('land', makeTarget('land'), false);
+      // 停在吸氣的 lift，或從氣流起演、第一格還沒換成 lift（姿勢還是 flow）：都收回 land
+      if ((pose === 'lift' || pose === 'flow') && shapes.has('land')) apply('land', makeTarget('land'), false);
     }
     if (wasActive) notifyIntroEnd();
   };
 
   /** 這一次開場結束了：把 `onEnd` 交出去並清掉（只呼叫一次）。 */
-  const notifyIntroEnd = (): void => {
+  const notifyIntroEnd = (failed = false): void => {
     const done = introOnEnd;
     introOnEnd = null;
-    done?.();
+    done?.({ failed });
   };
 
   const ensureShape = async (id: PoseId): Promise<void> => {
@@ -444,6 +501,9 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
     if (state.phase === 'land' && !introLanded) {
       introLanded = true;
       land();
+      const landed = introOnLand;
+      introOnLand = null;
+      landed?.();
     }
     return state;
   };
@@ -524,7 +584,7 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
   const advance = (dt: number, now: number): void => {
     if (!sim) return;
     time += dt;
-    sealCalm = pose === 'seal' && scatter <= SEAL_SCATTER_MAX ? sealCalm + dt : 0;
+    crestCalm = pose === 'crest' && scatter <= CREST_SCATTER_MAX ? crestCalm + dt : 0;
     const intro = stepIntro(dt);
     const snap = time < snapUntil;
     const forces = forcesFor({
@@ -581,12 +641,11 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
   document.addEventListener('visibilitychange', onVisibility);
 
   // ── 除錯（?qi-debug=1）─────────────────────────────────────────
-  /** 朱印的螢幕矩形；還沒聚合就 null（條件見 `QiStage.getSealRect`）。 */
-  const getSealRect = (): Box | null => {
-    if (disposed || pose !== 'seal' || !target || scatter > SEAL_SCATTER_MAX) return null;
-    if (sim && sealCalm < SEAL_SETTLE_S) return null; // 減少動態沒有模擬：光點直接在目標上
-    const half = SEAL_WORLD_SIZE / 2;
-    return stage.projectRect(-half, SEAL_CENTER_Y - half, SEAL_WORLD_SIZE, SEAL_WORLD_SIZE);
+  /** 光點館徽的螢幕矩形；還沒聚合就 null（條件見 `QiStage.getCrestRect`）。 */
+  const getCrestRect = (): Box | null => {
+    if (disposed || pose !== 'crest' || !target || scatter > CREST_SCATTER_MAX) return null;
+    if (sim && crestCalm < CREST_SETTLE_S) return null; // 減少動態沒有模擬：光點直接在目標上
+    return stage.projectRect(-CREST_WORLD_WIDTH / 2, CREST_CENTER_Y - CREST_WORLD_HEIGHT / 2, CREST_WORLD_WIDTH, CREST_WORLD_HEIGHT);
   };
 
   const positions = (): Float32Array => (sim ? sim.readPositions() : (target?.data ?? new Float32Array(0)));
@@ -696,7 +755,7 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
       governFrame(virtualMs);
     },
     project: (x, y, z) => stage.project(x, y, z),
-    sealRect: getSealRect,
+    crestRect: getCrestRect,
     extent() {
       if (!target) return { left: 0, right: 0, top: 0, bottom: 0 };
       const p = positions();
@@ -774,25 +833,39 @@ function createApi(o: QiStageOptions, renderer: WebGLRenderer, stage: Stage, poi
       }
       if (!sim || introT >= 0 || introPending) return; // 減少動態沒有演出；演出中再呼叫不重來
       introPending = true;
+      const fromAmbient = opts?.fromAmbient === true;
+      introOnStart = opts?.onStart ?? null;
       introOnEnd = opts?.onEnd ?? null;
+      introOnLand = opts?.onLand ?? null;
       const token = ++introToken;
       Promise.all([ensureShape('land'), ensureShape('lift')]).then(
         () => {
           if (disposed || token !== introToken) return;
           introPending = false;
-          if (pose !== 'land') apply('land', makeTarget('land'), false); // 交接：從 land 的聚合態開始
-          introT = 0;
-          introExhaled = false;
+          if (fromAmbient) {
+            introT = INHALE_AT; // 從氣流直接吸氣：目標在第一格換成 lift，不重播散開（exhale 的衝量）
+            introExhaled = true;
+          } else {
+            if (pose !== 'land') apply('land', makeTarget('land'), false); // 交接：從 land 的聚合態開始
+            introT = 0;
+            introExhaled = false;
+          }
           introLanded = false;
+          const started = introOnStart;
+          introOnStart = null;
+          started?.();
         },
         () => {
           if (token !== introToken) return;
-          introPending = false; // 形體載不到就不演（頁面照常、停在目前姿勢）
-          notifyIntroEnd();
+          introPending = false; // 形體載不到就不演（頁面照常）
+          introOnStart = null;
+          // `failed: true`：開場被擋下的 `setPose('land')` 不會自己重試（呼叫端的 `requested` 已經是 land），引擎還停在氣流；
+          // 呼叫端要在 onEnd 重新要求目前段落的姿勢（首頁的 `onEnd`）。
+          notifyIntroEnd(true);
         },
       );
     },
-    getSealRect,
+    getCrestRect,
     resize(w, h) {
       if (disposed) return;
       cssWidth = Math.max(1, w);

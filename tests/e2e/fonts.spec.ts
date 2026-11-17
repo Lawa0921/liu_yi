@@ -1,4 +1,4 @@
-import { expect, test, type Response } from '@playwright/test';
+import { expect, test, type Response } from './fixtures';
 
 const PAGES = [
   { name: '首頁', path: './' },

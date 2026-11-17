@@ -123,25 +123,111 @@ describe('home.css 的退回與海報規則（Task 20）', () => {
   });
 });
 
-describe('home.css 的朱印點擊區規則（Task 21）', () => {
-  it('引擎在跑（html.js:not(.qi-static)）時 .seal-hit 預設 display:none，要等腳本標 data-placed 才顯示、定位在 --seal-* 上', () => {
-    const base = /html\.js:not\(\.qi-static\)\s+\.seal-hit\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+describe('home.css 的館徽點擊區規則（Task 21 的朱印點擊區，Task 25 改成館徽）', () => {
+  it('引擎在跑（html.js:not(.qi-static)）時 .crest-hit 預設 display:none，要等腳本標 data-placed 才顯示、定位在 --hit-* 上', () => {
+    const base = /html\.js:not\(\.qi-static\)\s+\.crest-hit\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
     expect(base).toMatch(/position\s*:\s*fixed/);
     expect(base).toMatch(/display\s*:\s*none/);
-    for (const name of ['--seal-x', '--seal-y', '--seal-w', '--seal-h']) expect(base).toContain(`var(${name}`);
-    expect(css).toMatch(/html\.js:not\(\.qi-static\)\s+\.seal-hit\[data-placed\]\s*\{[^}]*display\s*:\s*block/);
+    for (const name of ['--hit-x', '--hit-y', '--hit-w', '--hit-h']) expect(base).toContain(`var(${name}`);
+    expect(css).toMatch(/html\.js:not\(\.qi-static\)\s+\.crest-hit\[data-placed\]\s*\{[^}]*display\s*:\s*block/);
   });
 
-  it('靜態圖（其餘情況）時 .seal-hit 絕對定位在朱印靜態圖的盒子裡、對齊圖上的印，不是隱藏也不是 pointer-events:none', () => {
-    const rule = /(?:^|\})\s*\.seal-hit\s*\{([^}]*)\}/m.exec(css)?.[1] ?? '';
+  it('靜態圖（其餘情況）時 .crest-hit 絕對定位在館徽靜態圖的盒子裡、對齊圖上的館徽，不是隱藏也不是 pointer-events:none', () => {
+    const rule = /(?:^|\})\s*\.crest-hit\s*\{([^}]*)\}/m.exec(css)?.[1] ?? '';
     expect(rule).toMatch(/position\s*:\s*absolute/);
     expect(rule).toMatch(/inset\s*:/);
     expect(rule).not.toMatch(/display\s*:\s*none|pointer-events\s*:\s*none/);
-    expect(/\.seal-stage\s*\{([^}]*)\}/.exec(css)?.[1] ?? '').toMatch(/position\s*:\s*relative/);
+    expect(/\.crest-stage\s*\{([^}]*)\}/.exec(css)?.[1] ?? '').toMatch(/position\s*:\s*relative/);
   });
 
-  it('BookingBeat 把靜態圖與 .seal-hit 包在同一個 .seal-stage 裡（同一個座標系），.seal-hit 對讀屏與 Tab 隱藏', () => {
+  it('BookingBeat 把靜態圖與 .crest-hit 包在同一個 .crest-stage 裡（同一個座標系），.crest-hit 對讀屏與 Tab 隱藏', () => {
     const booking = readFileSync(new URL('../../src/components/home/BookingBeat.astro', import.meta.url), 'utf8');
-    expect(booking).toMatch(/<div class="seal-stage">\s*<Still name="seal" \/>\s*<a class="seal-hit"[^>]*tabindex="-1"[^>]*aria-hidden="true"/);
+    expect(booking).toMatch(/<div class="crest-stage">\s*<Still name="crest" \/>\s*<a class="crest-hit"[^>]*tabindex="-1"[^>]*aria-hidden="true"/);
+  });
+
+  it('按鈕旁的小朱印：aria-hidden 的純裝飾、不可點、約 56–72 px（4rem）、用朱印遮罩填 --color-seal；按鈕在小印之前（鍵盤順序不受影響）', () => {
+    const booking = readFileSync(new URL('../../src/components/home/BookingBeat.astro', import.meta.url), 'utf8');
+    expect(booking).toMatch(/<span class="booking__seal"[^>]*aria-hidden="true"><\/span>/);
+    expect(booking).toMatch(/<a class="button button--solid"[\s\S]*<span class="booking__seal"/);
+    expect(booking).toContain("import sealMask from '../../assets/seal/seal-liuyi.png'");
+    const rule = /\.booking__seal\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(rule).toMatch(/width\s*:\s*4rem/);
+    expect(rule).toMatch(/height\s*:\s*4rem/);
+    expect(rule).toMatch(/background\s*:\s*var\(--color-seal\)/);
+    expect(rule).toMatch(/mask\s*:\s*var\(--seal-mask\)/);
+    expect(rule).toMatch(/pointer-events\s*:\s*none/);
+  });
+
+  it('PricingBeat 有竹簡的靜態圖（<Still name="scroll" />），放在文字之外（與其他 beat 一樣在 .beat__panel 的第二欄）', () => {
+    const pricing = readFileSync(new URL('../../src/components/home/PricingBeat.astro', import.meta.url), 'utf8');
+    expect(pricing).toMatch(/<\/div>\s*<Still name="scroll" \/>\s*<\/div>\s*<\/section>/);
+  });
+});
+
+describe('home.css 的入館閘門規則（Task 25）', () => {
+  it('沒有 html[data-gate] 時整層不渲染（無 JS、減少動態、再訪都沒有閘門）；有了才顯示', () => {
+    expect(/(?:^|\})\s*\.gate,\s*\.gate-backdrop\s*\{([^}]*)\}/m.exec(css)?.[1] ?? '').toMatch(/display\s*:\s*none/);
+    expect(css).toMatch(/html\[data-gate\]\s+\.gate-backdrop\s*\{[^}]*display\s*:\s*block/);
+    expect(css).toMatch(/html\[data-gate\]\s+\.gate\s*\{[^}]*display\s*:\s*grid/);
+  });
+
+  it('閘門期間 html 不可捲動：overflow:hidden 於 html（拿掉 data-gate 就還原）、留著捲軸的位置不讓版面位移', () => {
+    const rule = /html\[data-gate\]\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(rule).toMatch(/overflow\s*:\s*hidden/);
+    expect(rule).toMatch(/scrollbar-gutter\s*:\s*stable/);
+  });
+
+  it('疊放：背板 200（不透明黑底）→ 引擎畫布 201 → 對話框 202（透明，只有按鈕接收指標）', () => {
+    expect(/html\[data-gate\]\s+\.gate-backdrop\s*\{([^}]*)\}/.exec(css)?.[1] ?? '').toMatch(/z-index\s*:\s*200[\s\S]*background\s*:\s*var\(--color-bg\)/);
+    expect(/html\[data-gate\]\s+\.home-canvas\s*\{([^}]*)\}/.exec(css)?.[1] ?? '').toMatch(/z-index\s*:\s*201/);
+    const dialog = /html\[data-gate\]\s+\.gate\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(dialog).toMatch(/z-index\s*:\s*202/);
+    expect(dialog).toMatch(/pointer-events\s*:\s*none/);
+    expect(dialog).not.toMatch(/background/);
+    expect(css).toMatch(/html\[data-gate\]\s+\.gate\s*>\s*\.gate__enter\s*\{[^}]*pointer-events\s*:\s*auto/);
+  });
+
+  it('「入館」按鈕在腳本接手（.gate[data-ready]）之前 visibility:hidden，不是一顆點了沒反應的按鈕；腳本先標 data-ready 再聚焦', () => {
+    const rule = /html\[data-gate\]\s+\.gate:not\(\[data-ready\]\)\s+\.gate__enter\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(rule).toMatch(/visibility\s*:\s*hidden/);
+    const script = readFileSync(new URL('../../src/scripts/home/gate.ts', import.meta.url), 'utf8');
+    expect(script).toMatch(/dialog\.dataset\.ready = '';[\s\S]*button\.focus\(/);
+  });
+
+  it('閘門的館徽沿用開場館徽的掃光：同一組選擇器，沒有 background-clip:text、混色模式、外發光', () => {
+    const crestRules = css
+      .split('}')
+      .filter((rule) => rule.includes('gate__crest'))
+      .join('}');
+    expect(crestRules).toMatch(/mask-image\s*:[^;]*gradient/);
+    expect(crestRules).not.toMatch(/background-clip|mix-blend-mode|text-shadow|box-shadow/);
+  });
+
+  it('淡出：html[data-gate="leaving"] 把背板與對話框的 opacity 降到 0；按鈕不再接收指標', () => {
+    const fade = /html\[data-gate='leaving'\]\s+\.gate,\s*html\[data-gate='leaving'\]\s+\.gate-backdrop\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(fade).toMatch(/opacity\s*:\s*0/);
+    expect(css).toMatch(/html\[data-gate='leaving'\]\s+\.gate\s*>\s*\.gate__enter\s*\{[^}]*pointer-events\s*:\s*none/);
+  });
+
+  it('閘門還擋著（open）時站名組不演進場動畫、先不透明度 0；淡出開始才演', () => {
+    const rule = /html\[data-gate='open'\]\s+\.opening__lockup\s*>\s*\*\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(rule).toMatch(/animation\s*:\s*none/);
+    expect(rule).toMatch(/opacity\s*:\s*0/);
+  });
+
+  it('Gate.astro：role=dialog、aria-modal、aria-label="入館"；按鈕沿用 .button；館徽純裝飾（aria-hidden、圖 alt 為空）', () => {
+    const gate = readFileSync(new URL('../../src/components/home/Gate.astro', import.meta.url), 'utf8');
+    expect(gate).toMatch(/<div class="gate" data-gate-dialog role="dialog" aria-modal="true" aria-label="入館">/);
+    expect(gate).toMatch(/<button type="button" class="button gate__enter" data-gate-enter>入館<\/button>/);
+    expect(gate).toMatch(/<div class="gate__crest" data-crest aria-hidden="true">/);
+    expect(gate).toMatch(/alt: ''/);
+  });
+
+  it('首頁把 Gate 放在 <BaseLayout> 的 overlay 插槽（body 的最後，不改變內容的 DOM 順序）', () => {
+    const index = readFileSync(new URL('../../src/pages/index.astro', import.meta.url), 'utf8');
+    expect(index).toContain('<Gate slot="overlay" />');
+    const layout = readFileSync(new URL('../../src/layouts/BaseLayout.astro', import.meta.url), 'utf8');
+    expect(layout.indexOf('<PosterDialog />')).toBeLessThan(layout.indexOf('<slot name="overlay" />'));
+    expect(layout.indexOf('<slot />')).toBeLessThan(layout.indexOf('<slot name="overlay" />'));
   });
 });

@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from './fixtures';
 import { trackTransfers } from './helpers';
 
 // 第二版（設計文件 §15）：3D 金屬兵器。首頁改版（氣聚成人）後，兵器台、震腳、刀光、掃光都已移除；

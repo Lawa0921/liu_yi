@@ -53,7 +53,7 @@ function fakeDocument(initial: Dataset = {}, skipButtons = 1, focusedButton: num
 
 async function load() {
   vi.resetModules();
-  return import('../../src/scripts/home/fallback');
+  return import('../../src/scripts/qi/fallback');
 }
 
 beforeEach(() => {

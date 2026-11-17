@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ambientField, expandTargets, flowTargets, weaponLayout, type AmbientField } from '../../src/qi/shapes/expand';
+import { ambientField, armedLayout, CREST_JITTER, expandTargets, flowTargets, JITTER, type AmbientField, type Layout } from '../../src/qi/shapes/expand';
 import { KIND, kindToW, SHAPE_COUNT, type Shape } from '../../src/qi/shapes/format';
 import { rng } from '../../src/qi/shapes/rng';
 
@@ -16,6 +16,24 @@ function synthShape(seed: number, count = SHAPE_COUNT, kinds: 'figure' | 'mixed'
 }
 
 /** 非環境煙格的索引（依序）。 */
+/**
+ * 試作時代的「單件兵器」擺位（D13 的數值：寬螢幕 jian 2.9／miaodao 3.2／spear 3.8、窄螢幕 1.9／2.1／2.3，傾角、中點高度 1.05）。
+ * Task 27 起首頁的兵器是「拳師持械」（`armedLayout`：scale 1、不旋轉），這組數值已不在 src 內；
+ * `expandTargets` 的旋轉、縮放、maxRight／minLeft 推移機制沒有變，所以這些測試仍用它當固定的測資。
+ */
+const WEAPON_FIXTURE = {
+  jian: { wide: [2.9, 0.16], narrow: [1.9, 0.5] },
+  miaodao: { wide: [3.2, 0.22], narrow: [2.1, 0.55] },
+  spear: { wide: [3.8, 0.05], narrow: [2.3, 0.45] },
+} as const;
+function weaponLayout(name: keyof typeof WEAPON_FIXTURE, wide: boolean, maxRight?: number, minLeft?: number): Layout {
+  const [scale, rotZ] = WEAPON_FIXTURE[name][wide ? 'wide' : 'narrow'];
+  const layout: Layout = { scale, rotZ, offset: [0, 1.05, 0] };
+  if (wide && maxRight !== undefined) layout.maxRight = maxRight;
+  if (wide && minLeft !== undefined) layout.minLeft = maxRight !== undefined ? Math.min(minLeft, maxRight - 1) : minLeft;
+  return layout;
+}
+
 const solidSlots = (ambient: AmbientField): number[] => {
   const slots: number[] = [];
   for (let i = 0; i < ambient.mask.length; i++) if (!ambient.mask[i]) slots.push(i);
@@ -249,23 +267,74 @@ describe('跨 tier 前綴：較小 tier 的目標逐位元等於 256² 版的前
   });
 });
 
-describe('weaponLayout（D13：寬／窄的長度與傾角；中點高度 1.05）', () => {
-  it.each([
-    ['jian', true, 2.9, 0.16],
-    ['miaodao', true, 3.2, 0.22],
-    ['spear', true, 3.8, 0.05],
-    ['jian', false, 1.9, 0.5],
-    ['miaodao', false, 2.1, 0.55],
-    ['spear', false, 2.3, 0.45],
-  ] as const)('%s wide=%s → scale %s、rotZ %s、offset [0, 1.05, 0]', (name, wide, scale, rotZ) => {
-    expect(weaponLayout(name, wide)).toEqual({ scale, rotZ, offset: [0, 1.05, 0] });
+describe('armedLayout（Task 27：拳師持械，形體已是世界座標，只剩「放進左右界」）', () => {
+  it('沒給界：scale 1、不旋轉、不平移（形體與其他人形同一把尺）', () => {
+    expect(armedLayout()).toEqual({ scale: 1, rotZ: 0, offset: [0, 0, 0] });
   });
 
-  it('未知的兵器名 → RangeError（含原型鏈名稱）', () => {
-    expect(() => weaponLayout('halberd' as never, true)).toThrow(RangeError);
-    expect(() => weaponLayout('constructor' as never, true)).toThrow(RangeError);
+  it('給右界、左界：帶進 layout；沒給的欄位不存在', () => {
+    expect(armedLayout(1.5)).toEqual({ scale: 1, rotZ: 0, offset: [0, 0, 0], maxRight: 1.5 });
+    expect(armedLayout(1.5, -0.2)).toEqual({ scale: 1, rotZ: 0, offset: [0, 0, 0], maxRight: 1.5, minLeft: -0.2 });
+    expect('maxRight' in armedLayout(undefined, -0.2)).toBe(false);
+    expect(armedLayout(undefined, -0.2).minLeft).toBe(-0.2);
   });
 
+  it('窗太窄（< 1 個世界單位）：左界往左放寬到剛好 1，不把形體縮到接近 0', () => {
+    expect(armedLayout(1.5, 1.4).minLeft).toBeCloseTo(0.5, 10);
+  });
+
+  it('右界不是正的有限值、左界不是有限值：RangeError', () => {
+    for (const bad of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) expect(() => armedLayout(bad), String(bad)).toThrow(RangeError);
+    expect(() => armedLayout(1.5, Number.NaN)).toThrow(RangeError);
+    expect(() => armedLayout(1.5, Number.POSITIVE_INFINITY)).toThrow(RangeError);
+  });
+
+  /** 一個「持械的人」：腳底在 y = 0 的一排點，x 從 −1.8 到 +1.6（兵器伸向左邊），高 0–1.5。 */
+  function armedShape(): Shape {
+    const count = 64;
+    const positions = new Float32Array(count * 3);
+    const kinds = new Uint8Array(count).fill(KIND.STEEL);
+    for (let k = 0; k < count; k++) {
+      positions[k * 3] = -1.8 + (3.4 * k) / (count - 1);
+      positions[k * 3 + 1] = (1.5 * k) / (count - 1);
+    }
+    return { count, positions, kinds, min: [-1.8, 0, 0], max: [1.6, 1.5, 0] };
+  }
+  const xs = (out: Float32Array, ambient: AmbientField): number[] => solidSlots(ambient).slice(0, 64).map((i) => out[i * 4]!);
+  const ys = (out: Float32Array, ambient: AmbientField): number[] => solidSlots(ambient).slice(0, 64).map((i) => out[i * 4 + 1]!);
+
+  it('沒超出界：不動（對照組，整個貼圖逐位元相同）', () => {
+    const ambient = ambientField(112 * 112);
+    const free = expandTargets(armedShape(), 112, ambient);
+    const out = expandTargets(armedShape(), 112, ambient, armedLayout(5, -5));
+    expect(Buffer.from(out.buffer).equals(Buffer.from(free.buffer))).toBe(true);
+  });
+
+  it('右端超出右界：以腳底為中心等比例縮小到剛好在右界；腳底仍在 y = 0、人沒有飄起來', () => {
+    const ambient = ambientField(112 * 112);
+    const out = expandTargets(armedShape(), 112, ambient, armedLayout(1.0));
+    expect(Math.max(...xs(out, ambient))).toBeCloseTo(1.0, 4);
+    expect(Math.min(...ys(out, ambient))).toBeCloseTo(0, 5);
+    expect(Math.max(...ys(out, ambient))).toBeCloseTo(1.5 * (1.0 / 1.6), 4); // 高度跟著等比例縮
+  });
+
+  it('左端超出左界、右邊放得下：整體往右推（大小不變）', () => {
+    const ambient = ambientField(112 * 112);
+    const out = expandTargets(armedShape(), 112, ambient, armedLayout(3, -1.2));
+    expect(Math.min(...xs(out, ambient))).toBeCloseTo(-1.2, 4);
+    expect(Math.max(...xs(out, ambient)) - Math.min(...xs(out, ambient))).toBeCloseTo(3.4, 4);
+  });
+
+  it('窗（左界到右界）比形體窄：縮到剛好塞進窗裡，腳底不動', () => {
+    const ambient = ambientField(112 * 112);
+    const out = expandTargets(armedShape(), 112, ambient, armedLayout(1.0, -1.0));
+    expect(Math.min(...xs(out, ambient))).toBeCloseTo(-1.0, 4);
+    expect(Math.max(...xs(out, ambient))).toBeCloseTo(1.0, 4);
+    expect(Math.min(...ys(out, ambient))).toBeCloseTo(0, 5);
+  });
+});
+
+describe('expandTargets 套單件兵器的 layout（旋轉、縮放；測資是試作時代的 D13 數值）', () => {
   /** 單位形：第 0 個點是鋒尖（+0.5, 0, 0），第 1 個是尾端（−0.5, 0, 0）。 */
   function unitWeapon(): Shape {
     const shape = synthShape(13);
@@ -378,12 +447,6 @@ describe('weaponLayout 的右端上限 maxRight（Task 22b：大槍不壓到右�
     expect(capped[slot * 4 + 1]).toBeCloseTo(1.05 + 0.3 * Math.sin(0.05) * scale - 0.1 * scale, 4);
   });
 
-  it('上限不是正數或不是有限值：RangeError（呼叫端算錯時不要悄悄擺出長度 0 的兵器）', () => {
-    expect(() => weaponLayout('spear', true, 0)).toThrow(RangeError);
-    expect(() => weaponLayout('spear', true, -1)).toThrow(RangeError);
-    expect(() => weaponLayout('spear', true, Number.NaN)).toThrow(RangeError);
-  });
-
   it('窄（直向）版面沒有段落導覽，不套上限：維持試作的窄版長度', () => {
     expect(weaponLayout('spear', false, 0.5)).toEqual({ scale: 2.3, rotZ: 0.45, offset: [0, 1.05, 0] });
   });
@@ -457,11 +520,6 @@ describe('weaponLayout 的右端上限 maxRight（Task 22b：大槍不壓到右�
     expect(weaponLayout('spear', false, undefined, 0.5)).toEqual({ scale: 2.3, rotZ: 0.45, offset: [0, 1.05, 0] });
   });
 
-  it('minLeft 不是有限值：RangeError；窗太窄（< 1 個世界單位）時把 minLeft 往左放寬到剛好 1，不擺出長度接近 0 的兵器', () => {
-    expect(() => weaponLayout('spear', true, 1.5, Number.NaN)).toThrow(RangeError);
-    expect(() => weaponLayout('spear', true, 1.5, Number.POSITIVE_INFINITY)).toThrow(RangeError);
-    expect(weaponLayout('spear', true, 1.5, 1.4).minLeft).toBeCloseTo(0.5, 10);
-  });
 });
 
 describe('纓穗（RED）：套 layout 後仍朝下垂（試作：pendulum 反向旋轉，Task 16）', () => {
@@ -623,5 +681,83 @@ describe('flowTargets（收費段的氣流：全部點緩流，範圍比環境�
     const ambient = ambientField(112 * 112);
     expect(() => flowTargets(0, ambient)).toThrow(RangeError);
     expect(() => flowTargets(144, ambient)).toThrow(RangeError);
+  });
+});
+
+describe('光點館徽（KIND.CREST）的重複點抖動：細線條不能被抖散（Task 25 審查）', () => {
+  /** 全部是 CREST 的假形體。 */
+  function crestShape(seed: number): Shape {
+    const base = synthShape(seed);
+    return { ...base, kinds: new Uint8Array(base.count).fill(KIND.CREST) };
+  }
+
+  it('常數：CREST 的抖動 0.002，只有人形與其他形體的 0.006 的三分之一', () => {
+    expect(CREST_JITTER).toBe(0.002);
+    expect(JITTER).toBe(0.006);
+  });
+
+  it('size = 256：CREST 的重複點（第 N + k 個）離原點每軸 ≤ 0.002（仍有抖動，只是小得多）；第一輪不抖；w 為 9', () => {
+    const shape = crestShape(11);
+    const ambient = ambientField(256 * 256);
+    const out = expandTargets(shape, 256, ambient);
+    const slots = solidSlots(ambient);
+    expect(slots.length).toBeGreaterThan(SHAPE_COUNT * 3);
+    let jittered = 0;
+    let maxAxis = 0;
+    slots.forEach((slot, j) => {
+      const source = j % SHAPE_COUNT;
+      expect(out[slot * 4 + 3]).toBe(9);
+      if (j < SHAPE_COUNT) {
+        expect(out[slot * 4]).toBe(shape.positions[source * 3]);
+        return;
+      }
+      for (let a = 0; a < 3; a++) {
+        const d = Math.abs(out[slot * 4 + a]! - shape.positions[source * 3 + a]!);
+        expect(d).toBeLessThanOrEqual(0.002 + 1e-6);
+        maxAxis = Math.max(maxAxis, d);
+      }
+      if (dist3(out, slot * 4, shape.positions, source * 3) > 0) jittered++;
+    });
+    expect(jittered).toBeGreaterThan((slots.length - SHAPE_COUNT) * 0.99);
+    expect(maxAxis, '仍有抖動（讓重疊的點散成一層），幅度是 0.002 的量級').toBeGreaterThan(0.0015);
+  });
+
+  it('非 CREST 不變：人形、兵器、朱印、竹簡的重複點仍用 0.006（幅度明顯大於 CREST 的上限）', () => {
+    for (const kind of [10, 99, KIND.STEEL, KIND.AURA, KIND.SEAL, KIND.BAMBOO]) {
+      const base = synthShape(12);
+      const shape: Shape = { ...base, kinds: new Uint8Array(base.count).fill(kind) };
+      const ambient = ambientField(192 * 192);
+      const out = expandTargets(shape, 192, ambient);
+      let maxAxis = 0;
+      solidSlots(ambient).forEach((slot, j) => {
+        if (j < SHAPE_COUNT) return;
+        const source = j % SHAPE_COUNT;
+        for (let a = 0; a < 3; a++) maxAxis = Math.max(maxAxis, Math.abs(out[slot * 4 + a]! - shape.positions[source * 3 + a]!));
+      });
+      expect(maxAxis, `kind ${kind}`).toBeGreaterThan(0.005);
+      expect(maxAxis, `kind ${kind}`).toBeLessThanOrEqual(0.006 + 1e-6);
+    }
+  });
+
+  it('混合形體（人形加 CREST）：每個點依自己的種類決定抖動幅度', () => {
+    const base = synthShape(13, SHAPE_COUNT, 'figure');
+    const kinds = new Uint8Array(base.count);
+    for (let i = 0; i < base.count; i++) kinds[i] = i % 2 === 0 ? KIND.CREST : 40;
+    const shape: Shape = { ...base, kinds };
+    const ambient = ambientField(192 * 192);
+    const out = expandTargets(shape, 192, ambient);
+    let crestMax = 0;
+    let figureMax = 0;
+    solidSlots(ambient).forEach((slot, j) => {
+      if (j < SHAPE_COUNT) return;
+      const source = j % SHAPE_COUNT;
+      for (let a = 0; a < 3; a++) {
+        const d = Math.abs(out[slot * 4 + a]! - shape.positions[source * 3 + a]!);
+        if (kinds[source] === KIND.CREST) crestMax = Math.max(crestMax, d);
+        else figureMax = Math.max(figureMax, d);
+      }
+    });
+    expect(crestMax).toBeLessThanOrEqual(0.002 + 1e-6);
+    expect(figureMax).toBeGreaterThan(0.005);
   });
 });

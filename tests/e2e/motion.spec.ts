@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 // 第二階段的行為：手機選單展開時鎖住捲動、沒有 JavaScript 時海報仍可看、海報站內放大、課程頁照片切換。
 // 舊首頁的三幕與釘選捲動已隨首頁改版移除，首頁的行為見 home.spec.ts 與 home-fallback.spec.ts。

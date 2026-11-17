@@ -338,7 +338,9 @@ describe('renderAllStills：畫面品質（機械可驗的部分）', () => {
     expect(largestRedBlob(rasters.get('jian')!), 'jian 紅穗').toBeGreaterThan(300);
     expect(largestRedBlob(rasters.get('land')!), 'land 的火星').toBeLessThan(80);
     expect(redPixels(rasters.get('land')!), 'land 的火星總量').toBeLessThan(1500);
-    expect(redPixels(rasters.get('miaodao')!), 'miaodao 沒有紅').toBeLessThan(100);
+    // 苗刀沒有紅纓：只有人形上的零星火星（第 2 輪改成低弓步前指後，人形比較大，火星總量約 150 顆像素，仍遠小於 land 的上限，也沒有連成一塊）
+    expect(largestRedBlob(rasters.get('miaodao')!), 'miaodao 沒有紅纓').toBeLessThan(80);
+    expect(redPixels(rasters.get('miaodao')!), 'miaodao 的火星總量').toBeLessThan(1500);
   });
 
   it('朱印是朱紅色的（紅像素多，且亮部以紅為主，不是金色）', () => {
@@ -368,17 +370,73 @@ describe('renderAllStills：畫面品質（機械可驗的部分）', () => {
     expect(aspect).toBeLessThan(1.25);
   });
 
-  it('兵器是橫放的長條：亮部外框寬 ≥ 影像的 70%，且寬是高的 2 倍以上', () => {
+  it('竹簡（scroll）與光點館徽（crest）的靜態圖是金色的：亮部 R > G > B、沒有朱紅（朱印才是紅的）', () => {
+    for (const name of ['scroll', 'crest']) {
+      const r = rasters.get(name)!;
+      let sr = 0;
+      let sg = 0;
+      let sb = 0;
+      let n = 0;
+      for (let i = 0; i < r.width * r.height; i++) {
+        if (luma(r, i) <= 60) continue;
+        sr += r.data[i * 3]!;
+        sg += r.data[i * 3 + 1]!;
+        sb += r.data[i * 3 + 2]!;
+        n++;
+      }
+      expect(n, `${name} 亮部像素`).toBeGreaterThan(1000);
+      expect(sr / n, name).toBeGreaterThan(sg / n);
+      expect(sg / n, name).toBeGreaterThan(sb / n);
+      expect(redPixels(r), `${name} 沒有朱紅`).toBeLessThan(100);
+    }
+  });
+
+  it('竹簡的靜態圖是橫的長方形（亮部外框寬高比 1.2–1.9）、置中；比光點館徽淡（亮度 > 100 的像素更少）', () => {
+    const scroll = rasters.get('scroll')!;
+    const { rows, columns } = litProfile(scroll, 50);
+    const across = litSpan(columns, 30)!;
+    const down = litSpan(rows, 30)!;
+    const aspect = (across.last - across.first + 1) / (down.last - down.first + 1);
+    expect(aspect).toBeGreaterThan(1.2);
+    expect(aspect).toBeLessThan(1.9);
+    const c = brightCentroid(scroll, 50);
+    expect(Math.abs(c.x - 0.5)).toBeLessThan(0.08);
+    expect(Math.abs(c.y - 0.5)).toBeLessThan(0.08);
+    expect(brightShare(scroll, 100)).toBeLessThan(brightShare(rasters.get('crest')!, 100));
+  });
+
+  it('光點館徽的靜態圖大致方正、置中（獅子）：亮部外框寬高比 0.9–1.3，質心在中央 ±10%', () => {
+    const crest = rasters.get('crest')!;
+    const { rows, columns } = litProfile(crest, 50);
+    const across = litSpan(columns, 30)!;
+    const down = litSpan(rows, 30)!;
+    const aspect = (across.last - across.first + 1) / (down.last - down.first + 1);
+    expect(aspect).toBeGreaterThan(0.9);
+    expect(aspect).toBeLessThan(1.3);
+    const c = brightCentroid(crest, 50);
+    expect(Math.abs(c.x - 0.5)).toBeLessThan(0.1);
+    expect(Math.abs(c.y - 0.5)).toBeLessThan(0.1);
+  });
+
+  it('持械的人（Task 27）：亮部外框占影像寬的 45% 以上、高的 30% 以上（人加兵器，不是橫躺的一條線；苗刀、劍與大槍都過這個門檻）；大槍橫伸得更寬', () => {
+    const shares: Record<string, { w: number; h: number }> = {};
     for (const name of ['jian', 'miaodao', 'spear']) {
       const r = rasters.get(name)!;
-      // 兵器細長：刃身的每一欄只有十來個亮點、斜放時每一列有幾十個；環境煙更少
+      // 人形的每一欄有幾十個亮點、每一列也是；兵器細長，那一欄只有十來個亮點，所以用較低的門檻把兵器算進外框；環境煙更少
       const { rows, columns } = litProfile(r, 50);
       const across = litSpan(columns, 8)!;
-      const down = litSpan(rows, 30)!;
-      const width = across.last - across.first + 1;
-      expect(width / r.width, `${name} 寬`).toBeGreaterThanOrEqual(0.7);
-      expect(width / (down.last - down.first + 1), `${name} 長寬比`).toBeGreaterThan(2);
+      const down = litSpan(rows, 8)!;
+      shares[name] = { w: (across.last - across.first + 1) / r.width, h: (down.last - down.first + 1) / r.height };
     }
+    for (const [name, share] of Object.entries(shares)) {
+      expect(share.w, `${name} 寬`).toBeGreaterThanOrEqual(0.45);
+      expect(share.h, `${name} 高`).toBeGreaterThanOrEqual(0.3);
+      expect(share.h, `${name} 高不超出影像`).toBeLessThanOrEqual(0.95);
+    }
+    // 大槍是橫著伸的：寬高比（以像素算）比劍大。苗刀第 2 輪改成低弓步前指（原本是直立高舉，像日本劍道），也是橫向的，所以不再拿它跟大槍比。
+    const aspect = (name: string) => (shares[name]!.w * rasters.get(name)!.width) / (shares[name]!.h * rasters.get(name)!.height);
+    expect(aspect('spear')).toBeGreaterThan(aspect('jian'));
+    expect(aspect('miaodao'), '苗刀是橫向的弓步前指，不是直立的一條').toBeGreaterThan(1.2);
   });
 
   it('others 是四個人形橫排：連續有亮點的欄分成 4 段（人形之間有空隙），整排占影像寬的 70% 以上、高度不到一半', () => {

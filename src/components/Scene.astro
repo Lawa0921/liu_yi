@@ -1,0 +1,74 @@
+---
+// 子頁頁首的剪影立體場景（Task 27）：一幕由遠到近四層的剪影（遠景屋脊、中景器物、人物、前景框），純 CSS 分層加少量 JS 視差（scripts/scene.ts），不載入 three、不用 WebGL。
+// 配對表在 lib/scene/config.ts（每頁的組合不同）；層的位置與大小在 styles/scene.css（依 data-asset）；視差計算在 lib/scene/parallax.ts。
+//
+// 版面：場景在內容上方（<main> 的最前面），內容的 DOM 順序不變、文字不被前景遮住；全程 aria-hidden，圖的 alt 是空的。
+// 退回：沒有 JS 時就是靜態的一幕（層都在原位，文字完整）；減少動態時 JS 不做視差、CSS 不飄塵。
+// 課程總覽（`swap`）：滑過或聚焦課程卡時，人物換成該課的剪影（交叉淡化）；換人的清單來自頁面（每張卡的場景人物）。
+//
+// 素材：src/assets/silhouettes/<名稱>.webp（黑色加透明）。用原檔的網址（不再經過圖片服務重新編碼）；--nw／--nh 是原圖像素，CSS 用它算大小。
+import '../styles/scene.css';
+import { sceneImage } from '../lib/scene/assets';
+import type { SceneLayerRef, SceneSpec } from '../lib/scene/config';
+
+interface Props {
+  spec: SceneSpec;
+  /** 頁面種類（`data-scene`，e2e 與樣式用）。 */
+  kind: string;
+  /** 課程總覽：還要預先放進場景、滑過課程卡時換上的人物素材名稱（預設那一張已在 `spec.subject`）。 */
+  swap?: string[];
+}
+
+const { spec, kind, swap = [] } = Astro.props;
+
+function image(layer: SceneLayerRef) {
+  return { ...sceneImage(layer.asset), flip: layer.flip ? -1 : 1 };
+}
+
+const far = image(spec.far);
+const mid = image(spec.mid);
+const subject = image(spec.subject);
+const fg = spec.fg.map(image);
+const swaps = [...new Set(swap)].filter((asset) => asset !== spec.subject.asset).map((asset) => image({ asset }));
+
+/** 倒影方向：人物翻轉時，中景與人物換邊（人物在左、中景在右），組合更不一樣。 */
+const mirrored = spec.subject.flip === true;
+---
+
+<div class="scene" data-scene={kind} data-scene-subject={subject.asset} data-scene-mirrored={mirrored ? '' : undefined} data-scene-swap={swaps.length > 0 ? '' : undefined} aria-hidden="true">
+  <div class="scene__sky"></div>
+
+  <div class="scene__layer scene__layer--far" data-scene-layer="far">
+    <img class="scene__img" data-asset={far.asset} src={far.src} width={far.width} height={far.height} alt="" decoding="async" data-flip={far.flip} style={`--nw:${far.width};--nh:${far.height};--flip:${far.flip}`} />
+  </div>
+  <div class="scene__mist"></div>
+
+  <div class="scene__layer scene__layer--mid" data-scene-layer="mid">
+    <img class="scene__img" data-asset={mid.asset} src={mid.src} width={mid.width} height={mid.height} alt="" decoding="async" data-flip={mid.flip} style={`--nw:${mid.width};--nh:${mid.height};--flip:${mid.flip}`} />
+  </div>
+  <div class="scene__floor"></div>
+
+  <div class="scene__layer scene__layer--subject" data-scene-layer="subject">
+    <img class="scene__img is-active" data-asset={subject.asset} src={subject.src} width={subject.width} height={subject.height} alt="" decoding="async" data-flip={subject.flip} style={`--nw:${subject.width};--nh:${subject.height};--flip:${subject.flip}`} />
+    {swaps.map((swapped) => (
+      <img class="scene__img" data-asset={swapped.asset} src={swapped.src} width={swapped.width} height={swapped.height} alt="" decoding="async" data-flip={swapped.flip} style={`--nw:${swapped.width};--nh:${swapped.height};--flip:${swapped.flip}`} />
+    ))}
+  </div>
+
+  <div class="scene__dust" aria-hidden="true">
+    <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+  </div>
+
+  <div class="scene__layer scene__layer--fg" data-scene-layer="fg">
+    {fg.map((layer) => (
+      <img class="scene__img" data-asset={layer.asset} src={layer.src} width={layer.width} height={layer.height} alt="" decoding="async" data-flip={layer.flip} style={`--nw:${layer.width};--nh:${layer.height};--flip:${layer.flip}`} />
+    ))}
+  </div>
+  <div class="scene__vignette"></div>
+</div>
+
+<script>
+  import { initScenes } from '../scripts/scene';
+
+  initScenes();
+</script>

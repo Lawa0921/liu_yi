@@ -12,6 +12,8 @@ import CoachesBeat from '../components/home/CoachesBeat.astro';
 import PricingBeat from '../components/home/PricingBeat.astro';
 import BookingBeat from '../components/home/BookingBeat.astro';
 import SectionRail from '../components/home/SectionRail.astro';
+import Gate from '../components/home/Gate.astro';
+import Depth from '../components/home/Depth.astro';
 import { getPublishedCoaches, getPublishedCourses } from '../lib/content';
 import { buildHomeModel } from '../lib/home';
 
@@ -30,6 +32,8 @@ const rail = [
 <BaseLayout home>
   {/* 光點畫布：固定在視窗、在所有內容底下；純裝飾，不可聚焦、不進無障礙樹。 */}
   <canvas class="home-canvas" data-qi-canvas aria-hidden="true"></canvas>
+  {/* 景深層（Task 27）：遠景與中景在光點後面、前景簷角在光點前面（文字之下）；DOM 順序在畫布之後，前景才疊在畫布上。 */}
+  <Depth />
   <Opening />
   {steps.length > 0 && <CoursesRun steps={steps} />}
   {others.length > 0 && <OtherCourses courses={others} />}
@@ -37,10 +41,13 @@ const rail = [
   <PricingBeat />
   <BookingBeat />
   <SectionRail items={rail} />
+  <Gate slot="overlay" />
 </BaseLayout>
 
 <script>
   import { initHome } from '../scripts/home/init-home';
+  import { initDepth } from '../scripts/home/depth';
 
+  initDepth();
   void initHome();
 </script>

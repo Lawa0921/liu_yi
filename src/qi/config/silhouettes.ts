@@ -16,6 +16,13 @@ export const SILHOUETTES_READY: string[] = [
   'fig-kid-defense-b',
   'fig-kid-weapon',
   'fig-salute',
+  // Task 27：兵器三段改成拳師持械（`config/armed.ts`），這三張剪影（人本來就拿著兵器）升格；provenance 是 legacy（Task 6 之前就入庫、原圖備份在本機快取）
+  'fig-jian',
+  'fig-miaodao',
+  'fig-daqiang',
+  // Task 27 追加（使用者：苗刀和大槍的區塊沒有小孩版）：小孩持刀、持槍
+  'fig-kid-miaodao',
+  'fig-kid-daqiang',
 ];
 
 /** 待生成：過閘門、補上 provenance 後才移進 READY。目前沒有待生成的剪影。 */
