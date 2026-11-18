@@ -955,6 +955,19 @@ html[data-audience='kid'] [data-audience-option='kid'] {
   color: var(--color-on-accent);
 }
 
+/*
+ * 矮的桌機／筆電視窗（寬 ≥ 60rem、高 ≤ 47.5rem，例如 1366×650、1024×600、960×540）：切換鈕在左上，
+ * 課程段的文字欄垂直置中、高度幾乎塞滿舞台，標題會頂到切換鈕底下。上方留出切換鈕的高度
+ * （距外框 0.75rem + 按鈕約 3.4rem，含外框線）再加 1rem 間距；下方縮成 --space-3，上下合計仍是原本的 6rem，
+ * 段落不會比 --stage-height 高（qi-static 的靜態圖高度上限也是扣 6rem）。只在有切換鈕時（html[data-audience]，有 JS）才套用。
+ * 窄螢幕（< 60rem）切換鈕已靠右，不需要；高視窗文字離上緣夠遠，不動，版面與先前一致。
+ */
+@media (min-width: 60rem) and (max-height: 47.5rem) {
+  html[data-audience] .beat--course {
+    padding-block: 5.25rem var(--space-3);
+  }
+}
+
 /* ── 段落跳轉（桌機右緣） ─────────────────────────── */
 
 .home-rail {

@@ -481,8 +481,22 @@ for (const size of [
             .poll(() => page.evaluate(() => getComputedStyle(document.querySelector('.depth-fg img[data-asset="fg-lattice"]')!).opacity), { message: `${beat} 的窗櫺`, timeout: 10_000 })
             .toBe(wantLattice);
         }
+        // 簷角同樣是 CSS 轉場淡入（opening 段在整套負載下曾經量到還沒淡入）：等到看得見的前景就是這一段該有的那幾張再量
+        const wantAssets = wantLattice === '1' ? ['fg-eave', 'fg-lattice'] : ['fg-eave'];
+        await expect
+          .poll(
+            () =>
+              page.evaluate(() =>
+                [...document.querySelectorAll<HTMLImageElement>('.depth-fg img')]
+                  .filter((img) => Number(getComputedStyle(img).opacity) >= 0.5 && getComputedStyle(img).display !== 'none')
+                  .map((img) => img.dataset.asset!)
+                  .sort(),
+              ),
+            { message: `${beat} 看得見的前景（等淡入完成）`, timeout: 10_000 },
+          )
+          .toEqual(wantAssets);
         const fgs = await fgBoxes(page);
-        expect(fgs.map((fg) => fg.asset).sort(), `${beat} 看得見的前景`).toEqual(wantLattice === '1' ? ['fg-eave', 'fg-lattice'] : ['fg-eave']);
+        expect(fgs.map((fg) => fg.asset).sort(), `${beat} 看得見的前景`).toEqual(wantAssets);
         const texts = await textBoxes(page);
         const rail = await page.locator('nav.home-rail').boundingBox();
         const extent = await page.evaluate(() => (window as unknown as W).__qi.debug.extent());

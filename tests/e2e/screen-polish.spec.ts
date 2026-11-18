@@ -309,9 +309,10 @@ for (const size of ORIENT_SIZES) {
   });
 }
 
-// ── 4b. 橫放手機：切換鈕不蓋住招式文字 ────────────────────────────────
+// ── 4b. 橫放手機與矮桌機視窗：切換鈕不蓋住招式文字 ─────────────────────────
 // 橫向版面的文字欄在左；切換鈕（頁面上 sticky，捲動時一直在視窗上緣）在寬度 < 60rem 時靠右，才不蓋到拳術段與三個兵器段的標題、朱印。
-// 直式堆疊版面（直向）切換鈕本來就在右上，這裡只量橫放手機。
+// 矮的桌機／筆電視窗（高 ≤ 650）文字欄頂端離視窗上緣很近，切換鈕在左上同樣會蓋到標題，所以也量。
+// 直式堆疊版面（直向）切換鈕本來就在右上，這裡不量。
 
 const PHONE_LANDSCAPE = [
   { width: 844, height: 390 },
@@ -319,30 +320,70 @@ const PHONE_LANDSCAPE = [
   { width: 667, height: 375 },
   { width: 568, height: 320 },
 ];
+const SHORT_DESKTOP = [
+  { width: 1366, height: 650 },
+  { width: 1024, height: 600 },
+  { width: 960, height: 540 },
+  { width: 1280, height: 500 },
+  // 斷點（高 47.5rem = 760px）之外、仍常見的桌機視窗：沒有加留白，也不得重疊
+  { width: 1440, height: 800 },
+  { width: 1280, height: 800 },
+];
+const PHONE_BEATS = ['fist', 'weapon-a', 'weapon-b', 'weapon-c'] as const;
+const ALL_BEATS = ['fist', 'combat-a', 'combat-b', 'weapon-a', 'weapon-b', 'weapon-c'] as const;
 
-for (const size of PHONE_LANDSCAPE) {
-  test.describe(`切換鈕與招式文字：橫放手機 ${size.width}×${size.height}`, () => {
-    test.use({ viewport: size });
+const switcherOverlap = (page: Page, beat: BeatId) =>
+  page.evaluate((id) => {
+    const rect = (el: Element) => {
+      const r = el.getBoundingClientRect();
+      return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+    };
+    const text = rect([...document.querySelectorAll(`[data-beat="${id}"] .beat__text`)].find((el) => el.getClientRects().length > 0)!);
+    const switcher = rect(document.querySelector('.audience-switch__inner')!);
+    const x = Math.min(text.right, switcher.right) - Math.max(text.left, switcher.left);
+    const y = Math.min(text.bottom, switcher.bottom) - Math.max(text.top, switcher.top);
+    return { hit: x > 0 && y > 0, message: `切換鈕與招式文字相交（重疊 x ${x.toFixed(1)}px、y ${y.toFixed(1)}px）：文字 ${JSON.stringify(text)}、切換鈕 ${JSON.stringify(switcher)}` };
+  }, beat);
 
-    for (const beat of ['fist', 'weapon-a', 'weapon-b', 'weapon-c'] as const) {
-      test(`${beat} 段：切換鈕與 .beat__text 不相交`, async ({ page }) => {
-        await open(page);
-        await scrollToBeat(page, beat);
-        await page.clock.runFor(300);
-        const boxes = await page.evaluate((id) => {
-          const rect = (el: Element) => {
-            const r = el.getBoundingClientRect();
-            return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
-          };
-          const text = [...document.querySelectorAll(`[data-beat="${id}"] .beat__text`)].find((el) => el.getClientRects().length > 0)!;
-          return { text: rect(text), switcher: rect(document.querySelector('.audience-switch__inner')!) };
-        }, beat);
-        const x = Math.min(boxes.text.right, boxes.switcher.right) - Math.max(boxes.text.left, boxes.switcher.left);
-        const y = Math.min(boxes.text.bottom, boxes.switcher.bottom) - Math.max(boxes.text.top, boxes.switcher.top);
-        expect(x > 0 && y > 0, `切換鈕與招式文字相交（重疊 x ${x.toFixed(1)}px、y ${y.toFixed(1)}px）：文字 ${JSON.stringify(boxes.text)}、切換鈕 ${JSON.stringify(boxes.switcher)}`).toBe(false);
-      });
-    }
-  });
+for (const [label, sizes, beats] of [
+  ['橫放手機', PHONE_LANDSCAPE, PHONE_BEATS],
+  ['矮桌機視窗', SHORT_DESKTOP, ALL_BEATS],
+] as const) {
+  for (const size of sizes) {
+    test.describe(`切換鈕與招式文字：${label} ${size.width}×${size.height}`, () => {
+      test.use({ viewport: size });
+
+      for (const beat of beats) {
+        test(`${beat} 段：切換鈕與 .beat__text 不相交（大人、小孩）`, async ({ page }) => {
+          await open(page);
+          for (const audience of ['adult', 'kid'] as const) {
+            await scrollToBeat(page, beat);
+            await page.clock.runFor(300);
+            await page.locator(`.audience-switch__option[data-audience-option="${audience}"]`).click();
+            await scrollToBeat(page, beat); // 切換後文字長度可能不同，重新置中
+            await page.clock.runFor(300);
+            // 切到小孩時那一組重播 beat-text-in（CSS 動畫走真實時間，不受假時鐘控制，文字從下方 0.9rem 升上來）：等它跑完再量，不然重疊會被低估
+            await expect
+              .poll(
+                () =>
+                  page.evaluate(
+                    (id) =>
+                      [...document.querySelectorAll(`[data-beat="${id}"] .beat__text`)]
+                        .filter((el) => el.getClientRects().length > 0)
+                        .flatMap((el) => el.getAnimations())
+                        .filter((a) => a.playState === 'running').length,
+                    beat,
+                  ),
+                { message: `${audience}：文字進場動畫跑完`, timeout: 5000 },
+              )
+              .toBe(0);
+            const result = await switcherOverlap(page, beat);
+            expect(result.hit, `${audience}：${result.message}`).toBe(false);
+          }
+        });
+      }
+    });
+  }
 }
 
 // ── 5. 課程卡大字：平面古金 ───────────────────────────────────────────
