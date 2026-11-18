@@ -50,6 +50,29 @@ describe('checkDist', () => {
     expect(result).toEqual({ ok: true, missing: [], pages: {} });
   });
 
+  it('延伸字集檔（extraCharsetFile）裡的字也算在子集內；檔案不存在視為空', async () => {
+    writePage('index.html', '<p>六藝</p>');
+    writePage('courses/index.html', '<p>劍</p>');
+    const extraFile = join(root, 'extra.txt');
+
+    expect((await checkDist({ distDir: dist, charsetFile, extraCharsetFile: extraFile })).missing).toEqual(['劍']);
+    writeFileSync(extraFile, '劍\n');
+    expect(await checkDist({ distDir: dist, charsetFile, extraCharsetFile: extraFile })).toEqual({ ok: true, missing: [], pages: {} });
+  });
+
+  it('首頁用到、卻只在延伸字集的字也算缺字（首頁不能下載延伸檔）', async () => {
+    writePage('index.html', '<p>六劍</p>');
+    writePage('courses/index.html', '<p>劍</p>');
+    const extraFile = join(root, 'extra.txt');
+    writeFileSync(extraFile, '劍\n');
+
+    const result = await checkDist({ distDir: dist, charsetFile, extraCharsetFile: extraFile });
+
+    expect(result.ok).toBe(false);
+    expect(result.missing).toEqual(['劍']);
+    expect(result.pages['劍']).toEqual(['courses/index.html', 'index.html']);
+  });
+
   it('allowedFile 列出的字不算缺字', async () => {
     writePage('index.html', '<p>六藝劍</p>');
     writeFileSync(allowedFile, '劍\n');

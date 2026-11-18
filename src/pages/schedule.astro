@@ -1,11 +1,13 @@
 ---
-// 課表：這一版照用海報（設計文件 §7），時間不轉成文字，避免抄錯。
+// 課表：照用業主的常態班課表海報（設計文件 §7），時間不轉成文字，避免抄錯。
+// 海報是粉專 2026-06-15 發的新版；之後粉專貼文公告的異動列在「最新異動」（只寫貼文明說的事，沒說的請訪客洽 LINE）。
+// 來源整理在 docs/fb-sync-2026-11-18.md。
 import BaseLayout from '../layouts/BaseLayout.astro';
 import PosterFigure from '../components/PosterFigure.astro';
 import Plaque from '../components/Plaque.astro';
-import schedule from '../assets/images/schedule.png';
+import schedule from '../assets/images/schedule-2026-06.jpg';
 import { PAGE_SCENES } from '../lib/scene/config';
-import { BOOKING_ANCHOR } from '../lib/site';
+import { BOOKING_ANCHOR, SITE } from '../lib/site';
 ---
 
 <BaseLayout title="課表" description="六藝武術工作室的常態班課表。" ogImage={schedule} scene={{ kind: 'schedule', spec: PAGE_SCENES.schedule }}>
@@ -14,9 +16,16 @@ import { BOOKING_ANCHOR } from '../lib/site';
       <div class="page-head">
         <Plaque as="h1" id="page-title" size="page" reveal={false}>課表</Plaque>
         <p class="lead">
-          常態班課表請見下方海報；想確認時段或預約，歡迎<a href={BOOKING_ANCHOR} data-line-open>用 LINE 詢問</a>。
+          常態班課表請見下方海報；想確認時段或預約，歡迎<a href={BOOKING_ANCHOR} data-line-open>用 LINE 詢問</a>，或填<a href={SITE.trialFormUrl} target="_blank" rel="noopener noreferrer">體驗預約表單</a>。
         </p>
       </div>
+      <aside class="schedule-update" aria-labelledby="schedule-update-heading">
+        <h2 id="schedule-update-heading">最新異動</h2>
+        <ul>
+          <li>中式兵器新開中式劍新班：<strong>週日 16:00–17:30</strong>（2026 年 11 月公告）。海報上週日 18:00–19:30 的中式兵器是否照常，請用 LINE 確認。</li>
+        </ul>
+        <p>其他時段以海報為準。</p>
+      </aside>
       <div class="schedule-poster">
         <PosterFigure src={schedule} alt="常態班課表海報。詳細內容請見圖片或洽 LINE。" caption="常態班課表" eager />
       </div>
@@ -25,6 +34,34 @@ import { BOOKING_ANCHOR } from '../lib/site';
 </BaseLayout>
 
 <style>
+  .schedule-update {
+    max-width: 44rem;
+    margin: 0 auto var(--space-7);
+    padding: var(--space-5) var(--space-6);
+    border: var(--line) solid var(--color-line);
+    color: var(--color-text-muted);
+  }
+
+  .schedule-update h2 {
+    margin: 0 0 var(--space-3);
+    color: var(--color-text);
+    font-size: var(--text-lg);
+  }
+
+  .schedule-update ul {
+    margin: 0 0 var(--space-3);
+    padding-left: 1.2em;
+  }
+
+  .schedule-update strong {
+    color: var(--color-text);
+  }
+
+  .schedule-update p {
+    margin: 0;
+    font-size: var(--text-sm);
+  }
+
   .schedule-poster {
     display: grid;
     justify-items: center;

@@ -9,7 +9,7 @@ import vip from '../assets/images/vip.png';
 import memberPolicy from '../assets/images/member-policy.png';
 import refundPolicy from '../assets/images/refund-policy.png';
 import { PAGE_SCENES } from '../lib/scene/config';
-import { BOOKING_ANCHOR } from '../lib/site';
+import { BOOKING_ANCHOR, SITE } from '../lib/site';
 
 const DETAIL = '詳細內容請見圖片或洽 LINE。';
 const posters = [
@@ -44,11 +44,38 @@ const posters = [
           ))
         }
       </div>
+      <section class="notice" aria-labelledby="notice-heading" data-reveal>
+        <h2 id="notice-heading">預約與停課</h2>
+        <ul>
+          <li>想先試試看，可以填<a href={SITE.trialFormUrl} target="_blank" rel="noopener noreferrer">體驗預約表單</a>，或<a href={BOOKING_ANCHOR} data-line-open>用 LINE 詢問</a>。</li>
+          <li>颱風等天災：依政府公布的臺北市停班停課同步停課；沒有宣布停班停課就照常上課。</li>
+          <li>臨時停課會在 Facebook 粉絲專頁與官方 LINE 公告。</li>
+        </ul>
+      </section>
     </div>
   </section>
 </BaseLayout>
 
 <style>
+  .notice {
+    max-width: 44rem;
+    margin: var(--space-8) auto 0;
+    padding: var(--space-5) var(--space-6);
+    border: var(--line) solid var(--color-line);
+    color: var(--color-text-muted);
+  }
+
+  .notice h2 {
+    margin: 0 0 var(--space-3);
+    color: var(--color-text);
+    font-size: var(--text-lg);
+  }
+
+  .notice ul {
+    margin: 0;
+    padding-left: 1.2em;
+  }
+
   .poster-grid {
     display: grid;
     gap: var(--space-8) var(--space-7);

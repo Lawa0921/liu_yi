@@ -116,14 +116,17 @@ npm run build:harness && npx playwright test --project=engine --workers=2  # dis
 
 ## 字型
 
-全站只用 TW-Kai（全字庫正楷體，OFL-1.1，授權檔 `src/assets/fonts/OFL-TW-Kai.txt`）、字重 400。原檔約 37 MB、**不進 git**；入庫的是依實際用字子集化的 `src/assets/fonts/twkai-subset.woff2` 與字集 `twkai-subset.chars.txt`。
+全站只用 TW-Kai（全字庫正楷體，OFL-1.1，授權檔 `src/assets/fonts/OFL-TW-Kai.txt`）、字重 400。原檔約 37 MB、**不進 git**；入庫的是依實際用字子集化的兩份子集：
+核心 `src/assets/fonts/twkai-subset.woff2`／`twkai-subset.chars.txt`（首頁與共用 JS／CSS 用到的字，首頁只 preload 這份），
+延伸 `twkai-extra.woff2`／`twkai-extra.chars.txt`（只出現在其他頁面的字）。兩份以 `@font-face` 的 `unicode-range` 區隔（`astro.config.mjs`），
+瀏覽器只在頁面真的用到延伸字時才下載延伸檔，所以子頁加文案不會加重首頁首屏。拆法見 `scripts/fonts/split.ts`。
 
-- **改了任何會顯示在頁面上的文字**（文案、標籤、alt、aria-label）後執行 `npm run fonts:subset`：它下載並驗證原檔（sha256，快取在被忽略的 `.cache/fonts/`）、建置站台掃用字、子集化並寫出上述兩個檔。
+- **改了任何會顯示在頁面上的文字**（文案、標籤、alt、aria-label）後執行 `npm run fonts:subset`：它下載並驗證原檔（sha256，快取在被忽略的 `.cache/fonts/`）、建置站台掃用字、子集化並寫出上述檔案（沒有延伸字時刪掉延伸檔）。改完要重新 `npm run build`，建置產物才會用到新的子集。
   `-- --from-dir <dist>` 可略過建置、直接掃現成的建置資料夾。子集變了要一起提交。
 - **每次 `astro build` 都有守門**（`integrations/twkai-guard.ts`）：頁面（HTML 文字、alt／title／aria-label、CSS `content:`、JS 內的 CJK 字串）有任何字不在子集內就讓建置失敗並列出字與頁面；掃到 0 個字也算失敗。
   TW-Kai 本身沒有的字須列入 `scripts/fonts/fallback-allowed.txt`；`TWKAI_GUARD=warn` 只印警告（`fonts:subset` 自己建置時用）。
 - 會被打包進瀏覽器端的程式（引擎 chunk、首頁腳本）的錯誤訊息與字串用英文，否則守門會因 JS 內的中文字失敗。
-- 單一 woff2 的大小上限由 `tests/e2e/fonts.spec.ts` 把關；字數增加讓子集變大超過上限時會紅燈，逼著重新檢討。
+- 每一份 woff2 的大小上限與每頁下載份數（首頁 1、其他頁最多 2）由 `tests/e2e/fonts.spec.ts` 把關；字數增加讓子集變大超過上限時會紅燈，逼著重新檢討。
 
 ## 建置
 

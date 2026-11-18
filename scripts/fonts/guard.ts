@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { assertHasHtml, missingChars, parseCharList, scanDist } from './charset';
+import { splitCharset } from './split';
 
 /**
  * 建置字型守門：掃 `distDir` 的用字，任何字不在子集（`charsetFile`）、也沒列入 `allowedFile` 就算缺字。
@@ -26,8 +27,14 @@ async function readOptional(path: string | undefined): Promise<string> {
   }
 }
 
-export async function checkDist(opts: { distDir: string; charsetFile: string; allowedFile?: string }): Promise<GuardResult> {
-  const { distDir, charsetFile, allowedFile } = opts;
+export async function checkDist(opts: {
+  distDir: string;
+  charsetFile: string;
+  /** 延伸子集的字集檔（`twkai-extra.chars.txt`）；不存在視為空。 */
+  extraCharsetFile?: string;
+  allowedFile?: string;
+}): Promise<GuardResult> {
+  const { distDir, charsetFile, extraCharsetFile, allowedFile } = opts;
 
   let charsetText: string;
   try {
@@ -44,9 +51,14 @@ export async function checkDist(opts: { distDir: string; charsetFile: string; al
   // 有 .html 卻掃不到任何字，代表掃描壞了或頁面是空殼：不能把「沒有用字」當成「沒有缺字」而報綠燈（`fonts:subset` 有同樣的防線）
   if (scan.chars.size === 0) throw new Error(`掃描 ${distDir} 得到 0 個字，無法判斷缺字：請確認建置有產出頁面內容`);
 
-  const subset = parseCharList(charsetText);
+  const core = parseCharList(charsetText);
+  const subset = new Set([...core, ...parseCharList(await readOptional(extraCharsetFile))]);
   const allowed = parseCharList(await readOptional(allowedFile));
-  const missing = missingChars(scan.chars, subset, allowed);
+  // 首頁與共用 JS／CSS 的字必須在核心：只在延伸字集的話，首頁會多下載整份延伸檔（split.ts 的拆法）
+  const { core: needsCore, extra: otherPagesOnly } = splitCharset(scan.chars, scan.where);
+  const missing = [
+    ...new Set([...missingChars(needsCore, core, allowed), ...missingChars(otherPagesOnly, subset, allowed)]),
+  ].sort((a, b) => a.codePointAt(0)! - b.codePointAt(0)!);
 
   const pages: Record<string, string[]> = {};
   for (const ch of missing) pages[ch] = scan.where.get(ch) ?? [];

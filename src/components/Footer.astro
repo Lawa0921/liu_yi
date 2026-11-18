@@ -1,7 +1,7 @@
 ---
-// 頁尾：海水紋帶、題字、導覽、聯絡方式（只有 Facebook 與 LINE QR）。
+// 頁尾：海水紋帶、題字、導覽、聯絡方式（LINE QR、體驗表單、Facebook、地址、Email）。
 // #line 是「預約體驗」在沒有 JavaScript 時的落點，id 不要改。
-// 地址、電話、營業時間等業主提供後再加（設計文件 §5、§13-4）；沒有就不顯示，不留空位。
+// 聯絡資訊 2026-11-18 依粉專核對（見 src/lib/site.ts）；電話粉專沒公開，不放。
 // 版權行下面的「印文字形」是首頁朱印的姓名標示（崇羲篆體的 CC BY-ND 3.0 TW 要求標示作者）；朱印只在首頁，但頁尾全站共用，標示跟著頁尾。
 import { Image } from 'astro:assets';
 import titleArt from '../assets/images/text_transparent.png';
@@ -39,13 +39,22 @@ import { url } from '../lib/url';
       </div>
       <div>
         <h2 id="line-heading">預約體驗</h2>
-        <p>用 LINE 掃描 QR code，或直接點下面的連結加入好友，傳訊息預約或詢問課程。</p>
+        <p>用 LINE 掃描 QR code，或直接點下面的連結加入好友，傳訊息預約或詢問課程；也可以填體驗預約表單。</p>
         <p>
           <a class="text-link" href={SITE.lineUrl} target="_blank" rel="noopener noreferrer">用 LINE 加入</a>
+          <span class="site-footer__note">（搜尋 ID 請連 @ 一起輸入：{SITE.lineId}）</span>
+        </p>
+        <p>
+          <a class="text-link" href={SITE.trialFormUrl} target="_blank" rel="noopener noreferrer">體驗預約表單</a>
         </p>
         <p>
           <a class="text-link" href={SITE.facebookUrl} target="_blank" rel="noopener noreferrer">Facebook 粉絲專頁</a>
         </p>
+        <address class="site-footer__address">
+          <a class="text-link" href={SITE.mapUrl} target="_blank" rel="noopener noreferrer">{SITE.address}</a><br />
+          {SITE.transit}<br />
+          <a class="text-link" href={`mailto:${SITE.email}`}>{SITE.email}</a>
+        </address>
       </div>
     </section>
   </div>
@@ -142,6 +151,18 @@ import { url } from '../lib/url';
   .site-footer__contact p {
     color: var(--color-text-muted);
     font-size: var(--text-sm);
+  }
+
+  .site-footer__note {
+    font-size: var(--text-xs);
+  }
+
+  .site-footer__address {
+    margin-top: var(--space-4);
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+    font-style: normal;
+    line-height: 1.8;
   }
 
   .site-footer__qr {

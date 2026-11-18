@@ -855,7 +855,13 @@ test.describe('頁尾：LINE 區塊不變，加崇羲篆體的姓名標示（CC 
     await line.scrollIntoViewIfNeeded();
     await expect(line.getByRole('heading', { name: '預約體驗', level: 2 })).toBeVisible();
     await expect(line.getByRole('img', { name: /LINE 好友 QR code/ })).toBeVisible();
-    await expect(line.getByRole('link', { name: '用 LINE 加入' })).toHaveAttribute('href', 'https://lin.ee/CIOGR8n');
+    await expect(line.getByRole('link', { name: '用 LINE 加入' })).toHaveAttribute('href', 'https://lin.ee/kUCPTbo'); // 2026-11-18 依粉專改用官方帳號（docs/fb-sync-2026-11-18.md）
+    // 粉專公開的聯絡資訊實際渲染在頁尾（不只原始碼裡有）
+    await expect(line.getByText('@713oinxb')).toBeVisible();
+    await expect(line.getByRole('link', { name: '體驗預約表單' })).toHaveAttribute('href', 'https://forms.gle/FHZ6zVtpS2r76y5b7');
+    await expect(line.getByRole('link', { name: '103 臺北市大同區伊寧街43號2樓' })).toBeVisible();
+    await expect(line.getByText('捷運大橋頭站 1 號出口，步行兩分鐘')).toBeVisible();
+    await expect(line.getByRole('link', { name: 'samartialart@gmail.com' })).toHaveAttribute('href', 'mailto:samartialart@gmail.com');
 
     const credit = page.locator('footer').getByText('印文字形：崇羲篆體（中央研究院，CC BY-ND 3.0 TW）');
     await expect(credit).toHaveCount(1);

@@ -63,6 +63,33 @@ describe.skipIf(!hasTtf)('runSubset', () => {
     expect(out).toContain(`${readFileSync(woff2Path()).byteLength} bytes`);
   });
 
+  it('只出現在其他頁面的字寫進延伸檔（twkai-extra），首頁的字留在核心檔', async () => {
+    const dist = join(root, 'out');
+    writeHtml(dist, '<p>六藝</p>');
+    writeHtml(join(dist, 'courses'), '<p>六劍</p>');
+
+    const code = await runSubset({ root, fromDir: dist, ensureFont, log });
+
+    expect(code).toBe(0);
+    expect(parseCharList(readFileSync(charsPath(), 'utf8'))).toEqual(new Set(['六', '藝']));
+    expect(parseCharList(readFileSync(join(root, 'src/assets/fonts/twkai-extra.chars.txt'), 'utf8'))).toEqual(new Set(['劍']));
+    expect(String.fromCharCode(...readFileSync(join(root, 'src/assets/fonts/twkai-extra.woff2')).subarray(0, 4))).toBe('wOF2');
+    expect(lines.join('\n')).toMatch(/twkai-extra\.woff2/);
+  });
+
+  it('沒有只在其他頁面出現的字：刪掉舊的延伸檔', async () => {
+    const dist = join(root, 'out');
+    writeHtml(dist, '<p>六藝</p>');
+    mkdirSync(join(root, 'src/assets/fonts'), { recursive: true });
+    writeFileSync(join(root, 'src/assets/fonts/twkai-extra.woff2'), 'OLD');
+    writeFileSync(join(root, 'src/assets/fonts/twkai-extra.chars.txt'), '劍\n');
+
+    await runSubset({ root, fromDir: dist, ensureFont, log });
+
+    expect(existsSync(join(root, 'src/assets/fonts/twkai-extra.woff2'))).toBe(false);
+    expect(existsSync(join(root, 'src/assets/fonts/twkai-extra.chars.txt'))).toBe(false);
+  });
+
   it('字型沒有的字：仍寫出檔案，但回傳 1、列出該字，且不寫進 chars.txt', async () => {
     const dist = join(root, 'out');
     writeHtml(dist, '<p>六😀</p>');

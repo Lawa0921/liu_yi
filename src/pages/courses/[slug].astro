@@ -499,6 +499,19 @@ const WEAPON_KIND: Record<string, 'jian' | 'miaodao' | 'spear'> = { 中國劍: '
     color: var(--color-text);
   }
 
+  /* 內文照片（Markdown 圖片，例如中式兵器：課程卡保留 3D 兵器，所以照片不放 photos）。 */
+  .course-body .prose :global(img) {
+    display: block;
+    width: 100%;
+    max-width: 36rem;
+    height: auto;
+    border: var(--line) solid var(--color-line-faint);
+  }
+
+  .course-body .prose :global(p:has(> img)) {
+    margin-block: var(--space-6);
+  }
+
   .course-body .prose :global(h2) {
     display: flex;
     align-items: center;
