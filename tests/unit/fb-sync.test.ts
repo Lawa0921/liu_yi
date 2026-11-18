@@ -82,15 +82,16 @@ describe('課程文案（粉專貼文）', () => {
   });
 });
 
-describe('外派與機構合作、停課規定', () => {
+describe('外派與機構合作、收費頁', () => {
   it('課程總覽有外派與機構合作段落', () => {
     const page = read('src/pages/courses/index.astro');
     expect(page).toContain('外派與機構合作');
     expect(page).toContain('安親班');
   });
 
-  it('收費頁有颱風停課規定', () => {
+  it('收費頁有體驗預約表單；不寫粉專沒有明訂的停課規定', () => {
     const page = read('src/pages/pricing.astro');
-    expect(page).toContain('停班停課');
+    expect(page).toContain('SITE.trialFormUrl');
+    expect(page).not.toContain('停班停課');
   });
 });

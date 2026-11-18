@@ -9,11 +9,11 @@ photos:
   - src: ../../assets/images/kids_weapon_2.jpg
     alt: 兩位戴護具的孩子在藍色地墊上持軟式兵器對打
   - src: ../../assets/images/kids_weapon_lightsaber_match.jpg
-    alt: 2026 武踐盃光劍賽，兩位戴護面的選手持發光的光劍交手
+    alt: 光劍比賽場上，兩位戴護面的選手持發光的劍交手
   - src: ../../assets/images/kids_weapon_spear_match.jpg
-    alt: 世界盃武術比賽的大槍賽，兩個孩子持長槍在場上對戰，裁判在旁
+    alt: 比賽場上，兩個孩子持長槍對戰，旁邊站著穿紅背心的工作人員
   - src: ../../assets/images/kids_weapon_award.jpg
-    alt: 孩子們拿著獎狀和獎牌，與教練、裁判在比賽場地合照
+    alt: 2026 年武踐盃兵器技擊公開賽的舞台上，四個孩子和一位大人拿著獎狀合照
 coaches: [monkey]
 subItems:
   - name: 中國劍

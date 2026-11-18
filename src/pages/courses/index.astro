@@ -15,8 +15,8 @@ import lecture3 from '../../assets/images/outreach_lecture_3.jpg';
 const courses = await getPublishedCourses();
 // 外派與機構合作：文案改寫自粉專 2026-11 的機構講座與社區親子防身課貼文（docs/fb-sync-2026-11-18.md）。
 const outreachPhotos = [
-  { src: lecture1, alt: '機構防身講座：學員在教室裡分組站立，聽教練講解' },
-  { src: lecture3, alt: '機構防身講座：教練在教室前方示範動作，學員圍在桌邊觀看' },
+  { src: lecture1, alt: '防身講座現場：學員站在教室裡，前方的人在講解' },
+  { src: lecture3, alt: '防身講座現場：前方的人示範動作，學員站在桌旁觀看' },
 ];
 const others = otherCourses(courses);
 // 頁首的剪影場景（Task 27）：預設是站樁的人物；滑過或聚焦課程卡時換成該課的剪影（卡片的 data-scene-card），所以把每門課的人物都放進場景。
@@ -62,15 +62,15 @@ const scene = {
       <div class="outreach">
         <div class="outreach__text" data-reveal>
           <p>
-            除了教室裡的常態課，我們也把防身教育帶到學校、機構、企業與社區：依對象的需求規劃課程，把武術與防身的教學經驗，轉成貼近生活與工作的實用知識。
+            除了日常武術課程，我們也持續拓展不同形式的教學服務，包含專題講座、職場防身課程及機構合作活動。機構、學校、企業或團體若有防身教育與安全課程的需求，歡迎與我們聯繫。
           </p>
-          <p>近期合作：替社會工作師事務所規劃單日職場防身講座；到社區發展協會帶親子防身課。</p>
+          <p>近期合作：詹教練受邀擔任暖暖社會工作師事務所防身專題講座講師，為社工人員規劃單日防身課程；猴子老師應城男舊事心驛站邀約，到加蚋錦德社區發展協會分享親子防身。</p>
           <h3>可規劃的合作形式</h3>
           <ul>
             <li>安親班、幼兒園的常態武術防身課</li>
             <li>親子館單日講座</li>
             <li>親子共學團、家長自主團的短期主題活動</li>
-            <li>機構、學校、企業的專題講座與職場防身課</li>
+            <li>專題講座、職場防身課程及機構合作活動</li>
           </ul>
           <p><a class="button" href={BOOKING_ANCHOR} data-line-open>用 LINE 洽談合作</a></p>
         </div>

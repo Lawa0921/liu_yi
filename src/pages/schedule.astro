@@ -1,6 +1,6 @@
 ---
 // 課表：照用業主的常態班課表海報（設計文件 §7），時間不轉成文字，避免抄錯。
-// 海報是粉專 2026-06-15 發的新版；之後粉專貼文公告的異動列在「最新異動」（只寫貼文明說的事，沒說的請訪客洽 LINE）。
+// 海報是粉專 2026-06-15 發的新版；之後粉專貼文公告的時段列在「最新異動」，只寫貼文明說的事。
 // 來源整理在 docs/fb-sync-2026-11-18.md。
 import BaseLayout from '../layouts/BaseLayout.astro';
 import PosterFigure from '../components/PosterFigure.astro';
@@ -22,9 +22,8 @@ import { BOOKING_ANCHOR, SITE } from '../lib/site';
       <aside class="schedule-update" aria-labelledby="schedule-update-heading">
         <h2 id="schedule-update-heading">最新異動</h2>
         <ul>
-          <li>中式兵器新開中式劍新班：<strong>週日 16:00–17:30</strong>（2026 年 11 月公告）。海報上週日 18:00–19:30 的中式兵器是否照常，請用 LINE 確認。</li>
+          <li>中式兵器（2026 年 11 月公告）：<strong>週日 16:00–17:30</strong> 中式劍新班招生中；週六 17:30–19:00 目前進度為大槍；週五 18:00–19:30 目前進度為苗刀。</li>
         </ul>
-        <p>其他時段以海報為準。</p>
       </aside>
       <div class="schedule-poster">
         <PosterFigure src={schedule} alt="常態班課表海報。詳細內容請見圖片或洽 LINE。" caption="常態班課表" eager />
