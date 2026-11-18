@@ -9,7 +9,7 @@ import vip from '../assets/images/vip.png';
 import memberPolicy from '../assets/images/member-policy.png';
 import refundPolicy from '../assets/images/refund-policy.png';
 import { PAGE_SCENES } from '../lib/scene/config';
-import { BOOKING_ANCHOR } from '../lib/site';
+import { BOOKING_ANCHOR, SITE } from '../lib/site';
 
 const DETAIL = '詳細內容請見圖片或洽 LINE。';
 const posters = [
@@ -44,11 +44,33 @@ const posters = [
           ))
         }
       </div>
+      <section class="notice" aria-labelledby="notice-heading" data-reveal>
+        <h2 id="notice-heading">預約體驗</h2>
+        <p>想先試試看，歡迎填<a href={SITE.trialFormUrl} target="_blank" rel="noopener noreferrer">體驗預約表單</a>，或<a href={BOOKING_ANCHOR} data-line-open>用 LINE 詢問</a>。</p>
+      </section>
     </div>
   </section>
 </BaseLayout>
 
 <style>
+  .notice {
+    max-width: 44rem;
+    margin: var(--space-8) auto 0;
+    padding: var(--space-5) var(--space-6);
+    border: var(--line) solid var(--color-line);
+    color: var(--color-text-muted);
+  }
+
+  .notice h2 {
+    margin: 0 0 var(--space-3);
+    color: var(--color-text);
+    font-size: var(--text-lg);
+  }
+
+  .notice p {
+    margin: 0;
+  }
+
   .poster-grid {
     display: grid;
     gap: var(--space-8) var(--space-7);

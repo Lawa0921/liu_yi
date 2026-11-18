@@ -12,6 +12,8 @@ import { checkDist, formatMissing } from '../scripts/fonts/guard';
 export interface TwkaiGuardOptions {
   /** 子集內的字（`twkai-subset.chars.txt`）；預設是專案根目錄下的 `src/assets/fonts/twkai-subset.chars.txt`。 */
   charsetFile?: string;
+  /** 延伸子集的字集檔；預設是 `src/assets/fonts/twkai-extra.chars.txt`（不存在視為空）。 */
+  extraCharsetFile?: string;
   /** 允許退回後備字型的字；預設是專案根目錄下的 `scripts/fonts/fallback-allowed.txt`（不存在視為空）。 */
   allowedFile?: string;
   /** 測試用：預設是 `process.env`。 */
@@ -31,6 +33,7 @@ export function twkaiGuard(options: TwkaiGuardOptions = {}): AstroIntegration {
         const result = await checkDist({
           distDir: fileURLToPath(dir),
           charsetFile: options.charsetFile ?? join(root, 'src', 'assets', 'fonts', 'twkai-subset.chars.txt'),
+          extraCharsetFile: options.extraCharsetFile ?? join(root, 'src', 'assets', 'fonts', 'twkai-extra.chars.txt'),
           allowedFile: options.allowedFile ?? join(root, 'scripts', 'fonts', 'fallback-allowed.txt'),
         });
         if (result.ok) return;

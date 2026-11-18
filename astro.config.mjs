@@ -5,9 +5,18 @@ import { resolveDeployTarget } from './deploy-target.mjs';
 import { twkaiGuard } from './integrations/twkai-guard.ts';
 import { qiAssets } from './integrations/qi-assets.ts';
 import { QI_HARNESS_PATH, qiHarness } from './integrations/qi-harness.ts';
+import { charsetUnicodeRange } from './scripts/fonts/ranges.mjs';
 
 // site／base／outDir 的預設值與環境變數覆寫都在 deploy-target.mjs。
 const { site, base, outDir } = resolveDeployTarget(process.env);
+
+// TW-Kai 分成兩份子集（scripts/fonts/split.ts）：核心（首頁與共用 JS／CSS 的字）與延伸（只出現在其他頁面的字）。
+// 兩份用 unicode-range 區隔，瀏覽器只在頁面出現延伸字時才下載延伸檔；首頁只 preload 核心檔（BaseLayout.astro）。
+const TWKAI_CORE_RANGE = charsetUnicodeRange(new URL('./src/assets/fonts/twkai-subset.chars.txt', import.meta.url), { includeSpace: true });
+const TWKAI_EXTRA_RANGE = charsetUnicodeRange(new URL('./src/assets/fonts/twkai-extra.chars.txt', import.meta.url));
+/** @param {string[]} ranges */
+const toRange = (ranges) => (ranges.length > 0 ? /** @type {[string, ...string[]]} */ (ranges) : undefined);
+
 
 export default defineConfig({
   site,
@@ -39,7 +48,20 @@ export default defineConfig({
       name: 'TW-Kai',
       cssVariable: '--font-twkai',
       options: {
-        variants: [{ src: ['./src/assets/fonts/twkai-subset.woff2'], weight: 400, style: 'normal' }],
+        variants: [
+          // 順序有意義：第一個是核心，BaseLayout 只 preload fontData 的第一筆。
+          { src: ['./src/assets/fonts/twkai-subset.woff2'], weight: 400, style: 'normal', unicodeRange: toRange(TWKAI_CORE_RANGE) },
+          ...(TWKAI_EXTRA_RANGE.length > 0
+            ? [
+                {
+                  src: /** @type {[string]} */ (['./src/assets/fonts/twkai-extra.woff2']),
+                  weight: 400,
+                  style: /** @type {const} */ ('normal'),
+                  unicodeRange: toRange(TWKAI_EXTRA_RANGE),
+                },
+              ]
+            : []),
+        ],
       },
       fallbacks: ['Songti TC', 'PMingLiU', 'serif'],
     },

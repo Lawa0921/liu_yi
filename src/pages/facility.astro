@@ -1,16 +1,18 @@
 ---
-// 場地。文字只留照片上看得到的事實（鏡面牆、地墊）；地址等業主提供後再加。
+// 場地。文字只留照片上看得到的事實（鏡面牆、地墊）與粉專公開的地址、交通（2026-11-18 核對）。
 import { Image } from 'astro:assets';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Plaque from '../components/Plaque.astro';
 import interior1 from '../assets/images/facility-interior-1.jpg';
 import interior2 from '../assets/images/facility-interior-2.jpg';
+import kettlebell from '../assets/images/facility_kettlebell.jpg';
 import { PAGE_SCENES } from '../lib/scene/config';
-import { BOOKING_ANCHOR } from '../lib/site';
+import { BOOKING_ANCHOR, SITE } from '../lib/site';
 
 const photos = [
   { src: interior1, alt: '訓練場地全景：鋪滿地墊的教室，一側是整面鏡牆，天花板有成排的燈' },
   { src: interior2, alt: '從另一個角度看訓練場地：地墊、鏡牆與吊掛的沙袋' },
+  { src: kettlebell, alt: '教室地墊上一顆 108 公斤的壺鈴，側面寫著紅色的「煩惱」，後面是藥球與健身球' },
 ];
 ---
 
@@ -19,7 +21,11 @@ const photos = [
     <div class="container">
       <div class="page-head">
         <Plaque as="h1" id="page-title" size="page" reveal={false}>場地</Plaque>
-        <p class="lead">寬敞明亮的訓練場地，配備鏡面牆和地墊。</p>
+        <p class="lead">寬敞明亮的訓練場地，配備鏡面牆和地墊；器材也會隨訓練需求不定期增加。</p>
+        <p class="facility-address">
+          <a href={SITE.mapUrl} target="_blank" rel="noopener noreferrer">{SITE.address}</a><br />
+          {SITE.transit}
+        </p>
       </div>
       <ul class="facility-photos">
         {
@@ -64,6 +70,12 @@ const photos = [
 
   .facility-photos :global(img) {
     width: 100%;
+  }
+
+  .facility-address {
+    margin: var(--space-4) 0 0;
+    color: var(--color-text-muted);
+    line-height: 1.8;
   }
 
   .facility-cta {

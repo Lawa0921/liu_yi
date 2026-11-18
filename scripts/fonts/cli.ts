@@ -1,22 +1,26 @@
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolveDeployTarget } from '../../deploy-target.mjs';
 import { SITE } from '../../src/lib/site';
 import { assertHasHtml, parseCharList, scanDist, toCharsetText } from './charset';
 import { ensureSourceFont } from './source';
+import { splitCharset } from './split';
 import { buildSubset } from './subset';
 
 /**
  * `npm run fonts:subset [-- --from-dir <dist>]`：開發者本機指令，CI 與一般建置都不會跑。
- * 下載（或用快取的）TW-Kai 原檔 → 建置站台並掃用字 → 子集化 → 寫 `twkai-subset.woff2` 與 `twkai-subset.chars.txt`。
+ * 下載（或用快取的）TW-Kai 原檔 → 建置站台並掃用字 → 子集化 → 寫 `twkai-subset.woff2` 與 `twkai-subset.chars.txt`（核心：首頁與共用 JS／CSS 的字），
+ * 以及 `twkai-extra.woff2` 與 `twkai-extra.chars.txt`（延伸：只出現在其他頁面的字；沒有就刪掉這兩個檔）。拆法見 `split.ts`。
  * 不在 TW-Kai 內、也沒列入 `fallback-allowed.txt` 的字會讓指令以 1 結束（檔案仍會寫出）。
  */
 
 const SUBSET_FILE = 'src/assets/fonts/twkai-subset.woff2';
 const CHARS_FILE = 'src/assets/fonts/twkai-subset.chars.txt';
+const EXTRA_SUBSET_FILE = 'src/assets/fonts/twkai-extra.woff2';
+const EXTRA_CHARS_FILE = 'src/assets/fonts/twkai-extra.chars.txt';
 const FALLBACK_FILE = 'scripts/fonts/fallback-allowed.txt';
 
 export function parseArgs(argv: string[]): { fromDir?: string } {
@@ -89,13 +93,13 @@ export async function runSubset(opts: RunOptions): Promise<number> {
   const ttf = await readFile(await ensureFont(join(root, '.cache', 'fonts')));
 
   /** 子集化並寫出兩個檔；chars.txt 只記「確實進了子集」的字。 */
-  const writeSubset = async (chars: Set<string>) => {
+  const writeSubset = async (chars: Set<string>, woff2Path = subsetPath, charsFilePath = charsPath) => {
     const { woff2, notInFont } = await buildSubset(ttf, chars);
     const missing = new Set(notInFont);
     const inSubset = new Set([...chars].filter((ch) => !missing.has(ch)));
-    await mkdir(join(subsetPath, '..'), { recursive: true });
-    await writeFile(subsetPath, woff2);
-    await writeFile(charsPath, `${toCharsetText(inSubset)}\n`);
+    await mkdir(join(woff2Path, '..'), { recursive: true });
+    await writeFile(woff2Path, woff2);
+    await writeFile(charsFilePath, `${toCharsetText(inSubset)}\n`);
     return { woff2, notInFont, inSubset };
   };
 
@@ -120,7 +124,21 @@ export async function runSubset(opts: RunOptions): Promise<number> {
   assertHasHtml(scan, shownName);
   if (chars.size === 0) throw new Error(`掃描 ${shownName} 得到 0 個字，不覆寫現有的子集：請確認建置有產出頁面內容`);
 
-  const { woff2, notInFont } = await writeSubset(chars);
+  const { core, extra } = splitCharset(chars, where);
+  const coreResult = await writeSubset(core);
+  const extraWoff2Path = join(root, EXTRA_SUBSET_FILE);
+  const extraCharsPath = join(root, EXTRA_CHARS_FILE);
+  let extraResult: Awaited<ReturnType<typeof writeSubset>> | undefined;
+  if (extra.size > 0) {
+    extraResult = await writeSubset(extra, extraWoff2Path, extraCharsPath);
+  } else {
+    await rm(extraWoff2Path, { force: true });
+    await rm(extraCharsPath, { force: true });
+  }
+  const woff2 = coreResult.woff2;
+  const notInFont = [...coreResult.notInFont, ...(extraResult?.notInFont ?? [])].sort(
+    (a, b) => a.codePointAt(0)! - b.codePointAt(0)!,
+  );
 
   const allowed = parseCharList(await readIfExists(join(root, FALLBACK_FILE)));
   const unresolved = notInFont.filter((ch) => !allowed.has(ch));
@@ -128,7 +146,13 @@ export async function runSubset(opts: RunOptions): Promise<number> {
 
   log(`掃描 ${shownName}`);
   log(`字數：${chars.size - notInFont.length}（掃到 ${chars.size}，其中 ${notInFont.length} 個不在 TW-Kai 內）`);
-  log(`大小：${woff2.byteLength} bytes（${(woff2.byteLength / 1024).toFixed(1)} KB）→ ${SUBSET_FILE}`);
+  log(`大小：${woff2.byteLength} bytes（${(woff2.byteLength / 1024).toFixed(1)} KB）→ ${SUBSET_FILE}（核心 ${coreResult.inSubset.size} 字）`);
+  if (extraResult) {
+    const bytes = extraResult.woff2.byteLength;
+    log(`延伸：${bytes} bytes（${(bytes / 1024).toFixed(1)} KB）→ ${EXTRA_SUBSET_FILE}（${extraResult.inSubset.size} 字，只有用到的頁面才下載）`);
+  } else {
+    log(`延伸：沒有只出現在其他頁面的字，不產生 ${EXTRA_SUBSET_FILE}`);
+  }
   if (tolerated.length > 0) {
     log(`允許退回其他字型（${FALLBACK_FILE}）：${tolerated.join('')}`);
   }
