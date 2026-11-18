@@ -7,7 +7,7 @@ import { INTRO_STORAGE_KEY, shouldShowGate } from '../../src/scripts/home/intro-
 // <head> 的行內腳本（BaseLayout）在首繪前決定要不要顯示入館閘門（html[data-gate="open"]）。腳本不能 import，
 // 所以判斷式寫了兩份：這裡把那段腳本原封不動丟進 vm、用假的 window／document 跑，結果必須與純函式 `shouldShowGate` 完全一致。
 const layout = readFileSync(new URL('../../src/layouts/BaseLayout.astro', import.meta.url), 'utf8');
-const script = /<script is:inline data-probe-engine=\{home \? '' : undefined\}>([\s\S]*?)<\/script>/.exec(layout)?.[1] ?? '';
+const script = /<script is:inline data-probe-engine=\{home \? '' : undefined\}[^>]*>([\s\S]*?)<\/script>/.exec(layout)?.[1] ?? '';
 
 interface Scenario {
   reducedMotion: boolean;
@@ -24,10 +24,18 @@ interface Scenario {
 
 const ORIGIN = 'https://site.example';
 
-function runHead(s: Scenario): { gate: string | undefined; qiStatic: boolean; crest: string | undefined; timers: { fn: () => void; ms: number }[]; win: Record<string, unknown> } {
+function runHead(s: Scenario): {
+  gate: string | undefined;
+  qiStatic: boolean;
+  crest: string | undefined;
+  timers: { fn: () => void; ms: number }[];
+  win: Record<string, unknown>;
+  links: Record<string, string>[];
+} {
   const dataset: Record<string, string | undefined> = { base: s.base ?? '/liu_yi/', audienceKey: 'k' };
   const classes = new Set<string>();
   const timers: { fn: () => void; ms: number }[] = [];
+  const links: Record<string, string>[] = [];
   const win: Record<string, unknown> = {
     localStorage: { getItem: () => null },
     sessionStorage: {
@@ -42,16 +50,29 @@ function runHead(s: Scenario): { gate: string | undefined; qiStatic: boolean; cr
   };
   const document = {
     documentElement: { dataset, classList: { add: (name: string) => classes.add(name) } },
-    currentScript: s.home === false ? { hasAttribute: () => false } : { hasAttribute: (name: string) => name === 'data-probe-engine' },
+    currentScript:
+      s.home === false
+        ? { hasAttribute: () => false, getAttribute: () => null }
+        : { hasAttribute: (name: string) => name === 'data-probe-engine', getAttribute: (name: string) => (name === 'data-gate-css' ? '/liu_yi/_astro/gate.x.css' : null) },
     referrer: s.referrer,
-    createElement: () => ({
-      getContext: (type: string) => (type === 'webgl2' && s.webgl2 ? { getExtension: () => ({ loseContext: () => undefined }) } : null),
-    }),
+    head: { appendChild: (el: Record<string, string>) => links.push(el) },
+    createElement: (tag: string) => {
+      if (tag === 'link') {
+        const el: Record<string, string> & { setAttribute?: (k: string, v: string) => void } = {};
+        el.setAttribute = (k: string, v: string) => {
+          el[k] = v;
+        };
+        return el;
+      }
+      return {
+        getContext: (type: string) => (type === 'webgl2' && s.webgl2 ? { getExtension: () => ({ loseContext: () => undefined }) } : null),
+      };
+    },
   };
   win.document = document;
   win.window = win;
   runInNewContext(script, { ...win, window: win, document });
-  return { gate: dataset.gate, qiStatic: classes.has('qi-static'), crest: dataset.qiCrest, timers, win };
+  return { gate: dataset.gate, qiStatic: classes.has('qi-static'), crest: dataset.qiCrest, timers, win, links };
 }
 
 describe('<head> 行內腳本的閘門判斷與 shouldShowGate 一致', () => {
@@ -146,8 +167,27 @@ describe('閘門的保險計時器', () => {
   });
 });
 
+describe('門的樣式只在閘門顯示時才載入（Task 28：再訪不下載）', () => {
+  it('閘門顯示：<head> 的行內腳本插入 gate.css 的 <link>，標 blocking="render"（樣式到之前不首繪，門不會閃一下沒排版的樣子）', () => {
+    const result = runHead({ reducedMotion: false, webgl2: true, visited: false, hash: '', referrer: '' });
+    expect(result.gate).toBe('open');
+    expect(result.links).toHaveLength(1);
+    expect(result.links[0]).toMatchObject({ rel: 'stylesheet', href: '/liu_yi/_astro/gate.x.css', blocking: 'render' });
+  });
+
+  it('閘門不顯示（再訪、減少動態、帶錨點）或不是首頁：不插入、不下載', () => {
+    expect(runHead({ reducedMotion: false, webgl2: true, visited: true, hash: '', referrer: '' }).links).toEqual([]);
+    expect(runHead({ reducedMotion: true, webgl2: true, visited: false, hash: '', referrer: '' }).links).toEqual([]);
+    expect(runHead({ reducedMotion: false, webgl2: true, visited: false, hash: '#booking', referrer: '' }).links).toEqual([]);
+    expect(runHead({ reducedMotion: false, webgl2: true, visited: false, hash: '', referrer: '', home: false }).links).toEqual([]);
+  });
+});
+
 describe('閘門的時間常數與 CSS 一致', () => {
-  const css = readFileSync(new URL('../../src/styles/home.css', import.meta.url), 'utf8')
+  // 門本身的規則在 gate.css（只在閘門顯示時載入），外殼與淡出在 home.css：兩份接起來看
+  const css = ['home.css', 'gate.css']
+    .map((name) => readFileSync(new URL(`../../src/styles/${name}`, import.meta.url), 'utf8'))
+    .join('\n')
     .replace(/\r\n/g, '\n')
     .replace(/\/\*[\s\S]*?\*\//g, '');
 

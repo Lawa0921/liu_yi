@@ -75,6 +75,7 @@ export function initGate(session: Pick<Storage, 'setItem'> | null): Gate {
 
   // 門的三層圖（門框與牆、左右門扇）全部載入後才淡入（閘門是第一印象，不讓圖一塊一塊跳出來）；載入失敗也照樣露出（缺一塊而已，按鈕仍可用）
   const door = dialog.querySelector<HTMLElement>('[data-gate-door]');
+  const hit = door?.querySelector<HTMLElement>('.gate__door'); // 門洞：點它也能進（只有它接收指標）
   if (door) {
     const images = Array.from(door.querySelectorAll('img'));
     for (const img of images) img.loading = 'eager'; // 閘門開著才會走到這裡：立刻載，不等延後載入
@@ -95,11 +96,23 @@ export function initGate(session: Pick<Storage, 'setItem'> | null): Gate {
     }
   }
 
+  // 匾上的館徽（Task 28）：用開場區館徽挑到的同一個檔案（同一組 srcset／sizes，瀏覽器挑到同一張，快取命中，不多下載）。
+  // 用一個脫離文件的複本去載：開場區館徽沒占位（太矮的橫向）時它是 lazy、不會自己載，複本照樣載得到；它不改開場區那張的 loading。
+  const crest = dialog.querySelector<HTMLElement>('[data-gate-crest]');
+  const source = document.querySelector<HTMLImageElement>('.opening__crest-img');
+  if (crest && source) {
+    const probe = source.cloneNode() as HTMLImageElement;
+    probe.loading = 'eager';
+    probe.addEventListener('load', () => crest.style.setProperty('--crest', `url("${probe.currentSrc}")`), { once: true });
+  }
+
   const finish = (outcome: GateOutcome): void => {
     if (state === 'closed') return;
     state = 'closed';
     clearTimeout(timer);
     document.removeEventListener('keydown', onKey);
+    button.removeEventListener('click', enter);
+    hit?.removeEventListener('click', enter);
     for (const el of inerted) el.removeAttribute('inert');
     const active = document.activeElement;
     const hadFocus = !active || active === document.body || dialog.contains(active);
@@ -125,6 +138,8 @@ export function initGate(session: Pick<Storage, 'setItem'> | null): Gate {
   // Enter／空白鍵：焦點在按鈕上時由按鈕自己的 click 處理；焦點掉到別處（點了背板）時也要能進入
   const onKey = (event: KeyboardEvent): void => {
     if (state !== 'open') return;
+    // 用鍵盤操作過（Tab 等）：之後按鈕的焦點才讓門跟著微開（gate.css）；一進站的焦點不讓門動
+    if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'Spacebar') dialog.dataset.keyed = '';
     if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'Spacebar') return;
     if (event.target === button) return;
     event.preventDefault();
@@ -132,10 +147,9 @@ export function initGate(session: Pick<Storage, 'setItem'> | null): Gate {
   };
   document.addEventListener('keydown', onKey);
   button.addEventListener('click', enter);
-  door?.querySelector('.gate__door')?.addEventListener('click', enter); // 點門（門洞）也能進；門是裝飾，按鈕才是無障礙的入口
+  hit?.addEventListener('click', enter); // 點門（門洞）也能進；門是裝飾，按鈕才是無障礙的入口
   dialog.dataset.ready = ''; // 接線完成：按鈕這時才看得到、點得到（home.css；先於 focus，隱藏的元素聚焦不了）
-  // focusVisible: false：焦點在按鈕上（Enter／空白鍵直接進），但一進站不亮起焦點樣式（.button 的金色填滿），門口保持安靜；按 Tab 之後才亮。
-  button.focus({ preventScroll: true, focusVisible: false });
+  button.focus({ preventScroll: true }); // 焦點看得見（gate.css：低調的細框，不是金色填滿）
 
   return {
     isHolding: () => state !== 'closed',

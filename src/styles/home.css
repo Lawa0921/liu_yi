@@ -332,14 +332,8 @@ html[data-qi-ready] .opening__poster {
  * 閘門期間畫面上沒有光點：引擎照常在背板後面預載（按下後開場立即開始），但畫布留在內容底下（z-index 不動）。
  * 閘門期間不得捲動：overflow: hidden 於 html（scrollbar-gutter 保留捲軸的位置，開關閘門時版面不位移）；拿掉 data-gate 就還原，任何退出路徑都走同一個屬性。
  *
- * 場景（.gate__scene）是那張生圖的等比框（1536×1024），三層的位置全用圖的像素換成百分比，所以怎麼縮放都對齊：
- *   門洞 x 448–1061、y 228–805（門扇兩片：左 448–762、右 762–1061，接縫在門縫上）；匾 x 363–1141、y 97–195。
- * 場景寬：寬螢幕約等於視窗寬（蓋滿，上下各裁一點），太寬時上限 168svh（匾與台階不被裁掉，兩側露出底色），
- * 手機直式上限 217vw（門洞約 87vw，門完整、兩側牆裁掉，上下露出的底色由門框圖的邊緣漸隱接上）。
- *
- * 進入（data-gate="leaving"）整段 1.4 s（GATE_FADE_MS，scripts/home/gate.ts，單元測試對照）：
- *   門扇以門軸為中心向內打開（rotateY，GATE_OPEN_MS ＝ 1 s）、門後的暖光露出來、場景往前推（scale，整段），
- *   最後 0.5 s（GATE_VEIL_MS）整層淡出露出首頁。只用 transform／opacity。
+ * 門本身（場景、三層圖的位置、開門的 rotateY 與推進）在 styles/gate.css：只在閘門顯示時由 <head> 的行內腳本載入，再訪不下載。
+ * 進入（data-gate="leaving"）整段 1.4 s（GATE_FADE_MS，scripts/home/gate.ts，單元測試對照）：最後 0.5 s（GATE_VEIL_MS）整層淡出露出首頁。
  */
 .gate,
 .gate-backdrop {
@@ -377,106 +371,9 @@ html[data-gate] .gate > .gate__enter {
   pointer-events: auto;
 }
 
-/* 只有門洞接收指標：場景在桌機蓋滿整個畫面，指到牆上門不動、點牆不進 */
-html[data-gate] .gate__door {
-  pointer-events: auto;
-}
-
+/* 門本身（場景、門扇、門框、匾、開門）的樣式在 styles/gate.css，只在閘門顯示時才下載；那份沒到之前（或載不到）場景不顯示。 */
 .gate__scene {
-  grid-area: 1 / 1;
-  /* 比視窗寬時兩側平均裁掉（預設的 safe 對齊會靠左） */
-  place-self: unsafe center;
-  position: relative;
-  width: min(max(100vw, 150svh), 168svh, 217vw);
-  aspect-ratio: 1536 / 1024;
-  container-type: inline-size;
-  /* 往前推的中心：門洞的中心 */
-  transform-origin: 50.85% 50.44%;
-  /* 三層圖載入後才淡入（scripts/home/gate.ts 標 data-ready），不讓圖一塊一塊跳出來 */
   opacity: 0;
-  transition: opacity 0.8s var(--ease-out);
-}
-
-.gate__scene[data-ready] {
-  opacity: 1;
-}
-
-/* 門洞（門扇與門後的光共用的框） */
-.gate__light,
-.gate__door {
-  position: absolute;
-  left: 29.1667%;
-  top: 22.2656%;
-  width: 39.9089%;
-  height: 56.3477%;
-}
-
-/* 門後：館裡點著燈的暖光（CSS 漸層）。關著門時被門扇蓋住；門縫微開、門打開時才看得到（開門時亮起來的就是它）。 */
-.gate__light {
-  background: radial-gradient(ellipse 50% 58% at 50% 55%, #b48452, #6b4a28 40%, #1e150d 75%, #0c0907);
-}
-
-.gate__door {
-  display: flex;
-  cursor: pointer;
-  perspective: 90cqi;
-}
-
-.gate__leaf {
-  height: 100%;
-  transition: transform 1s var(--ease-in-out);
-}
-
-.gate__leaf--left {
-  width: 51.2235%;
-  transform-origin: left center;
-}
-
-.gate__leaf--right {
-  width: 48.7765%;
-  transform-origin: right center;
-}
-
-/* 門縫透出的一絲光（指到門、或「入館」按鈕以鍵盤取得焦點時） */
-.gate__door::after {
-  content: '';
-  position: absolute;
-  left: calc(51.2235% - 0.15cqi);
-  top: 3%;
-  bottom: 3%;
-  width: 0.3cqi;
-  background: linear-gradient(to bottom, transparent, rgb(222 176 112 / 0.55) 25%, rgb(222 176 112 / 0.7) 65%, transparent);
-  opacity: 0;
-  transition: opacity 0.6s var(--ease-out);
-}
-
-/* 門框與牆（門洞挖空）：門扇之上，門扇轉進去時邊緣藏在門框後面；四邊漸隱接上底色（手機直式上下會露出底色）。 */
-.gate__frame {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  mask-image:
-    linear-gradient(to bottom, transparent, #000 5%, #000 94%, transparent),
-    linear-gradient(to right, transparent, #000 4%, #000 96%, transparent);
-  mask-composite: intersect;
-}
-
-/* 匾：生圖上是空白的木匾，字用站內的楷書（真字型）疊上去，像褪了色的刻字——不描金、不發光。 */
-.gate__plaque {
-  position: absolute;
-  left: 23.6328%;
-  top: 9.4727%;
-  width: 50.651%;
-  height: 9.5703%;
-  display: grid;
-  place-items: center;
-  font-size: 3.6cqi;
-  letter-spacing: 0.9em;
-  text-indent: 0.9em;
-  color: color-mix(in srgb, var(--paper-300) 52%, transparent);
-  pointer-events: none;
 }
 
 /* .gate .gate__enter：全站的 .button 在樣式表裡排在後面，同一個特異度會蓋掉這裡的字級與高度 */
@@ -498,40 +395,6 @@ html[data-gate] .gate:not([data-ready]) .gate__enter {
   visibility: hidden;
 }
 
-/* 指到門上、或按鈕以鍵盤取得焦點：門扇微微內開 3 度，門縫透出一絲光。按鈕在 DOM 裡排在場景之前（畫面位置由 grid-area 決定），才能用 + 選到場景。 */
-html[data-gate='open'] .gate__door:hover .gate__leaf--left,
-html[data-gate='open'] .gate__enter:focus-visible + .gate__scene .gate__leaf--left {
-  transform: rotateY(3deg);
-}
-
-html[data-gate='open'] .gate__door:hover .gate__leaf--right,
-html[data-gate='open'] .gate__enter:focus-visible + .gate__scene .gate__leaf--right {
-  transform: rotateY(-3deg);
-}
-
-html[data-gate='open'] .gate__door:hover::after,
-html[data-gate='open'] .gate__enter:focus-visible + .gate__scene .gate__door::after {
-  opacity: 1;
-}
-
-/* 進入：開門、暖光、往前推，最後整層淡出 */
-html[data-gate='leaving'] .gate__leaf--left {
-  transform: rotateY(80deg);
-}
-
-html[data-gate='leaving'] .gate__leaf--right {
-  transform: rotateY(-80deg);
-}
-
-html[data-gate='leaving'] .gate__door {
-  pointer-events: none;
-}
-
-html[data-gate='leaving'] .gate__scene {
-  transform: scale(1.12);
-  transition: transform 1.4s var(--ease-in-out);
-}
-
 html[data-gate='leaving'] .gate,
 html[data-gate='leaving'] .gate-backdrop {
   opacity: 0;
@@ -542,8 +405,9 @@ html[data-gate='leaving'] .gate > .gate__enter {
   pointer-events: none;
 }
 
-/* 閘門還擋著時，站名組先不演進場（淡出開始才演）：閘門後面的首屏不會在看不見的時候就演完。 */
-html[data-gate='open'] .opening__lockup > * {
+/* 閘門還在（開著、開門與淡出中）時，站名組先不演進場；閘門收起（拿掉 data-gate）才演：不會在門後演完。
+ * html.js 讓特異度高過下方的 html.js .opening__lockup > *（同特異度時排在後面的進場動畫會蓋過來）。 */
+html.js[data-gate] .opening__lockup > * {
   animation: none;
   opacity: 0;
 }

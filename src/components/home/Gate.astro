@@ -1,7 +1,8 @@
 ---
 // 入館閘門（Task 25 起；Task 28 改成武館大門，使用者要求「入口點即進入頁面的階段應該不要有粒子，應該要是低調內斂的武館大門，點了之後進入這樣的互動模式」）：
-// 首次進站（每個工作階段一次）蓋一層全屏的「夜裡只點一盞燈籠的老武館門口」：深色舊木雙扇門、門釘與鋪首門環、石門框與門檻、兩側灰磚牆，
-// 門上一塊空白的木匾（字是 HTML 文字「六藝武術」，用站內的楷書字型疊上去，不讓生圖畫字）；下方一顆「入館」按鈕。
+// 首次進站（每個工作階段一次）蓋一層全屏的「夜裡的老武館門口」：深色舊木雙扇門、門釘與鋪首門環、石門框與門檻、兩側灰磚牆，暖光來自畫面外（上方簷下），
+// 門上一塊空白的木匾：正中是開場區那隻燙金獅子館徽（金屬掃光），兩側「六藝」「武術」是 HTML 文字（站內的楷書，不讓生圖畫字）；下方一顆「入館」按鈕。
+// 館徽不另外出圖：gate.ts 讓它用開場區館徽挑到的同一個檔案（快取命中，不多下載；閘門沒顯示就不設）。
 // 點按鈕、點門、按 Enter／空白鍵後兩扇門向內打開、門後的暖光擴散、畫面略往前推，接著整層淡出，才開始開場（吸氣聚成拳師、落地、館徽擦出）。
 // 閘門期間畫面上沒有任何光點（引擎照常在背板後面預載，畫布不抬到閘門之上）。
 //
@@ -23,12 +24,12 @@ import leafRight from '../../assets/images/gate/gate-leaf-right.webp';
 
 // 場景寬度（home.css 的 .gate__scene）：桌機約等於視窗寬（1440 → 1440px），手機直式約 846px（門完整、兩側牆裁掉）。
 // 門扇的寬是場景寬的 20.4%（左）與 19.5%（右）。sizes 用同樣的比例，各裝置挑到的候選與實際顯示寬度相近。
-// 首屏預算（budget.spec）很緊：門框最大的候選是 1440（1440 寬的桌機剛好挑到它，約 70 KB），品質 50；門扇只有兩個候選。
+// 首屏預算（budget.spec）很緊：門框最大的候選是 1440（1440 寬的桌機剛好挑到它，約 70 KB），品質 50。
+// 門扇只出原寸一張（約 12–17 KB、不帶 srcset）：桌機與 DPR 2 的手機本來就挑到原寸，少一組 srcset 也讓再訪（沒有閘門）的 HTML 少幾百位元組。
 const common = { alt: '', format: 'webp' as const, loading: 'lazy' as const, decoding: 'async' as const, quality: 60 };
-const frameImage = { ...common, src: frame, quality: 50, widths: [768, 1152, 1440], sizes: 'min(max(100vw, 150vh), 168vh, 217vw)' };
-const leafSizes = 'min(max(20vw, 30vh), 34vh, 44vw)'; // 0.2 × 場景寬
-const leftImage = { ...common, src: leafLeft, widths: [160, 314], sizes: leafSizes };
-const rightImage = { ...common, src: leafRight, widths: [152, 299], sizes: leafSizes };
+const frameImage = { ...common, src: frame, quality: 50, widths: [768, 1152, 1440], sizes: 'min(max(100vw, 150svh), 168svh, 230vw)' };
+const leftImage = { ...common, src: leafLeft, layout: 'none' as const };
+const rightImage = { ...common, src: leafRight, layout: 'none' as const };
 ---
 
 <div class="gate-backdrop" data-gate-backdrop aria-hidden="true"></div>
@@ -41,6 +42,6 @@ const rightImage = { ...common, src: leafRight, widths: [152, 299], sizes: leafS
       <Image {...rightImage} class="gate__leaf gate__leaf--right" />
     </div>
     <Image {...frameImage} class="gate__frame" />
-    <span class="gate__plaque">六藝武術</span>
+    <span class="gate__plaque"><span>六藝</span><span class="gate__crest" data-gate-crest></span><span>武術</span></span>
   </div>
 </div>

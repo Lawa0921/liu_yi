@@ -1,0 +1,200 @@
+/* ── 入館閘門的門（Task 28）──────────────────────────────
+ * 只在閘門顯示時才下載：<head> 的行內腳本（BaseLayout）標 html[data-gate="open"] 的同時插入這份樣式表（blocking="render"，
+ * 樣式到之前不首繪）。再訪、減少動態、帶錨點…沒有閘門的訪客不下載它。閘門的外殼（背板、對話框、按鈕、淡出、捲動鎖定）在 home.css：
+ * 這份載不到時只剩黑底與「入館」按鈕（場景在 home.css 是 opacity 0），照樣進得去。
+ *
+ * 場景（.gate__scene）是那張生圖的等比框（1536×1024），三層的位置全用圖的像素換成百分比，所以怎麼縮放都對齊：
+ *   門洞 x 448–1061、y 228–805（門扇兩片：左 448–762、右 762–1061，接縫在門縫上）；匾 x 363–1141、y 97–195。
+ * 場景寬：寬螢幕約等於視窗寬（蓋滿，上下各裁一點），太寬時上限 168svh（匾與台階不被裁掉，兩側露出底色），
+ * 直式上限 230vw（門洞約 92vw，門完整、兩側牆裁掉）；Gate.astro 的 sizes 用同一把尺。
+ *
+ * 進入（data-gate="leaving"）整段 1.4 s（GATE_FADE_MS，scripts/home/gate.ts，單元測試對照）：
+ *   門扇以門軸為中心向內打開（rotateY，GATE_OPEN_MS ＝ 1 s）、門後的暖光露出來、場景往前推（scale，整段），
+ *   最後 0.5 s（GATE_VEIL_MS，home.css）整層淡出露出首頁。只用 transform／opacity。
+ */
+.gate__scene {
+  grid-area: 1 / 1;
+  /* 比視窗寬時兩側平均裁掉（預設的 safe 對齊會靠左） */
+  place-self: unsafe center;
+  position: relative;
+  width: min(max(100vw, 150svh), 168svh, 230vw);
+  aspect-ratio: 1536 / 1024;
+  container-type: inline-size;
+  /* 往前推的中心：門洞的中心 */
+  transform-origin: 50.85% 50.44%;
+  /* 三層圖載入後才淡入（scripts/home/gate.ts 標 data-ready），不讓圖一塊一塊跳出來 */
+  opacity: 0;
+  transition: opacity 0.8s var(--ease-out);
+}
+
+.gate__scene[data-ready] {
+  opacity: 1;
+}
+
+/* 只有門洞接收指標：場景在桌機蓋滿整個畫面，指到牆上門不動、點牆不進 */
+html[data-gate] .gate__door {
+  pointer-events: auto;
+}
+
+/* 門洞（門扇與門後的光共用的框） */
+.gate__light,
+.gate__door {
+  position: absolute;
+  left: 29.1667%;
+  top: 22.2656%;
+  width: 39.9089%;
+  height: 56.3477%;
+}
+
+/* 門後：館裡點著燈的暖光（CSS 漸層）。關著門時被門扇蓋住；門縫微開、門打開時才看得到。 */
+.gate__light {
+  background: radial-gradient(ellipse 50% 58% at 50% 55%, #b48452, #6b4a28 40%, #1e150d 75%, #0c0907);
+}
+
+.gate__door {
+  display: flex;
+  cursor: pointer;
+  perspective: 90cqi;
+}
+
+.gate__leaf {
+  height: 100%;
+  transition: transform 1s var(--ease-in-out);
+}
+
+.gate__leaf--left {
+  width: 51.2235%;
+  transform-origin: left center;
+}
+
+.gate__leaf--right {
+  width: 48.7765%;
+  transform-origin: right center;
+}
+
+/* 門縫透出的一絲光（指到門、或用鍵盤操作時按鈕取得焦點） */
+.gate__door::after {
+  content: '';
+  position: absolute;
+  left: calc(51.2235% - 0.15cqi);
+  top: 3%;
+  bottom: 3%;
+  width: 0.3cqi;
+  background: linear-gradient(to bottom, transparent, rgb(222 176 112 / 0.55) 25%, rgb(222 176 112 / 0.7) 65%, transparent);
+  opacity: 0;
+  transition: opacity 0.6s var(--ease-out);
+}
+
+/* 門框與牆（門洞挖空）：門扇之上，門扇轉進去時邊緣藏在門框後面；四邊漸隱接上底色（直式上下會露出底色）。 */
+.gate__frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  mask-image:
+    linear-gradient(to bottom, transparent, #000 5%, #000 94%, transparent),
+    linear-gradient(to right, transparent, #000 4%, #000 96%, transparent);
+  mask-composite: intersect;
+}
+
+/* 匾：生圖上是空白的木匾。正中是燙金獅子館徽（站的 logo），兩側「六藝」「武術」用站內的楷書（真字型）疊上去，
+ * 像褪了色的刻字——不描金、不發光。 */
+.gate__plaque {
+  position: absolute;
+  left: 23.6328%;
+  top: 9.4727%;
+  width: 50.651%;
+  height: 9.5703%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4.5cqi;
+  font-size: 3.4cqi;
+  letter-spacing: 0.6em;
+  color: color-mix(in srgb, var(--paper-300) 52%, transparent);
+  pointer-events: none;
+}
+
+/* 兩組字的最後一個字後面不留字距：左右兩組等寬、對稱於館徽 */
+.gate__plaque > :not(.gate__crest) {
+  margin-right: -0.6em;
+}
+
+/* 館徽：開場區那一張燙金獅子（960:920 透明底），gate.ts 載好後寫進 --crest。高度約等於匾高（桌機約 80px、手機約 50px）。 */
+.gate__crest {
+  position: relative;
+  flex: none;
+  width: 6.1cqi;
+  aspect-ratio: 960 / 920;
+  background: var(--crest) center / contain no-repeat;
+}
+
+/* 金屬掃光：同一張圖提亮成香檳金，只露出一道斜帶（--sheen-x，與開場區館徽同一套），平常每 9 秒緩慢掃過；指到門上掃一次。 */
+.gate__crest::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: inherit;
+  filter: brightness(2.1) saturate(0.55);
+  mask-image: linear-gradient(104deg, transparent calc(var(--sheen-x) - 13%), #000 var(--sheen-x), transparent calc(var(--sheen-x) + 13%));
+  animation: crest-sweep 9s var(--ease-in-out) 1.4s infinite both;
+}
+
+html[data-gate='open'] .gate__scene:has(.gate__door:hover) .gate__crest::after {
+  animation: crest-sweep 2.4s var(--ease-out) both;
+}
+
+/* 按鈕的焦點：一進站就有焦點，用全站的細框（:focus-visible 的 outline）就好，不要 .button 的金色填滿（門口保持安靜）；指到時照常填滿。 */
+.gate .gate__enter:focus-visible:not(:hover) {
+  color: var(--color-accent-strong);
+}
+
+.gate .gate__enter:focus-visible:not(:hover)::before {
+  transform: scaleX(0);
+}
+
+/* 直式：門與匾在畫面中間，按鈕緊接在台階下方（場景高 ＝ 寬 ÷ 1.5，台階下緣在場景約 96% 高） */
+@media (max-aspect-ratio: 4/5) {
+  /* html[data-gate]：這份樣式表插在 <head> 的哪個位置不一定，特異度要高過 home.css 的 .gate .gate__enter */
+  html[data-gate] .gate .gate__enter {
+    align-self: center;
+    margin: 0;
+    translate: 0 calc(min(max(100vw, 150svh), 168svh, 230vw) * 0.3);
+  }
+}
+
+/* 指到門上，或用鍵盤操作過（gate.ts 標 data-keyed）之後按鈕取得焦點：門扇微微內開 3 度，門縫透出一絲光。
+ * 按鈕在 DOM 裡排在場景之前（畫面位置由 grid-area 決定），才能用 + 選到場景。一進站的焦點不讓門動（那時門是關著的）。 */
+html[data-gate='open'] .gate__door:hover .gate__leaf--left,
+html[data-gate='open'] .gate[data-keyed] .gate__enter:focus-visible + .gate__scene .gate__leaf--left {
+  transform: rotateY(3deg);
+}
+
+html[data-gate='open'] .gate__door:hover .gate__leaf--right,
+html[data-gate='open'] .gate[data-keyed] .gate__enter:focus-visible + .gate__scene .gate__leaf--right {
+  transform: rotateY(-3deg);
+}
+
+html[data-gate='open'] .gate__door:hover::after,
+html[data-gate='open'] .gate[data-keyed] .gate__enter:focus-visible + .gate__scene .gate__door::after {
+  opacity: 1;
+}
+
+/* 進入：開門、往前推（淡出在 home.css） */
+html[data-gate='leaving'] .gate__leaf--left {
+  transform: rotateY(80deg);
+}
+
+html[data-gate='leaving'] .gate__leaf--right {
+  transform: rotateY(-80deg);
+}
+
+html[data-gate='leaving'] .gate__door {
+  pointer-events: none;
+}
+
+html[data-gate='leaving'] .gate__scene {
+  transform: scale(1.12);
+  transition: transform 1.4s var(--ease-in-out);
+}

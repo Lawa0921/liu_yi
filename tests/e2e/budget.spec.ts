@@ -100,6 +100,7 @@ for (const device of DEVICES) {
       });
       expect(doorImages.map((item) => fileName(item.url).split('.')[0]).sort(), '門的三層圖各一張').toEqual(['gate-frame', 'gate-leaf-left', 'gate-leaf-right']);
       expect(totalBytes(doorImages), '門的圖合計').toBeLessThanOrEqual(300 * 1024);
+      expect(first.filter((item) => /\/gate\.[^/]*\.css(\?|$)/.test(item.url)), '門的樣式表（只在閘門顯示時下載）').toHaveLength(1);
       const crestImages = first.filter((item) => /crest-lion[^/]*\.webp(\?|$)/.test(item.url));
       expect(crestImages.length, '館徽圖最多一個候選（開場區）').toBeLessThanOrEqual(1);
       expect(totalBytes(crestImages), '館徽圖合計').toBeLessThanOrEqual(80 * 1024);
@@ -144,6 +145,7 @@ for (const device of DEVICES) {
       const bytes = totalBytes(first);
       test.info().annotations.push({ type: 'first-screen-bytes-no-gate', description: `${mb(bytes)}（${bytes} B）＝ ${breakdown(first)}` });
       expect(first.filter((item) => /gate-(frame|leaf-left|leaf-right)[^/]*\.webp(\?|$)/.test(item.url)).map((item) => fileName(item.url)), '沒有閘門就不下載門的圖').toEqual([]);
+      expect(first.filter((item) => /\/gate\.[^/]*\.css(\?|$)/.test(item.url)).map((item) => fileName(item.url)), '沒有閘門就不下載門的樣式').toEqual([]);
       expect(bytes, `首屏 ${mb(bytes)} 不得超過 1.5 MB`).toBeLessThanOrEqual(FIRST_SCREEN_LIMIT);
     });
   });

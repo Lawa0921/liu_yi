@@ -148,7 +148,14 @@ for (const device of [
       expect(layers.dialog).toBe(202);
       expect(layers.backdropBg, '背板是不透明的黑底').toMatch(/^rgb\(\d+, \d+, \d+\)$/);
       expect(layers.dialogBg, '對話框本身透明').toBe('rgba(0, 0, 0, 0)');
-      expect(await page.locator('.gate__crest, [data-gate-dialog] [data-crest]').count(), '閘門上沒有館徽與掃光').toBe(0);
+      expect(await page.locator('.gate__crest-img, [data-gate-dialog] [data-crest]').count(), '舊的閘門館徽（兩張 <img>）已拿掉').toBe(0);
+
+      // 門的樣式表（gate.css）由 <head> 的行內腳本插入、標 blocking="render"，而且已經套用
+      const sheet = await page.evaluate(() => {
+        const link = document.querySelector<HTMLLinkElement>('head link[rel="stylesheet"][href*="/gate."]');
+        return { found: !!link, blocking: link?.getAttribute('blocking') ?? null, loaded: !!link?.sheet };
+      });
+      expect(sheet).toEqual({ found: true, blocking: 'render', loaded: true });
 
       // 門的三層圖（門框與牆、左右門扇）都載入了，載完場景才淡入
       const door = page.locator('[data-gate-door]');
@@ -192,8 +199,32 @@ for (const device of [
         expect(Math.abs(leaf.bottom - boxes.door.bottom)).toBeLessThanOrEqual(1);
       }
       expect(boxes.plaque.top, '匾在視窗內').toBeGreaterThanOrEqual(0);
+      // 構圖：門在畫面垂直的中間附近；匾到按鈕這一組不偏上也不偏下（手機直式不留一大片上方空白）、按鈕緊接在門下（台階前）
+      expect(Math.abs((boxes.door.top + boxes.door.bottom) / 2 - boxes.view.h / 2), '門大致垂直置中').toBeLessThanOrEqual(boxes.view.h * 0.06);
+      const above = boxes.plaque.top;
+      const below = boxes.view.h - boxes.button.bottom;
+      expect(Math.abs(above - below), '匾上方與按鈕下方的留白差不多').toBeLessThanOrEqual(boxes.view.h * 0.12);
+      expect(boxes.button.top - boxes.door.bottom, '按鈕靠近門（台階前）').toBeLessThanOrEqual(boxes.view.h * 0.12);
       expect(boxes.plaque.bottom, '匾在門的上方').toBeLessThanOrEqual(boxes.door.top);
       await expect(page.locator('.gate__plaque')).toHaveText('六藝武術');
+      // 匾正中的燙金館徽：用開場區館徽的同一個檔案（已載入），在匾的範圍內、清楚可辨（≥ 44px 寬）
+      const crest = page.locator('[data-gate-crest]');
+      await expect.poll(() => crest.evaluate((el) => getComputedStyle(el).backgroundImage), { message: '館徽圖設好了' }).toMatch(/crest-lion[^"]*\.webp/);
+      const crestInfo = await page.evaluate(() => {
+        const el = document.querySelector<HTMLElement>('[data-gate-crest]')!;
+        const url = /url\("?([^")]+)"?\)/.exec(getComputedStyle(el).backgroundImage)![1]!;
+        const opening = document.querySelector<HTMLImageElement>('.opening__crest-img')!;
+        const r = el.getBoundingClientRect();
+        return { url, opening: opening.currentSrc, sheen: getComputedStyle(el, '::after').animationName, box: { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width } };
+      });
+      if (crestInfo.opening) expect(crestInfo.url, '與開場區館徽同一個檔案（快取命中）').toBe(crestInfo.opening);
+      expect(crestInfo.sheen, '金屬掃光').toBe('crest-sweep');
+      expect(crestInfo.box.width, '館徽清楚可辨').toBeGreaterThanOrEqual(44);
+      expect(crestInfo.box.left).toBeGreaterThanOrEqual(boxes.plaque.left);
+      expect(crestInfo.box.right).toBeLessThanOrEqual(boxes.plaque.right);
+      expect(crestInfo.box.top, '館徽在匾的範圍內（上下可略出 4px）').toBeGreaterThanOrEqual(boxes.plaque.top - 4);
+      expect(crestInfo.box.bottom).toBeLessThanOrEqual(boxes.plaque.bottom + 4);
+      expect(Math.abs((crestInfo.box.left + crestInfo.box.right) / 2 - (boxes.plaque.left + boxes.plaque.right) / 2), '館徽在匾的正中').toBeLessThanOrEqual(2);
       expect(Math.abs((boxes.button.left + boxes.button.right) / 2 - gateCenter), '按鈕水平置中').toBeLessThanOrEqual(1);
       expect(boxes.button.top, '按鈕在門的下方（門前或門檻下）').toBeGreaterThanOrEqual(boxes.door.bottom - 1);
       expect(boxes.button.height, '按鈕夠大（≥ 44px）').toBeGreaterThanOrEqual(44);
@@ -232,7 +263,7 @@ async function brightPixels(page: Page): Promise<number> {
 test.describe('武館大門的互動', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
-  test('一進站門是關的、按鈕不亮起焦點樣式；指到門上門扇微開（rotateY 1–4 度）、門縫透光；鍵盤 Tab 回到按鈕（focus-visible）也一樣', async ({ page }) => {
+  test('一進站門是關的、按鈕有看得見的焦點（細框、不是金色填滿）；指到門上門扇微開（rotateY 1–4 度）、門縫透光；用鍵盤 Tab 回到按鈕也一樣', async ({ page }) => {
     await open(page);
     const leafAngle = (side: 'left' | 'right') =>
       page.locator(`.gate__leaf--${side}`).evaluate((el) => {
@@ -242,8 +273,17 @@ test.describe('武館大門的互動', () => {
     const seam = () => page.locator('.gate__door').evaluate((el) => Number(getComputedStyle(el, '::after').opacity));
     await expect(page.locator('[data-gate-door]')).toHaveAttribute('data-ready', '');
     await expect(enterButton(page)).toBeFocused();
-    expect(await enterButton(page).evaluate((el) => el.matches(':focus-visible')), '一進站按鈕不亮（門口保持安靜）').toBe(false);
-    expect(await leafAngle('left')).toBeCloseTo(0, 3);
+    const focusStyle = await enterButton(page).evaluate((el) => ({
+      visible: el.matches(':focus-visible'),
+      outline: getComputedStyle(el).outlineStyle,
+      outlineWidth: Number.parseFloat(getComputedStyle(el).outlineWidth),
+      fill: new DOMMatrixReadOnly(getComputedStyle(el, '::before').transform).a,
+    }));
+    expect(focusStyle.visible, '一進站的焦點看得見（WCAG 2.4.7）').toBe(true);
+    expect(focusStyle.outline, '焦點是細框').not.toBe('none');
+    expect(focusStyle.outlineWidth).toBeGreaterThanOrEqual(1);
+    expect(focusStyle.fill, '不是 .button 的金色填滿（門口保持安靜）').toBe(0);
+    expect(await leafAngle('left'), '一進站的焦點不讓門動：門是關的').toBeCloseTo(0, 3);
     expect(await seam()).toBe(0);
 
     const box = (await page.locator('.gate__door').boundingBox())!;
@@ -259,7 +299,7 @@ test.describe('武館大門的互動', () => {
     // 移開：門回到關著
     await page.mouse.move(5, 5);
     await expect.poll(() => leafAngle('left')).toBeCloseTo(0, 1);
-    // 鍵盤：Shift+Tab 再 Tab 回到按鈕（焦點只會在閘門裡繞），按鈕 focus-visible 時門一樣微開
+    // 鍵盤：Shift+Tab 再 Tab 回到按鈕（焦點只會在閘門裡繞）：用鍵盤操作過之後，按鈕 focus-visible 時門一樣微開
     await page.keyboard.press('Shift+Tab');
     await page.keyboard.press('Tab');
     await expect(enterButton(page)).toBeFocused();
@@ -314,6 +354,15 @@ test.describe('進入閘門', () => {
     expect(await html(page).evaluate((el) => getComputedStyle(el).overflow), '淡出中仍不可捲動').toBe('hidden');
     await expect(html(page)).not.toHaveAttribute('data-qi-intro', /.*/); // 閘門淡出之後才開始開場
     expect(await page.evaluate((key) => sessionStorage.getItem(key), STORAGE_KEY), '一按就記：進過館').toBe('1');
+    // 站名組在門後不演：開門、淡出中仍是 animation:none、不透明度 0（CSS 走真實時間：等到淡出已經開始）
+    const lockup = () =>
+      page.evaluate(() =>
+        [...document.querySelectorAll<HTMLElement>('.opening__lockup > *')].map((el) => ({ name: getComputedStyle(el).animationName, opacity: getComputedStyle(el).opacity })),
+      );
+    await page.waitForTimeout(1100);
+    const behind = await lockup();
+    expect(behind.length).toBeGreaterThan(0);
+    for (const item of behind) expect(item, '閘門還在：站名組不演、不顯示').toEqual({ name: 'none', opacity: '0' });
 
     await run(page, GATE_FADE_MS - 1);
     await expect(html(page), '還沒到淡出結束').toHaveAttribute('data-gate', 'leaving');
@@ -321,6 +370,7 @@ test.describe('進入閘門', () => {
     await expect(html(page), '淡出結束：閘門收起').not.toHaveAttribute('data-gate', /.*/);
     expect(await html(page).evaluate((el) => getComputedStyle(el).overflow), '還原捲動').not.toBe('hidden');
     await expect(page.locator('[data-gate-dialog]')).toBeHidden();
+    for (const item of await lockup()) expect(item.name, '閘門收起才演站名組的進場').not.toBe('none');
     expect(await page.evaluate(() => [...document.querySelectorAll('[inert]')].length), '背景的 inert 都拿掉了').toBe(0);
     const focus = await page.evaluate(() => ({ tag: document.activeElement?.tagName, id: document.activeElement?.id, y: window.scrollY }));
     expect(focus, '焦點在 main、沒有捲動').toEqual({ tag: 'MAIN', id: 'main', y: 0 });
@@ -414,6 +464,10 @@ test.describe('進入閘門', () => {
     expect(await page.evaluate(() => [...document.querySelectorAll('[inert]')].length)).toBe(0);
     // 閘門沒顯示：門的三層圖是 lazy、不下載
     expect(await page.evaluate(() => [...document.querySelectorAll<HTMLImageElement>('[data-gate-door] img')].map((img) => img.loading))).toEqual(['lazy', 'lazy', 'lazy']);
+    // 門的樣式表也不插入、不下載（再訪的首屏不為閘門多付）
+    expect(await page.evaluate(() => document.querySelectorAll('link[href*="/gate."]').length)).toBe(0);
+    // 匾上的館徽也沒有設（不為閘門載任何圖）
+    expect(await page.locator('[data-gate-crest]').evaluate((el) => el.style.getPropertyValue('--crest'))).toBe('');
   });
 
   test('sessionStorage 被封鎖（隱私模式）：閘門照樣顯示、照樣進得去、開場照演；重新載入又擋一次（沒有記憶）', async ({ page }) => {
