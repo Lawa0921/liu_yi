@@ -194,6 +194,8 @@ describe('home.css 的入館閘門規則（Task 25）', () => {
     expect(/(?:^|\n)\.gate__frame\s*\{([^}]*)\}/.exec(gateCss)?.[1] ?? '').toMatch(/pointer-events\s*:\s*none/);
     // 樣式表沒到（gate.css 載入失敗）時場景不顯示（只剩黑底與按鈕，仍進得去）
     expect(/(?:^|\n)\.gate__scene\s*\{([^}]*)\}/.exec(css)?.[1] ?? '').toMatch(/opacity\s*:\s*0/);
+    // 而且與按鈕同一格（grid-area 1/1），沒排版的大圖不會把按鈕擠出畫面
+    expect(/(?:^|\n)\.gate__scene\s*\{([^}]*)\}/.exec(css)?.[1] ?? '').toMatch(/grid-area\s*:\s*1\s*\/\s*1/);
   });
 
   it('門的樣式只在閘門顯示時才下載：home.css 只留閘門的外殼（背板、對話框、按鈕、淡出），門本身的規則在 gate.css；<head> 的行內腳本只在首頁帶它的網址', () => {
@@ -282,6 +284,15 @@ describe('home.css 的入館閘門規則（Task 25）', () => {
     expect(gate).toMatch(/loading: 'lazy'/);
     // 匾：「六藝」「武術」是 HTML 真字型，燙金館徽在正中（Task 28 第二輪，使用者要求「大門應該要有六藝的 logo，且也是要有金屬光澤」）
     expect(gate).toMatch(/<span class="gate__plaque"><span>六藝<\/span><span class="gate__crest" data-gate-crest><\/span><span>武術<\/span><\/span>/);
+  });
+
+  it('遮罩補 -webkit- 前綴（比照開場區館徽；舊版 Safari 只認前綴）：門框的四邊漸隱與館徽的掃光', () => {
+    const frame = /(?:^|\n)\.gate__frame\s*\{([^}]*)\}/.exec(gateCss)?.[1] ?? '';
+    expect(frame).toMatch(/-webkit-mask-image\s*:/);
+    expect(frame).toMatch(/-webkit-mask-composite\s*:\s*source-in/);
+    expect(frame).toMatch(/(^|[^-])mask-composite\s*:\s*intersect/);
+    const sheen = /(?:^|\n)\.gate__crest::after\s*\{([^}]*)\}/.exec(gateCss)?.[1] ?? '';
+    expect(sheen).toMatch(/-webkit-mask-image\s*:[^;]*var\(--sheen-x\)/);
   });
 
   it('匾上的館徽：沿用開場區那一張燙金獅子（gate.ts 取它挑到的同一個檔案，快取命中、不多下載；閘門沒顯示就不設、不下載），金屬掃光（同一套 --sheen-x 斜帶遮罩與 crest-sweep），指到門上掃一次；不發光、不用漸層字', () => {

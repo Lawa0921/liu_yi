@@ -373,6 +373,7 @@ html[data-gate] .gate > .gate__enter {
 
 /* 門本身（場景、門扇、門框、匾、開門）的樣式在 styles/gate.css，只在閘門顯示時才下載；那份沒到之前（或載不到）場景不顯示。 */
 .gate__scene {
+  grid-area: 1 / 1; /* 與按鈕同一格：gate.css 沒到時，沒排版的大圖不會把按鈕擠出畫面 */
   opacity: 0;
 }
 

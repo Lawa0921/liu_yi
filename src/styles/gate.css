@@ -92,6 +92,10 @@ html[data-gate] .gate__door {
   width: 100%;
   height: 100%;
   pointer-events: none;
+  -webkit-mask-image:
+    linear-gradient(to bottom, transparent, #000 5%, #000 94%, transparent),
+    linear-gradient(to right, transparent, #000 4%, #000 96%, transparent);
+  -webkit-mask-composite: source-in;
   mask-image:
     linear-gradient(to bottom, transparent, #000 5%, #000 94%, transparent),
     linear-gradient(to right, transparent, #000 4%, #000 96%, transparent);
@@ -137,6 +141,7 @@ html[data-gate] .gate__door {
   inset: 0;
   background: inherit;
   filter: brightness(2.1) saturate(0.55);
+  -webkit-mask-image: linear-gradient(104deg, transparent calc(var(--sheen-x) - 13%), #000 var(--sheen-x), transparent calc(var(--sheen-x) + 13%));
   mask-image: linear-gradient(104deg, transparent calc(var(--sheen-x) - 13%), #000 var(--sheen-x), transparent calc(var(--sheen-x) + 13%));
   animation: crest-sweep 9s var(--ease-in-out) 1.4s infinite both;
 }

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { QiDebug } from '../../src/qi/engine/qi-stage';
-import { GATE_FADE_MS, GATE_SAFETY_MS } from '../../src/scripts/home/gate';
+import { GATE_FADE_MS, GATE_SAFETY_MS, GATE_VEIL_MS } from '../../src/scripts/home/gate';
 
 // 入館閘門（Task 25，使用者要求「進入頁面時應該要做一個點擊進入首頁的效果」）：
 //   - 顯示條件：首次進站才擋；無 JS、減少動態、無 WebGL／引擎掛不上、再訪、站內其他頁來、帶 #錨點都不擋。
@@ -210,6 +210,10 @@ for (const device of [
       // 匾正中的燙金館徽：用開場區館徽的同一個檔案（已載入），在匾的範圍內、清楚可辨（≥ 44px 寬）
       const crest = page.locator('[data-gate-crest]');
       await expect.poll(() => crest.evaluate((el) => getComputedStyle(el).backgroundImage), { message: '館徽圖設好了' }).toMatch(/crest-lion[^"]*\.webp/);
+      // 這兩個視窗（1440×900、390×844）開場區館徽都有占位、首頁腳本一開始就 eager 載入：先等它載好（沒載好就是錯，讓測試失敗，不跳過同檔斷言）
+      await expect
+        .poll(() => page.locator('.opening__crest-img').evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0 && img.currentSrc), { message: '開場區館徽已載入' })
+        .toBeTruthy();
       const crestInfo = await page.evaluate(() => {
         const el = document.querySelector<HTMLElement>('[data-gate-crest]')!;
         const url = /url\("?([^")]+)"?\)/.exec(getComputedStyle(el).backgroundImage)![1]!;
@@ -217,7 +221,7 @@ for (const device of [
         const r = el.getBoundingClientRect();
         return { url, opening: opening.currentSrc, sheen: getComputedStyle(el, '::after').animationName, box: { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width } };
       });
-      if (crestInfo.opening) expect(crestInfo.url, '與開場區館徽同一個檔案（快取命中）').toBe(crestInfo.opening);
+      expect(crestInfo.url, '與開場區館徽同一個檔案（快取命中）').toBe(crestInfo.opening);
       expect(crestInfo.sheen, '金屬掃光').toBe('crest-sweep');
       expect(crestInfo.box.width, '館徽清楚可辨').toBeGreaterThanOrEqual(44);
       expect(crestInfo.box.left).toBeGreaterThanOrEqual(boxes.plaque.left);
@@ -359,7 +363,9 @@ test.describe('進入閘門', () => {
       page.evaluate(() =>
         [...document.querySelectorAll<HTMLElement>('.opening__lockup > *')].map((el) => ({ name: getComputedStyle(el).animationName, opacity: getComputedStyle(el).opacity })),
       );
-    await page.waitForTimeout(1100);
+    // 等 CSS 的淡出真的開始：home.css 的淡出 delay 是 GATE_FADE_MS - GATE_VEIL_MS（900 ms），CSS transition 走真實時間（假時鐘管不到），
+    // 所以用真實時間等 1.1 s，此刻閘門已在淡出、門後的首頁看得到一部分——站名組這時必須還沒開始演
+    await page.waitForTimeout(GATE_FADE_MS - GATE_VEIL_MS + 200);
     const behind = await lockup();
     expect(behind.length).toBeGreaterThan(0);
     for (const item of behind) expect(item, '閘門還在：站名組不演、不顯示').toEqual({ name: 'none', opacity: '0' });
@@ -588,6 +594,54 @@ test.describe('沒有 JavaScript', () => {
 
 test.describe('閘門的退出路徑', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
+
+  for (const device of [
+    { name: '桌機 1440×900', viewport: { width: 1440, height: 900 } },
+    { name: '手機 390×844', viewport: { width: 390, height: 844 } },
+  ]) {
+    test.describe(device.name, () => {
+      test.use({ viewport: device.viewport });
+
+      test('門的樣式表（gate.css）載不到：場景不顯示、只剩黑底與「入館」按鈕（在畫面內），照樣進得去；進入後捲動與 inert 還原', async ({ page }) => {
+        const blocked: string[] = [];
+        await open(page, {
+          clock: true,
+          before: (p) =>
+            p.route(/\/gate\.[^/]*\.css(\?|$)/, (route) => {
+              blocked.push(route.request().url());
+              return route.abort();
+            }),
+        });
+        await expect(html(page)).toHaveAttribute('data-gate', 'open');
+        expect(blocked.length, '真的擋到了門的樣式表').toBeGreaterThan(0);
+        expect(await page.locator('[data-gate-door]').evaluate((el) => getComputedStyle(el).opacity), '樣式表沒到：場景不顯示').toBe('0');
+        const button = enterButton(page);
+        await expect(button).toBeVisible();
+        await expect(button).toBeFocused();
+        const box = (await button.boundingBox())!;
+        const view = page.viewportSize()!;
+        expect(box.x).toBeGreaterThanOrEqual(0);
+        expect(box.y).toBeGreaterThanOrEqual(0);
+        expect(box.x + box.width).toBeLessThanOrEqual(view.width);
+        expect(box.y + box.height, '按鈕在畫面內').toBeLessThanOrEqual(view.height);
+        expect(box.height).toBeGreaterThanOrEqual(44);
+
+        await button.click();
+        await expect(html(page)).toHaveAttribute('data-gate', 'leaving');
+        await run(page, GATE_FADE_MS + 50);
+        await expect(html(page)).not.toHaveAttribute('data-gate', /.*/);
+        expect(await html(page).evaluate((el) => getComputedStyle(el).overflow), '捲動還原').not.toBe('hidden');
+        expect(await page.evaluate(() => [...document.querySelectorAll('[inert]')].length), 'inert 都拿掉了').toBe(0);
+        expect(await page.evaluate(() => document.activeElement?.tagName)).toBe('MAIN');
+        await expect(html(page)).toHaveAttribute('data-qi-intro', 'playing');
+        // 被擋的樣式表會讓瀏覽器自己印一行「Failed to load resource」：只容許這一種，其他錯誤照樣算失敗
+        const log = seen.get(page)!;
+        expect(log.errors.filter((error) => !/Failed to load resource: net::ERR_FAILED/.test(error)), '除了被擋的樣式表，沒有其他錯誤').toEqual([]);
+        expect(log.warnings.filter((w) => !KNOWN_WARNING.test(w))).toEqual([]);
+        seen.delete(page);
+      });
+    });
+  }
 
   test('WebGL context 在閘門開著時遺失：退回靜態圖、閘門立刻收起（不淡出）、捲動與 inert 都還原', async ({ page }) => {
     await open(page);
