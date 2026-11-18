@@ -10,7 +10,7 @@
 //   - 離開頁面（`pagehide`、非 bfcache）釋放引擎與 GL context；bfcache 返回（`pageshow` persisted）重設時間戳後繼續。
 //   - 開場的燙金館徽（Task 24）：金屬掃光跟指標走（`crest-sheen.ts`，與引擎無關）；露出的時機用 `html[data-qi-crest]` 表示——
 //     `in`（落地的衝擊波，`playIntro` 的 `onLand`）才有擦出動畫；`shown`（再訪、略過、Esc、捲走、逾時保險）直接顯示終態；退回靜態圖由 CSS 直接露出。
-//   - 入館閘門（Task 25，`gate.ts`）：首次進站先蓋一層全屏閘門（<head> 的行內腳本標 html[data-gate]）。引擎在閘門後面照常載入，姿勢停在氣流（`flow`，光點飄在閘門上）；
+//   - 入館閘門（Task 25，`gate.ts`）：首次進站先蓋一層全屏閘門（<head> 的行內腳本標 html[data-gate]）。引擎在閘門後面照常載入，姿勢停在氣流（`flow`，藏在閘門不透明的背板後面，閘門期間畫面上沒有光點；Task 28）；
 //     按下「入館」、閘門淡出收起之後才開始開場（`playIntro({ fromAmbient: true })`：從氣流直接吸氣聚成拳師）。閘門還擋著時，姿勢、略過、逾時保險都不動作；
 //     引擎掛不上或退回靜態圖就立刻收掉閘門（`onEnterStatic`）。再訪、減少動態、沒有 WebGL、帶 #錨點、從站內其他頁來都沒有閘門（head 的判斷）。
 //   - 共用的那一半（殼、退回與收尾、降級事件、掛載、取景、換姿勢、每格迴圈、resize、離開頁面）在 `qi/host.ts`（Task 26 抽出；Task 27 起只有首頁用）；這裡只剩首頁專有的：
@@ -170,7 +170,7 @@ export async function initHome(): Promise<void> {
   // 取景（`host.refit`）：載入第一個姿勢期間視窗可能變了（那時 resize 監聽器還沒掛），`firstPose` 載入完成後立刻 refit 一次（RF1 邊角）。
   const requestPose = host.requestPose;
 
-  // 閘門擋著且要演開場：先停在氣流（光點在閘門上飄），按下「入館」才吸氣聚成拳師；其餘照目前這一段的姿勢。
+  // 閘門擋著且要演開場：先停在氣流（在背板後面，看不到），按下「入館」才吸氣聚成拳師；其餘照目前這一段的姿勢。
   // 引擎還沒好、閘門就已經收起（使用者很快按了「入館」）：首屏海報（聚合的拳師）已經露出來了，照原本的路徑接續它（land → 散開 → 吸氣）。
   ambient = gateWaiting && gate.isHolding();
   if (!(await host.firstPose(ambient ? 'flow' : poseFor(first, currentAudience())))) return;

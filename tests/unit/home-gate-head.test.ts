@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { describe, expect, it } from 'vitest';
-import { GATE_FADE_MS, GATE_SAFETY_MS } from '../../src/scripts/home/gate';
+import { GATE_FADE_MS, GATE_OPEN_MS, GATE_SAFETY_MS, GATE_VEIL_MS } from '../../src/scripts/home/gate';
 import { INTRO_STORAGE_KEY, shouldShowGate } from '../../src/scripts/home/intro-gate';
 
 // <head> 的行內腳本（BaseLayout）在首繪前決定要不要顯示入館閘門（html[data-gate="open"]）。腳本不能 import，
@@ -147,13 +147,39 @@ describe('閘門的保險計時器', () => {
 });
 
 describe('閘門的時間常數與 CSS 一致', () => {
-  const css = readFileSync(new URL('../../src/styles/home.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const css = readFileSync(new URL('../../src/styles/home.css', import.meta.url), 'utf8')
+    .replace(/\r\n/g, '\n')
+    .replace(/\/\*[\s\S]*?\*\//g, '');
 
-  it('淡出 ≤ 600 ms，CSS 的 transition 與 GATE_FADE_MS 是同一個數字', () => {
-    expect(GATE_FADE_MS).toBeGreaterThan(0);
-    expect(GATE_FADE_MS).toBeLessThanOrEqual(600);
-    const fade = /html\[data-gate='leaving'\][^{]*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+  /** 某條規則（選擇器原文）的宣告區塊。 */
+  const block = (selector: string): string => {
+    const at = css.indexOf(`${selector} {`);
+    return at === -1 ? '' : css.slice(css.indexOf('{', at) + 1, css.indexOf('}', at));
+  };
+  /** `transition: <prop> <dur>s <easing> [<delay>s]` → 毫秒。 */
+  const timing = (decl: string, prop: string): { duration: number; delay: number } | null => {
+    const m = new RegExp(`${prop}\\s+([\\d.]+)s\\s+[^,;]*?(?:\\s([\\d.]+)s)?\\s*[,;]`).exec(decl);
+    return m ? { duration: Math.round(Number(m[1]) * 1000), delay: Math.round(Number(m[2] ?? 0) * 1000) } : null;
+  };
+
+  it('進入（開門 → 推進 → 淡出）整段 ≤ 1.6 s；GATE_FADE_MS 就是整段，CSS 的最後淡出剛好在這一刻結束', () => {
+    expect(GATE_FADE_MS).toBeGreaterThan(GATE_VEIL_MS);
+    expect(GATE_FADE_MS).toBeLessThanOrEqual(1600);
+    const fade = block("html[data-gate='leaving'] .gate,\nhtml[data-gate='leaving'] .gate-backdrop");
     expect(fade).toMatch(/opacity\s*:\s*0/);
-    expect(fade).toContain(`transition: opacity ${GATE_FADE_MS / 1000}s`);
+    const t = timing(fade, 'opacity');
+    expect(t, '淡出的 transition').not.toBeNull();
+    expect(t!.duration).toBe(GATE_VEIL_MS);
+    expect(t!.duration + t!.delay, '淡出結束＝GATE_FADE_MS').toBe(GATE_FADE_MS);
+  });
+
+  it('門扇向內打開用 GATE_OPEN_MS（在淡出開始前開到底）；場景往前推用整段 GATE_FADE_MS', () => {
+    const leaf = timing(block('.gate__leaf'), 'transform');
+    expect(leaf, '門扇的 transform transition').not.toBeNull();
+    expect(leaf!.duration).toBe(GATE_OPEN_MS);
+    expect(GATE_OPEN_MS).toBeLessThanOrEqual(GATE_FADE_MS - GATE_VEIL_MS + 200);
+    const push = timing(block("html[data-gate='leaving'] .gate__scene"), 'transform');
+    expect(push, '場景推進的 transition').not.toBeNull();
+    expect(push!.duration + push!.delay).toBe(GATE_FADE_MS);
   });
 });

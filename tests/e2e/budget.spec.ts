@@ -90,16 +90,18 @@ for (const device of DEVICES) {
       const lazyMids = first.filter((item) => /(bg-mid-rack|mid-drum|mid-banner|mid-dummy)[^/]*\.webp(\?|$)/.test(item.url));
       expect(lazyMids.map((item) => fileName(item.url)), '首屏沒有延後載入的中景').toEqual([]);
 
-      // 入館閘門（Task 25）：第一次進站首頁先蓋著閘門（量到的就是使用者真實的第一次造訪）。閘門沿用 Task 24 的館徽圖（同一個來源、同樣的候選寬度，
-      // DPR ≥ 2 的裝置與開場區共用同一個檔案），不得再下載別的大檔：館徽圖最多兩個（開場區一個、閘門一個），合計 ≤ 80 KB。
+      // 入館閘門（Task 25；Task 28 改成武館大門）：第一次進站首頁先蓋著閘門（量到的就是使用者真實的第一次造訪）。
+      // 門的三層圖（門框與牆、左右門扇）各挑到一個候選，合計 ≤ 300 KB；閘門不再有館徽，館徽圖只剩開場區那一個（≤ 80 KB）。
       await expect(page.locator('html'), '前提：第一次進站，閘門擋著').toHaveAttribute('data-gate', 'open');
-      const crestImages = first.filter((item) => /crest-lion[^/]*\.webp(\?|$)/.test(item.url));
+      const doorImages = first.filter((item) => /gate-(frame|leaf-left|leaf-right)[^/]*\.webp(\?|$)/.test(item.url));
       test.info().annotations.push({
-        type: 'gate-crest-bytes',
-        description: `${crestImages.length} 張：${crestImages.map((item) => `${fileName(item.url)} ${kb(item.bytes)}`).join('、')}（合計 ${kb(totalBytes(crestImages))}）`,
+        type: 'gate-door-bytes',
+        description: `${doorImages.length} 張：${doorImages.map((item) => `${fileName(item.url)} ${kb(item.bytes)}`).join('、')}（合計 ${kb(totalBytes(doorImages))}）`,
       });
-      expect(crestImages.length, '館徽圖最多兩個候選（開場區與閘門）').toBeLessThanOrEqual(2);
-      expect(crestImages.length, '閘門的館徽有載入').toBeGreaterThanOrEqual(1);
+      expect(doorImages.map((item) => fileName(item.url).split('.')[0]).sort(), '門的三層圖各一張').toEqual(['gate-frame', 'gate-leaf-left', 'gate-leaf-right']);
+      expect(totalBytes(doorImages), '門的圖合計').toBeLessThanOrEqual(300 * 1024);
+      const crestImages = first.filter((item) => /crest-lion[^/]*\.webp(\?|$)/.test(item.url));
+      expect(crestImages.length, '館徽圖最多一個候選（開場區）').toBeLessThanOrEqual(1);
       expect(totalBytes(crestImages), '館徽圖合計').toBeLessThanOrEqual(80 * 1024);
 
       // three 與引擎 chunk 都在 ready 之前載完
@@ -119,6 +121,30 @@ for (const device of DEVICES) {
       expect(bins.length, `首屏的 .bin：${binNames.join('、')}`).toBeLessThanOrEqual(3);
       expect(binNames, '含落地').toContain('land');
       expect(binNames, '含吸氣').toContain('lift');
+    });
+  });
+}
+
+for (const device of DEVICES) {
+  // 再訪（這個工作階段進過館）：沒有閘門。用預設標記「進過館」的 test；門的圖是 lazy，一張都不下載。
+  test.describe(`首屏傳輸量（閘門沒顯示）：${device.name}`, () => {
+    test.use({ viewport: device.viewport });
+
+    test('再訪：首屏 ≤ 1.5 MB，門的圖一張都不下載', async ({ page }) => {
+      const transfers = trackTransfers(page);
+      await page.goto('./');
+      await page.waitForFunction(
+        () => document.documentElement.hasAttribute('data-qi-ready') || document.documentElement.dataset.qiMode === 'static',
+        undefined,
+        READY,
+      );
+      await settleRecording(page);
+      const first = [...transfers];
+      await expect(page.locator('html'), '前提：沒有閘門').not.toHaveAttribute('data-gate', /.*/);
+      const bytes = totalBytes(first);
+      test.info().annotations.push({ type: 'first-screen-bytes-no-gate', description: `${mb(bytes)}（${bytes} B）＝ ${breakdown(first)}` });
+      expect(first.filter((item) => /gate-(frame|leaf-left|leaf-right)[^/]*\.webp(\?|$)/.test(item.url)).map((item) => fileName(item.url)), '沒有閘門就不下載門的圖').toEqual([]);
+      expect(bytes, `首屏 ${mb(bytes)} 不得超過 1.5 MB`).toBeLessThanOrEqual(FIRST_SCREEN_LIMIT);
     });
   });
 }
