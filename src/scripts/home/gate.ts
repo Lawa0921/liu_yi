@@ -1,11 +1,11 @@
-// 入館閘門的接線（Task 25）：首頁腳本一開始就呼叫 `initGate`，之後引擎與開場都要等閘門收起。
+// 入館閘門的接線（Task 25；Task 28 改成武館大門，Gate.astro）：首頁腳本一開始就呼叫 `initGate`，之後引擎與開場都要等閘門收起。
 //
 //   - 要不要顯示由 <head> 的行內腳本在首繪前決定（BaseLayout 標 `html[data-gate="open"]`；判斷式見 `intro-gate.ts` 的 `shouldShowGate`）。
 //     沒有這個屬性就沒有閘門（`initGate` 回一個「已收起」的 Gate）。
 //   - 「入館」按鈕在腳本接手（對話框標 `data-ready`）之前不可見、不可點。
-//   - 閘門開著：`html[data-gate]` 讓 home.css 鎖住捲動（`overflow: hidden` 於 html）、顯示閘門、把引擎的畫布抬到閘門的背板之上（光點飄在閘門上）；
-//     這裡再把 body 底下閘門以外的內容設 `inert`（背景不可聚焦、不進無障礙樹）、焦點放在「入館」按鈕。
-//   - 進入（點按鈕、Enter、空白鍵）：記「這個工作階段進過館」、`data-gate="leaving"`（CSS 淡出，`GATE_FADE_MS`），淡出結束才真正收起：
+//   - 閘門開著：`html[data-gate]` 讓 home.css 鎖住捲動（`overflow: hidden` 於 html）、顯示閘門（不透明的背板蓋住引擎畫布：閘門期間沒有光點）；
+//     這裡再把 body 底下閘門以外的內容設 `inert`（背景不可聚焦、不進無障礙樹）、焦點放在「入館」按鈕；門的三層圖改成立刻載入，全部到齊才淡入。
+//   - 進入（點按鈕、點門、Enter、空白鍵）：記「這個工作階段進過館」、`data-gate="leaving"`（CSS 開門 → 推進 → 淡出，整段 `GATE_FADE_MS`），結束才真正收起：
 //     還原捲動（拿掉屬性）、還原 inert、焦點移到 main（不捲動），`closed` 此時 resolve——首頁腳本接著才開始開場。
 //   - 任何退出路徑都要還原：進入、`removeNow`（引擎掛不上、退回靜態圖、離開頁面）都走同一個 `finish`，只進一次。
 //   - 保險：腳本若載不到（網路、被擋），閘門就永遠沒人收——<head> 的行內腳本在 `GATE_SAFETY_MS` 後（若這個檔案沒有接手，`window.__qiGate`）自己拿掉屬性。
@@ -13,8 +13,12 @@
 
 import { markIntroSeen } from './intro-gate';
 
-/** 閘門淡出的時間（毫秒）：需求 ≤ 600 ms。home.css 的 transition 與它同一個數字（單元測試對照）。 */
-export const GATE_FADE_MS = 500;
+/** 進入的整段時間（毫秒）：開門、往前推、最後淡出，需求 ≤ 1.6 s。home.css 淡出的延遲＋長度、推進的長度與它同一個數字（單元測試對照）。 */
+export const GATE_FADE_MS = 1400;
+/** 門扇向內打開的時間（毫秒）：home.css `.gate__leaf` 的 transition。 */
+export const GATE_OPEN_MS = 1000;
+/** 最後整層淡出的長度（毫秒）：home.css 的淡出從 `GATE_FADE_MS - GATE_VEIL_MS` 開始。 */
+export const GATE_VEIL_MS = 500;
 /** <head> 行內腳本的保險：這麼久（毫秒）之後首頁腳本還沒接手，就拿掉閘門。BaseLayout 寫死同一個數字（單元測試對照）。 */
 export const GATE_SAFETY_MS = 10_000;
 
@@ -69,13 +73,14 @@ export function initGate(session: Pick<Storage, 'setItem'> | null): Gate {
   const inerted = backgroundNodes([dialog, backdrop]);
   for (const el of inerted) el.setAttribute('inert', '');
 
-  // 館徽圖載入後才淡入（閘門是第一印象，不讓圖「啪」地跳出來）；載入失敗也照樣露出（空白而已，按鈕仍可用）
-  const crest = dialog.querySelector<HTMLElement>('[data-crest]');
-  if (crest) {
-    const images = Array.from(crest.querySelectorAll('img'));
+  // 門的三層圖（門框與牆、左右門扇）全部載入後才淡入（閘門是第一印象，不讓圖一塊一塊跳出來）；載入失敗也照樣露出（缺一塊而已，按鈕仍可用）
+  const door = dialog.querySelector<HTMLElement>('[data-gate-door]');
+  const hit = door?.querySelector<HTMLElement>('.gate__door'); // 門洞：點它也能進（只有它接收指標）
+  if (door) {
+    const images = Array.from(door.querySelectorAll('img'));
     for (const img of images) img.loading = 'eager'; // 閘門開著才會走到這裡：立刻載，不等延後載入
     const reveal = (): void => {
-      crest.dataset.ready = '';
+      door.dataset.ready = '';
     };
     const pending = images.filter((img) => !(img.complete && img.naturalWidth > 0));
     if (pending.length === 0) reveal();
@@ -91,11 +96,23 @@ export function initGate(session: Pick<Storage, 'setItem'> | null): Gate {
     }
   }
 
+  // 匾上的館徽（Task 28）：用開場區館徽挑到的同一個檔案（同一組 srcset／sizes，瀏覽器挑到同一張，快取命中，不多下載）。
+  // 用一個脫離文件的複本去載：開場區館徽沒占位（太矮的橫向）時它是 lazy、不會自己載，複本照樣載得到；它不改開場區那張的 loading。
+  const crest = dialog.querySelector<HTMLElement>('[data-gate-crest]');
+  const source = document.querySelector<HTMLImageElement>('.opening__crest-img');
+  if (crest && source) {
+    const probe = source.cloneNode() as HTMLImageElement;
+    probe.loading = 'eager';
+    probe.addEventListener('load', () => crest.style.setProperty('--crest', `url("${probe.currentSrc}")`), { once: true });
+  }
+
   const finish = (outcome: GateOutcome): void => {
     if (state === 'closed') return;
     state = 'closed';
     clearTimeout(timer);
     document.removeEventListener('keydown', onKey);
+    button.removeEventListener('click', enter);
+    hit?.removeEventListener('click', enter);
     for (const el of inerted) el.removeAttribute('inert');
     const active = document.activeElement;
     const hadFocus = !active || active === document.body || dialog.contains(active);
@@ -121,6 +138,8 @@ export function initGate(session: Pick<Storage, 'setItem'> | null): Gate {
   // Enter／空白鍵：焦點在按鈕上時由按鈕自己的 click 處理；焦點掉到別處（點了背板）時也要能進入
   const onKey = (event: KeyboardEvent): void => {
     if (state !== 'open') return;
+    // 用鍵盤操作過（Tab 等）：之後按鈕的焦點才讓門跟著微開（gate.css）；一進站的焦點不讓門動
+    if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'Spacebar') dialog.dataset.keyed = '';
     if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'Spacebar') return;
     if (event.target === button) return;
     event.preventDefault();
@@ -128,8 +147,9 @@ export function initGate(session: Pick<Storage, 'setItem'> | null): Gate {
   };
   document.addEventListener('keydown', onKey);
   button.addEventListener('click', enter);
+  hit?.addEventListener('click', enter); // 點門（門洞）也能進；門是裝飾，按鈕才是無障礙的入口
   dialog.dataset.ready = ''; // 接線完成：按鈕這時才看得到、點得到（home.css；先於 focus，隱藏的元素聚焦不了）
-  button.focus({ preventScroll: true });
+  button.focus({ preventScroll: true }); // 焦點看得見（gate.css：低調的細框，不是金色填滿）
 
   return {
     isHolding: () => state !== 'closed',

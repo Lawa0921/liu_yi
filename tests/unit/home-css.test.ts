@@ -165,6 +165,9 @@ describe('home.css 的館徽點擊區規則（Task 21 的朱印點擊區，Task 
 });
 
 describe('home.css 的入館閘門規則（Task 25）', () => {
+  /** 門本身的樣式（Task 28）：只在閘門顯示時由 <head> 的行內腳本載入（再訪不下載）。 */
+  const gateCss = readFileSync(new URL('../../src/styles/gate.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+
   it('沒有 html[data-gate] 時整層不渲染（無 JS、減少動態、再訪都沒有閘門）；有了才顯示', () => {
     expect(/(?:^|\})\s*\.gate,\s*\.gate-backdrop\s*\{([^}]*)\}/m.exec(css)?.[1] ?? '').toMatch(/display\s*:\s*none/);
     expect(css).toMatch(/html\[data-gate\]\s+\.gate-backdrop\s*\{[^}]*display\s*:\s*block/);
@@ -177,14 +180,32 @@ describe('home.css 的入館閘門規則（Task 25）', () => {
     expect(rule).toMatch(/scrollbar-gutter\s*:\s*stable/);
   });
 
-  it('疊放：背板 200（不透明黑底）→ 引擎畫布 201 → 對話框 202（透明，只有按鈕接收指標）', () => {
+  it('疊放：背板 200（不透明黑底）→ 對話框 202（透明，只有門與按鈕接收指標）；閘門期間引擎畫布不抬到背板之上（沒有光點）', () => {
     expect(/html\[data-gate\]\s+\.gate-backdrop\s*\{([^}]*)\}/.exec(css)?.[1] ?? '').toMatch(/z-index\s*:\s*200[\s\S]*background\s*:\s*var\(--color-bg\)/);
-    expect(/html\[data-gate\]\s+\.home-canvas\s*\{([^}]*)\}/.exec(css)?.[1] ?? '').toMatch(/z-index\s*:\s*201/);
+    expect(css + gateCss, '閘門期間不得改畫布的疊放').not.toMatch(/html\[data-gate[^\]]*\][^{]*\.home-canvas/);
     const dialog = /html\[data-gate\]\s+\.gate\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
     expect(dialog).toMatch(/z-index\s*:\s*202/);
     expect(dialog).toMatch(/pointer-events\s*:\s*none/);
     expect(dialog).not.toMatch(/background/);
     expect(css).toMatch(/html\[data-gate\]\s+\.gate\s*>\s*\.gate__enter\s*\{[^}]*pointer-events\s*:\s*auto/);
+    // 只有門洞接收指標（場景在桌機蓋滿整個畫面：指到牆上門不動、點牆不進）；門框圖疊在門扇之上，不得攔下指標
+    expect(gateCss).toMatch(/html\[data-gate\]\s+\.gate__door\s*\{[^}]*pointer-events\s*:\s*auto/);
+    expect(gateCss).not.toMatch(/html\[data-gate\]\s+\.gate__scene\s*\{[^}]*pointer-events\s*:\s*auto/);
+    expect(/(?:^|\n)\.gate__frame\s*\{([^}]*)\}/.exec(gateCss)?.[1] ?? '').toMatch(/pointer-events\s*:\s*none/);
+    // 樣式表沒到（gate.css 載入失敗）時場景不顯示（只剩黑底與按鈕，仍進得去）
+    expect(/(?:^|\n)\.gate__scene\s*\{([^}]*)\}/.exec(css)?.[1] ?? '').toMatch(/opacity\s*:\s*0/);
+    // 而且與按鈕同一格（grid-area 1/1），沒排版的大圖不會把按鈕擠出畫面
+    expect(/(?:^|\n)\.gate__scene\s*\{([^}]*)\}/.exec(css)?.[1] ?? '').toMatch(/grid-area\s*:\s*1\s*\/\s*1/);
+  });
+
+  it('門的樣式只在閘門顯示時才下載：home.css 只留閘門的外殼（背板、對話框、按鈕、淡出），門本身的規則在 gate.css；<head> 的行內腳本只在首頁帶它的網址', () => {
+    for (const selector of ['.gate__door', '.gate__leaf', '.gate__frame', '.gate__plaque', '.gate__light']) {
+      expect(css, `home.css 不得有 ${selector}`).not.toContain(selector);
+      expect(gateCss, `gate.css 有 ${selector}`).toContain(selector);
+    }
+    const layout = readFileSync(new URL('../../src/layouts/BaseLayout.astro', import.meta.url), 'utf8');
+    expect(layout).toMatch(/import gateCss from '\.\.\/styles\/gate\.css\?url';/);
+    expect(layout).toMatch(/data-gate-css=\{home \? gateCss : undefined\}/);
   });
 
   it('「入館」按鈕在腳本接手（.gate[data-ready]）之前 visibility:hidden，不是一顆點了沒反應的按鈕；腳本先標 data-ready 再聚焦', () => {
@@ -194,13 +215,48 @@ describe('home.css 的入館閘門規則（Task 25）', () => {
     expect(script).toMatch(/dialog\.dataset\.ready = '';[\s\S]*button\.focus\(/);
   });
 
-  it('閘門的館徽沿用開場館徽的掃光：同一組選擇器，沒有 background-clip:text、混色模式、外發光', () => {
-    const crestRules = css
+  it('焦點看得見（WCAG 2.4.7）：一進站就照常 focus-visible，不關掉焦點樣式；閘門的按鈕聚焦時是低調的細框（全站的 :focus-visible outline），不是金色填滿', () => {
+    const script = readFileSync(new URL('../../src/scripts/home/gate.ts', import.meta.url), 'utf8');
+    expect(script).not.toMatch(/focusVisible\s*:\s*false/);
+    const focus = gateCss
       .split('}')
-      .filter((rule) => rule.includes('gate__crest'))
+      .filter((rule) => /\.gate__enter:focus-visible/.test(rule.split('{')[0] ?? ''))
       .join('}');
-    expect(crestRules).toMatch(/mask-image\s*:[^;]*gradient/);
-    expect(crestRules).not.toMatch(/background-clip|mix-blend-mode|text-shadow|box-shadow/);
+    expect(focus).toMatch(/::before[^{]*\{[^}]*transform\s*:\s*scaleX\(0\)/);
+    expect(focus).not.toMatch(/outline\s*:\s*(none|0)/);
+  });
+
+  it('武館大門：舊的閘門館徽（兩張 <img> 疊掃光）已拿掉、匾上的館徽改由 gate.css 的背景圖；門的動態只用 transform／opacity（不動版面、不用 WebGL）；沒有 background-clip:text、混色模式、外發光', () => {
+    expect(css + gateCss).not.toMatch(/gate__crest-(img|sheen)/);
+    expect(css).not.toMatch(/gate__crest/);
+    const gateRules = (css + gateCss)
+      .split('}')
+      .filter((rule) => /\.gate(__|\b)/.test(rule) && !rule.includes('@keyframes'))
+      .join('}');
+    expect(gateRules).not.toMatch(/background-clip|mix-blend-mode|text-shadow|box-shadow/);
+    for (const [, value] of gateRules.matchAll(/transition\s*:\s*([^;]*);/g)) {
+      for (const part of value!.split(/,(?![^(]*\))/)) expect(part.trim().split(/\s+/)[0], `transition「${part.trim()}」`).toMatch(/^(transform|opacity)$/);
+    }
+    // 三層的位置是同一組百分比（門洞 x 448–1061、y 228–805，圖 1536×1024）
+    const scene = /(?:^|\n)\.gate__scene\s*\{([^}]*)\}/.exec(gateCss)?.[1] ?? '';
+    expect(scene).toMatch(/aspect-ratio\s*:\s*1536\s*\/\s*1024/);
+    // 場景寬用 svh（與 Gate.astro 的 sizes 同一把尺，不用會隨網址列抖動的 vh）
+    expect(scene).toMatch(/width\s*:\s*min\(max\(100vw,\s*150svh\),\s*168svh,\s*230vw\)/);
+    const gate = readFileSync(new URL('../../src/components/home/Gate.astro', import.meta.url), 'utf8');
+    for (const [, sizes] of gate.matchAll(/sizes:\s*'([^']*)'/g)) expect(sizes).not.toMatch(/\d(vh)\b/);
+    expect(gate).toContain('min(max(100vw, 150svh), 168svh, 230vw)');
+  });
+
+  it('門扇以門軸為中心向內開：左扇 transform-origin 在左、右扇在右；進入時 rotateY（左正右負）；指到門、或用鍵盤操作過之後按鈕聚焦時微開', () => {
+    expect(/\.gate__leaf--left\s*\{([^}]*)\}/.exec(gateCss)?.[1] ?? '').toMatch(/transform-origin\s*:\s*left/);
+    expect(/\.gate__leaf--right\s*\{([^}]*)\}/.exec(gateCss)?.[1] ?? '').toMatch(/transform-origin\s*:\s*right/);
+    expect(/html\[data-gate='leaving'\]\s+\.gate__leaf--left\s*\{([^}]*)\}/.exec(gateCss)?.[1] ?? '').toMatch(/rotateY\(\s*[1-9]\d*deg\)/);
+    expect(/html\[data-gate='leaving'\]\s+\.gate__leaf--right\s*\{([^}]*)\}/.exec(gateCss)?.[1] ?? '').toMatch(/rotateY\(\s*-[1-9]\d*deg\)/);
+    expect(gateCss).toMatch(/\.gate__door:hover[^{]*\.gate__leaf--left[^{]*\{[^}]*rotateY\(\s*[0-3](\.\d+)?deg\)/);
+    expect(gateCss).not.toMatch(/\.gate__scene:hover/);
+    // 一進站按鈕就有焦點（看得見的細框），門不能因此一開始就微開：鍵盤操作過（gate.ts 標 data-keyed）才跟著焦點微開
+    expect(gateCss).toMatch(/\.gate\[data-keyed\]\s+\.gate__enter:focus-visible[^{]*\.gate__leaf--left/);
+    expect(gateCss).not.toMatch(/(^|[,}\s])html\[data-gate='open'\]\s+\.gate__enter:focus-visible/);
   });
 
   it('淡出：html[data-gate="leaving"] 把背板與對話框的 opacity 降到 0；按鈕不再接收指標', () => {
@@ -209,18 +265,57 @@ describe('home.css 的入館閘門規則（Task 25）', () => {
     expect(css).toMatch(/html\[data-gate='leaving'\]\s+\.gate\s*>\s*\.gate__enter\s*\{[^}]*pointer-events\s*:\s*none/);
   });
 
-  it('閘門還擋著（open）時站名組不演進場動畫、先不透明度 0；淡出開始才演', () => {
-    const rule = /html\[data-gate='open'\]\s+\.opening__lockup\s*>\s*\*\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+  it('閘門還在（開著或開門、淡出中）時站名組不演進場動畫、先不透明度 0；閘門收起才演（不會在門後演完）', () => {
+    // 特異度要高過 `html.js .opening__lockup > *`（進場動畫，排在後面）：html.js[data-gate]
+    const rule = /html\.js\[data-gate\]\s+\.opening__lockup\s*>\s*\*\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
     expect(rule).toMatch(/animation\s*:\s*none/);
     expect(rule).toMatch(/opacity\s*:\s*0/);
+    expect(css).not.toMatch(/html\[data-gate='open'\]\s+\.opening__lockup/);
   });
 
-  it('Gate.astro：role=dialog、aria-modal、aria-label="入館"；按鈕沿用 .button；館徽純裝飾（aria-hidden、圖 alt 為空）', () => {
+  it('Gate.astro：role=dialog、aria-modal、aria-label="入館"；按鈕沿用 .button；門純裝飾（aria-hidden、圖 alt 為空）、三層圖、匾上的字是 HTML 文字', () => {
     const gate = readFileSync(new URL('../../src/components/home/Gate.astro', import.meta.url), 'utf8');
     expect(gate).toMatch(/<div class="gate" data-gate-dialog role="dialog" aria-modal="true" aria-label="入館">/);
     expect(gate).toMatch(/<button type="button" class="button gate__enter" data-gate-enter>入館<\/button>/);
-    expect(gate).toMatch(/<div class="gate__crest" data-crest aria-hidden="true">/);
+    expect(gate).toMatch(/<div class="gate__scene" data-gate-door aria-hidden="true">/);
     expect(gate).toMatch(/alt: ''/);
+    expect(gate).not.toMatch(/crest-lion|data-crest/);
+    for (const layer of ['gate-frame', 'gate-leaf-left', 'gate-leaf-right']) expect(gate).toContain(`images/gate/${layer}.webp`);
+    expect(gate).toMatch(/loading: 'lazy'/);
+    // 匾：「六藝」「武術」是 HTML 真字型，燙金館徽在正中（Task 28 第二輪，使用者要求「大門應該要有六藝的 logo，且也是要有金屬光澤」）
+    expect(gate).toMatch(/<span class="gate__plaque"><span>六藝<\/span><span class="gate__crest" data-gate-crest><\/span><span>武術<\/span><\/span>/);
+  });
+
+  it('遮罩補 -webkit- 前綴（比照開場區館徽；舊版 Safari 只認前綴）：門框的四邊漸隱與館徽的掃光', () => {
+    const frame = /(?:^|\n)\.gate__frame\s*\{([^}]*)\}/.exec(gateCss)?.[1] ?? '';
+    expect(frame).toMatch(/-webkit-mask-image\s*:/);
+    expect(frame).toMatch(/-webkit-mask-composite\s*:\s*source-in/);
+    expect(frame).toMatch(/(^|[^-])mask-composite\s*:\s*intersect/);
+    const sheen = /(?:^|\n)\.gate__crest::after\s*\{([^}]*)\}/.exec(gateCss)?.[1] ?? '';
+    expect(sheen).toMatch(/-webkit-mask-image\s*:[^;]*var\(--sheen-x\)/);
+  });
+
+  it('匾上的館徽：沿用開場區那一張燙金獅子（gate.ts 取它挑到的同一個檔案，快取命中、不多下載；閘門沒顯示就不設、不下載），金屬掃光（同一套 --sheen-x 斜帶遮罩與 crest-sweep），指到門上掃一次；不發光、不用漸層字', () => {
+    const rule = /(?:^|\n)\.gate__crest\s*\{([^}]*)\}/.exec(gateCss)?.[1] ?? '';
+    expect(rule).toMatch(/background\s*:[^;]*var\(--crest\)/);
+    const sheen = /(?:^|\n)\.gate__crest::after\s*\{([^}]*)\}/.exec(gateCss)?.[1] ?? '';
+    expect(sheen).toMatch(/mask-image\s*:[^;]*var\(--sheen-x\)/);
+    expect(sheen).toMatch(/filter\s*:\s*brightness\(/);
+    expect(gateCss).toMatch(/\.gate__crest::after\s*\{[^}]*animation\s*:\s*crest-sweep/);
+    expect(gateCss).toMatch(/\.gate__door:hover\)[^{]*\.gate__crest::after\s*\{[^}]*animation\s*:\s*crest-sweep/);
+    const crestRules = gateCss.split('}').filter((r) => r.includes('gate__crest')).join('}');
+    expect(crestRules).not.toMatch(/background-clip|text-shadow|box-shadow|drop-shadow/);
+    const script = readFileSync(new URL('../../src/scripts/home/gate.ts', import.meta.url), 'utf8');
+    expect(script).toMatch(/querySelector<HTMLImageElement>\('\.opening__crest-img'\)/);
+    expect(script).toMatch(/setProperty\('--crest'/);
+  });
+
+  it('gate.ts：任何退出路徑都拿掉自己掛的監聽（keydown、點按鈕、點門）', () => {
+    const script = readFileSync(new URL('../../src/scripts/home/gate.ts', import.meta.url), 'utf8');
+    const finish = /const finish = [\s\S]*?\n {2}\};/.exec(script)?.[0] ?? '';
+    expect(finish).toMatch(/document\.removeEventListener\('keydown', onKey\)/);
+    expect(finish).toMatch(/button\.removeEventListener\('click', enter\)/);
+    expect(finish).toMatch(/hit\?\.removeEventListener\('click', enter\)/);
   });
 
   it('首頁把 Gate 放在 <BaseLayout> 的 overlay 插槽（body 的最後，不改變內容的 DOM 順序）', () => {

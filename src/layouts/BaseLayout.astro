@@ -3,6 +3,8 @@
 // 固定外框（Frame.astro＋Header.astro）包在這裡的 <body> 內，各頁不用管。
 import { Font, getImage } from 'astro:assets';
 import '../styles/global.css';
+// 入館閘門的門（Task 28）：只在閘門顯示時由下方的行內腳本插入（再訪不下載），所以這裡只取網址
+import gateCss from '../styles/gate.css?url';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
 import LineDialog from '../components/LineDialog.astro';
@@ -79,10 +81,11 @@ const favicon = await getImage({ src: logoEmblem, width: 96, height: 96, fit: 'c
         入館閘門（Task 25）也在這裡、首繪前決定：首頁、沒有減少動態、有 WebGL2、這個工作階段沒進過館、網址沒有 #錨點、不是從站內其他頁來（referrer 在本站 base 底下），
         才標 html[data-gate="open"]（home.css 據此鎖住捲動並顯示閘門）。判斷式與 scripts/home/intro-gate.ts 的 shouldShowGate 是同一條（tests/unit/home-gate-head.test.ts 用 vm 跑這段腳本對照）。
         保險：首頁腳本（scripts/home/gate.ts）接手時設 window.__qiGate；10 秒後還沒接手（腳本載不到），這裡自己拿掉屬性，不讓閘門永遠擋著（GATE_SAFETY_MS）。 */}
-    <script is:inline data-probe-engine={home ? '' : undefined}>
+    <script is:inline data-probe-engine={home ? '' : undefined} data-gate-css={home ? gateCss : undefined}>
       (function () {
         var root = document.documentElement;
-        var probeEngine = document.currentScript !== null && document.currentScript.hasAttribute('data-probe-engine');
+        var me = document.currentScript;
+        var probeEngine = me !== null && me.hasAttribute('data-probe-engine');
         root.classList.add('js');
         var stored = null;
         try {
@@ -123,6 +126,14 @@ const favicon = await getImage({ src: logoEmblem, width: 96, height: 96, fit: 'c
           } catch (e) {}
           if (!still && !visited && !hasHash && !fromSite) {
             root.dataset.gate = 'open';
+            var gateCss = me && me.getAttribute('data-gate-css');
+            if (gateCss) {
+              var link = document.createElement('link');
+              link.rel = 'stylesheet';
+              link.href = gateCss;
+              link.setAttribute('blocking', 'render');
+              document.head.appendChild(link);
+            }
             window.setTimeout(function () {
               if (!window.__qiGate) delete root.dataset.gate;
             }, 10000);

@@ -240,17 +240,14 @@ html[data-qi-ready] .opening__poster {
 }
 
 .opening__crest .opening__crest-img,
-.opening__crest .opening__crest-sheen,
-.gate__crest .gate__crest-img,
-.gate__crest .gate__crest-sheen {
+.opening__crest .opening__crest-sheen {
   display: block;
   width: 100%;
   height: auto;
   max-width: none;
 }
 
-.opening__crest .opening__crest-sheen,
-.gate__crest .gate__crest-sheen {
+.opening__crest .opening__crest-sheen {
   position: absolute;
   inset: 0;
   height: 100%;
@@ -276,13 +273,11 @@ html[data-qi-ready] .opening__poster {
 
 @media (prefers-reduced-motion: no-preference) {
   /* 沒有指標：每 9 秒由左往右掃過一次（前 45% 的時間），其餘時間停在畫面外；開頭延遲 1.4 秒，讓進場先演完。 */
-  .opening__crest .opening__crest-sheen,
-  .gate__crest .gate__crest-sheen {
+  .opening__crest .opening__crest-sheen {
     animation: crest-sweep 9s var(--ease-in-out) 1.4s infinite both;
   }
 
-  .opening__crest[data-pointer] .opening__crest-sheen,
-  .gate__crest[data-pointer] .gate__crest-sheen {
+  .opening__crest[data-pointer] .opening__crest-sheen {
     animation: none;
   }
 
@@ -330,13 +325,15 @@ html[data-qi-ready] .opening__poster {
   }
 }
 
-/* ── 入館閘門（Task 25）──────────────────────────────
- * 首次進站（<head> 的行內腳本標 html[data-gate="open"]）蓋一層全屏的黑底：中央是燙金獅子館徽（同一張圖、同樣的金屬掃光）、
- * 四周緩緩飄浮的光點（引擎的氣流，畫布抬到背板之上）、下方一顆「入館」按鈕。沒有 html[data-gate]（無 JS、減少動態、沒有 WebGL、再訪、帶錨點…）整層不渲染。
- * 疊放（由下而上）：背板 200（不透明黑底，擋住後面的首屏海報）→ 引擎畫布 201（光點飄在背板上）→ 對話框 202（館徽與按鈕）。
- * 對話框本身透明、不接收指標事件，只有按鈕接收；館徽之下的光點因此看得到、不被一層黑擋住。
+/* ── 入館閘門（Task 25；Task 28 改成武館大門）──────────────────
+ * 首次進站（<head> 的行內腳本標 html[data-gate="open"]）蓋一層全屏的武館門口：夜裡一盞燈籠、深色舊木雙扇門、石門框與門檻、灰磚牆，
+ * 門上一塊空白木匾疊 HTML 文字「六藝武術」，下方一顆「入館」按鈕。沒有 html[data-gate]（無 JS、減少動態、沒有 WebGL、再訪、帶錨點…）整層不渲染。
+ * 疊放（由下而上）：背板 200（不透明黑底，擋住後面的首屏與引擎畫布）→ 對話框 202（門與按鈕）。
+ * 閘門期間畫面上沒有光點：引擎照常在背板後面預載（按下後開場立即開始），但畫布留在內容底下（z-index 不動）。
  * 閘門期間不得捲動：overflow: hidden 於 html（scrollbar-gutter 保留捲軸的位置，開關閘門時版面不位移）；拿掉 data-gate 就還原，任何退出路徑都走同一個屬性。
- * 淡出（data-gate="leaving"）≤ 600 ms：GATE_FADE_MS（scripts/home/gate.ts）與這裡是同一個數字。
+ *
+ * 門本身（場景、三層圖的位置、開門的 rotateY 與推進）在 styles/gate.css：只在閘門顯示時由 <head> 的行內腳本載入，再訪不下載。
+ * 進入（data-gate="leaving"）整段 1.4 s（GATE_FADE_MS，scripts/home/gate.ts，單元測試對照）：最後 0.5 s（GATE_VEIL_MS）整層淡出露出首頁。
  */
 .gate,
 .gate-backdrop {
@@ -358,20 +355,14 @@ html[data-gate] .gate-backdrop {
   touch-action: none;
 }
 
-html[data-gate] .home-canvas {
-  z-index: 201;
-}
-
 html[data-gate] .gate {
-  --gate-crest-w: clamp(9rem, 36vmin, 18rem);
   display: grid;
-  place-content: center;
-  justify-items: center;
-  gap: clamp(var(--space-5), 5vh, var(--space-7));
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  place-items: center;
   position: fixed;
   inset: 0;
   z-index: 202;
-  padding: var(--space-6) var(--gutter);
+  overflow: hidden;
   pointer-events: none;
   touch-action: none;
 }
@@ -380,39 +371,24 @@ html[data-gate] .gate > .gate__enter {
   pointer-events: auto;
 }
 
-html[data-gate='leaving'] .gate,
-html[data-gate='leaving'] .gate-backdrop {
+/* 門本身（場景、門扇、門框、匾、開門）的樣式在 styles/gate.css，只在閘門顯示時才下載；那份沒到之前（或載不到）場景不顯示。 */
+.gate__scene {
+  grid-area: 1 / 1; /* 與按鈕同一格：gate.css 沒到時，沒排版的大圖不會把按鈕擠出畫面 */
   opacity: 0;
-  transition: opacity 0.5s var(--ease-out);
-}
-
-html[data-gate='leaving'] .gate > .gate__enter {
-  pointer-events: none;
-}
-
-/* 館徽：圖是 960:920，等比縮放；載入後才淡入（scripts/home/gate.ts 標 data-ready），不讓圖突然跳出來。 */
-.gate__crest {
-  position: relative;
-  width: var(--gate-crest-w);
-  pointer-events: none;
-  opacity: 0;
-  transition:
-    opacity 0.8s var(--ease-out),
-    --sheen-x 0.25s var(--ease-out),
-    --sheen-y 0.25s var(--ease-out);
-}
-
-.gate__crest[data-ready] {
-  opacity: 1;
 }
 
 /* .gate .gate__enter：全站的 .button 在樣式表裡排在後面，同一個特異度會蓋掉這裡的字級與高度 */
 .gate .gate__enter {
-  min-width: 10rem;
-  min-height: 3.25rem;
-  font-size: var(--text-xl);
+  grid-area: 1 / 1;
+  z-index: 1; /* 排在場景之前的 DOM，疊在場景之上 */
+  align-self: end;
+  margin-bottom: clamp(1.25rem, 7svh, 4rem);
+  min-width: 9rem;
+  min-height: 3rem;
+  font-size: var(--text-lg);
   letter-spacing: 0.5em;
   text-indent: 0.5em;
+  background: var(--color-veil); /* 底下是石階的紋理：墊一層深色，字才讀得清楚 */
 }
 
 /* 「入館」按鈕在首頁腳本接手（scripts/home/gate.ts 標 data-ready）之前不可見、不可點：腳本沒到時按鈕不會是一顆點了沒反應的死按鈕。 */
@@ -420,31 +396,21 @@ html[data-gate] .gate:not([data-ready]) .gate__enter {
   visibility: hidden;
 }
 
-/* 閘門還擋著時，站名組先不演進場（淡出開始才演）：閘門後面的首屏不會在看不見的時候就演完。 */
-html[data-gate='open'] .opening__lockup > * {
+html[data-gate='leaving'] .gate,
+html[data-gate='leaving'] .gate-backdrop {
+  opacity: 0;
+  transition: opacity 0.5s var(--ease-in-out) 0.9s;
+}
+
+html[data-gate='leaving'] .gate > .gate__enter {
+  pointer-events: none;
+}
+
+/* 閘門還在（開著、開門與淡出中）時，站名組先不演進場；閘門收起（拿掉 data-gate）才演：不會在門後演完。
+ * html.js 讓特異度高過下方的 html.js .opening__lockup > *（同特異度時排在後面的進場動畫會蓋過來）。 */
+html.js[data-gate] .opening__lockup > * {
   animation: none;
   opacity: 0;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .gate .gate__enter {
-    animation: gate-breathe 3.2s var(--ease-in-out) infinite;
-  }
-
-  .gate .gate__enter:hover,
-  .gate .gate__enter:focus-visible {
-    animation: none;
-  }
-}
-
-@keyframes gate-breathe {
-  0%,
-  100% {
-    border-color: var(--color-accent);
-  }
-  50% {
-    border-color: var(--color-line);
-  }
 }
 
 /* 太矮的橫向視窗（≤ 640px 高，如 900×600 的小筆電、橫放手機）：站名上方沒有放館徽的地方，不放（站名字級也不讓出）。 */

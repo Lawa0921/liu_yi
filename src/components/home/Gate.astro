@@ -1,38 +1,47 @@
 ---
-// 入館閘門（Task 25，使用者要求「進入頁面時應該要做一個點擊進入首頁的效果」）：首次進站（每個工作階段一次）蓋一層全屏的黑底，
-// 中央是燙金獅子館徽（沿用 Task 24 的館徽圖與金屬掃光）、四周緩緩飄浮的光點（引擎的氣流，畫在閘門之上）、下方一顆「入館」按鈕；
-// 點按鈕（或按 Enter、空白鍵）後閘門淡出，才開始開場（吸氣聚成拳師、落地、館徽擦出）。
+// 入館閘門（Task 25 起；Task 28 改成武館大門，使用者要求「入口點即進入頁面的階段應該不要有粒子，應該要是低調內斂的武館大門，點了之後進入這樣的互動模式」）：
+// 首次進站（每個工作階段一次）蓋一層全屏的「夜裡的老武館門口」：深色舊木雙扇門、門釘與鋪首門環、石門框與門檻、兩側灰磚牆，暖光來自畫面外（上方簷下），
+// 門上一塊空白的木匾：正中是開場區那隻燙金獅子館徽（金屬掃光），兩側「六藝」「武術」是 HTML 文字（站內的楷書，不讓生圖畫字）；下方一顆「入館」按鈕。
+// 館徽不另外出圖：gate.ts 讓它用開場區館徽挑到的同一個檔案（快取命中，不多下載；閘門沒顯示就不設）。
+// 點按鈕、點門、按 Enter／空白鍵後兩扇門向內打開、門後的暖光擴散、畫面略往前推，接著整層淡出，才開始開場（吸氣聚成拳師、落地、館徽擦出）。
+// 閘門期間畫面上沒有任何光點（引擎照常在背板後面預載，畫布不抬到閘門之上）。
 //
 // 這一塊在 HTML 裡永遠存在、但預設不顯示（home.css：沒有 html[data-gate] 就 display:none）——
 //   - 要不要顯示由 <head> 的行內腳本在首繪前決定（BaseLayout：首頁、沒有減少動態、有 WebGL2、這個工作階段沒進過館、網址沒有 #錨點、不是從站內其他頁來），
 //     標成 html[data-gate="open"]；判斷式與 `scripts/home/intro-gate.ts` 的 `shouldShowGate` 是同一條（單元測試用 vm 跑行內腳本對照）。
 //   - 沒有 JS：沒有人標屬性，閘門不渲染，爬蟲與無 JS 的訪客看到完整首頁。這一塊放在 <body> 的最後（頁尾與對話框之後），
-//     不改變內容的 DOM 順序，h1 仍是站名。
+//     不改變內容的 DOM 順序，h1 仍是站名（匾上的字是 aria-hidden 的裝飾，不是標題）。
 //   - 「入館」按鈕在首頁腳本接手之前是 visibility:hidden（home.css；腳本標 data-ready 才顯示），不會有一顆點了沒反應的按鈕。
 //   - 無障礙：role="dialog"、aria-modal="true"、aria-label="入館"；腳本（scripts/home/gate.ts）把焦點放在按鈕、背景設 inert，進入後焦點回到 main。
-// 館徽圖與開場區是同一張來源（館徽 960×920 的透明底金色版），同樣的候選寬度，所以裝置挑到的候選通常與開場區那一張相同（DPR ≥ 2 的裝置完全共用）；
-// 館徽純裝飾（外層 aria-hidden、圖 alt=""）。圖是 lazy：閘門沒顯示（再訪等）就不下載，首頁腳本在閘門開著時一開始就改成 eager。
+//     門整塊是裝飾（aria-hidden、圖 alt=""），點門只是按鈕的捷徑。
+// 美術：一張生圖（OpenAI 影像 API，關門的正面全圖 1536×1024）從門洞切成三層——門框與牆（門洞挖空）、左門扇、右門扇；接縫在門縫上。
+// 三層的位置全用這張圖的像素換成百分比（home.css 的 .gate__door 一組變數），所以不論場景縮放多少都對齊。
+// 圖是 lazy：閘門沒顯示（再訪等）就不下載，首頁腳本在閘門開著時一開始就改成 eager。
 import { Image } from 'astro:assets';
-import crest from '../../assets/images/crest-lion.png';
+import frame from '../../assets/images/gate/gate-frame.webp';
+import leafLeft from '../../assets/images/gate/gate-leaf-left.webp';
+import leafRight from '../../assets/images/gate/gate-leaf-right.webp';
 
-// 閘門的館徽寬度由 home.css 的 --gate-crest-w 決定（clamp(9rem, 36vmin, 18rem)；18rem ＝ 288px，正好是最大的候選寬度）；sizes 與它同一把尺。
-const crestImage = {
-  src: crest,
-  alt: '',
-  widths: [80, 96, 128, 192, 288],
-  sizes: 'clamp(9rem, 36vmin, 18rem)',
-  format: 'webp' as const,
-  quality: 70,
-  loading: 'lazy' as const,
-  decoding: 'async' as const,
-};
+// 場景寬度（home.css 的 .gate__scene）：桌機約等於視窗寬（1440 → 1440px），手機直式約 846px（門完整、兩側牆裁掉）。
+// 門扇的寬是場景寬的 20.4%（左）與 19.5%（右）。sizes 用同樣的比例，各裝置挑到的候選與實際顯示寬度相近。
+// 首屏預算（budget.spec）很緊：門框最大的候選是 1440（1440 寬的桌機剛好挑到它，約 70 KB），品質 50。
+// 門扇只出原寸一張（約 12–17 KB、不帶 srcset）：桌機與 DPR 2 的手機本來就挑到原寸，少一組 srcset 也讓再訪（沒有閘門）的 HTML 少幾百位元組。
+const common = { alt: '', format: 'webp' as const, loading: 'lazy' as const, decoding: 'async' as const, quality: 60 };
+const frameImage = { ...common, src: frame, quality: 50, widths: [768, 1152, 1440], sizes: 'min(max(100vw, 150svh), 168svh, 230vw)' };
+const leftImage = { ...common, src: leafLeft, layout: 'none' as const };
+const rightImage = { ...common, src: leafRight, layout: 'none' as const };
 ---
 
 <div class="gate-backdrop" data-gate-backdrop aria-hidden="true"></div>
 <div class="gate" data-gate-dialog role="dialog" aria-modal="true" aria-label="入館">
-  <div class="gate__crest" data-crest aria-hidden="true">
-    <Image {...crestImage} class="gate__crest-img" />
-    <Image {...crestImage} class="gate__crest-sheen" />
-  </div>
   <button type="button" class="button gate__enter" data-gate-enter>入館</button>
+  <div class="gate__scene" data-gate-door aria-hidden="true">
+    <div class="gate__light"></div>
+    <div class="gate__door">
+      <Image {...leftImage} class="gate__leaf gate__leaf--left" />
+      <Image {...rightImage} class="gate__leaf gate__leaf--right" />
+    </div>
+    <Image {...frameImage} class="gate__frame" />
+    <span class="gate__plaque"><span>六藝</span><span class="gate__crest" data-gate-crest></span><span>武術</span></span>
+  </div>
 </div>
