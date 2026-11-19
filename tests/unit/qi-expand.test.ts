@@ -626,7 +626,7 @@ describe('纓穗（RED）：套 layout 後仍朝下垂（試作：pendulum 反�
   });
 });
 
-describe('flowTargets（收費段的氣流：全部點緩流，範圍比環境煙大）', () => {
+describe('flowTargets（入館閘門背景的氣流：全部點緩流，範圍比環境煙大）', () => {
   it('輸出長度 size × size × 4，每一格 w === -1，座標全為有限值', () => {
     const ambient = ambientField(112 * 112);
     const out = flowTargets(112, ambient);

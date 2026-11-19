@@ -1,11 +1,11 @@
 import { expect, test, type Response } from './fixtures';
 
-// woff2：首頁只下載核心子集一份；課程總覽、收費用到只出現在子頁的字，要另外下載延伸子集（scripts/fonts/split.ts），共兩份。
+// woff2：首頁只下載核心子集一份；課程總覽、課表用到只出現在子頁的字，要另外下載延伸子集（scripts/fonts/split.ts），共兩份。
 // 延伸那份沒下載＝延伸的 @font-face 沒輸出（例如 astro.config.mjs 讀錯字集檔），子頁的延伸字會整批退回後備字型。
 const PAGES = [
   { name: '首頁', path: './', woff2: 1 },
   { name: '課程總覽', path: './courses/', woff2: 2 },
-  { name: '收費', path: './pricing/', woff2: 2 },
+  { name: '課表', path: './schedule/', woff2: 2 },
 ];
 
 /**

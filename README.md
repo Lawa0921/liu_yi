@@ -44,7 +44,7 @@ npm run build:harness && npx playwright test --project=engine --workers=2  # dis
 - 色彩、字體、外框尺寸都在 `src/styles/tokens.css`；元件只用語意色變數（`--color-*`）。
 - 紋樣（回紋、窗櫺、海水紋、顆粒）、匾額、方印、進場效果在 `src/styles/ornament.css`；固定外框在 `src/styles/chrome.css` 與 `src/components/Frame.astro`。
 - 兵器、八方、擂台的線稿是自繪 SVG，在 `src/components/ornament/`（兵器線稿現在是 3D 兵器的退路）。
-- 首頁是「氣聚成人」：一張固定的 WebGL 畫布，光點隨捲動聚成人形、兵器、攤開的竹簡（收費課表）與燙金獅子館徽（預約）（見下節）；其他頁的進場效果是 IntersectionObserver 加 CSS（`src/scripts/reveal.ts`）。已不使用 GSAP。
+- 首頁是「氣聚成人」：一張固定的 WebGL 畫布，光點隨捲動聚成人形、兵器、攤開的竹簡（課表）與燙金獅子館徽（預約）（見下節）；其他頁的進場效果是 IntersectionObserver 加 CSS（`src/scripts/reveal.ts`）。已不使用 GSAP。
 - 全站字型只有 TW-Kai 一種、字重 400（見〈字型〉）。
 
 ## 3D 兵器與特殊互動（第二版，設計文件 §15）
@@ -73,7 +73,7 @@ npm run build:harness && npx playwright test --project=engine --workers=2  # dis
 - **入館閘門**：首次進站（每個工作階段一次，`sessionStorage` 的 `liuyi:qi-intro`）先蓋一層全屏黑底——燙金獅子館徽、四周飄浮的光點（引擎的氣流，`flow` 姿勢）與「入館」按鈕；按下（或 Enter、空白鍵）後淡出（≤ 600 ms）才開始開場，閘門期間 `html` 不可捲動、背景 `inert`、焦點在按鈕，進入後焦點到 `main`。
   是否顯示由 `<head>` 的行內腳本在首繪前決定（`scripts/home/intro-gate.ts` 的 `shouldShowGate`，單元測試以 vm 對照）：減少動態、沒有 WebGL2、再訪、網址帶 `#錨點`、從站內其他頁進來、沒有 JavaScript 都不擋；首頁腳本載不到時 10 秒後由行內腳本拿掉閘門。
   網址可帶 `?qi-crest-failsafe=<ms|off>` 注入開場館徽的逾時保險（測試用；預設 7 秒，閘門收起後才起算，開場一開始就解除）。
-- 課程、收費、課表與 LINE 預約一律是 DOM 文字，不只存在畫布裡。
+- 課程、課表與 LINE 預約一律是 DOM 文字，不只存在畫布裡。收費方案不公開（業主決定），站上不放金額與收費頁，改引導用 LINE 詢問費用。
 
 - **景深層**（Task 27）：光點拳師旁邊有遠景屋脊與中景（院門、兵器架、鼓、旗、木人樁，依段落交叉淡化，`MID_BY_BEAT`；中景在人形左側、不是正後方），前面有框在左右的前景（右上簷角；左下窗櫺，只在左下角沒有字的段落出現，`HOME_FG_LEFT_BEATS`；直向只有左上簷角）；
   標記在 `components/home/Depth.astro`、樣式 `styles/depth.css`、接線 `scripts/home/depth.ts`，配對在 `lib/scene/config.ts`。遠景與中景用 `mix-blend-mode: lighten` 疊在最上面（z-index 2，只把比後面亮的地方提亮），
@@ -104,7 +104,7 @@ npm run build:harness && npx playwright test --project=engine --workers=2  # dis
 
 ## 其他頁面：剪影立體場景（Task 27）
 
-- 子頁（課程總覽、課程內頁、師資、教練、場地、收費、課表、404）頁首是一幕由遠到近四層的剪影，高約 50svh（手機 45svh），在內容上方、不與任何文字重疊：
+- 子頁（課程總覽、課程內頁、師資、教練、場地、課表、404）頁首是一幕由遠到近四層的剪影，高約 50svh（手機 45svh），在內容上方、不與任何文字重疊：
   遠景屋脊（最淡、最慢）→ 中景器物 → 人物（課程內頁用該課的 `fig-*`／`kid-*`、師資與 404 是抱拳、場地是空場）→ 前景框（簷角、柱框、窗櫺、石階、近處的兵器架）。
   元件 `components/Scene.astro`（由 `BaseLayout` 的 `scene` 屬性輸出）、樣式 `styles/scene.css`、視差接線 `scripts/scene.ts`；每頁的組合在 `lib/scene/config.ts`（`sceneSignature` 互不相同，單元測試守住）。
 - **深度感**：越遠越淡（黑色剪影在亮霧上的不透明度）、越遠越慢（捲動視差：位移 = 捲動量 ×（1 − 速度），遠景 0.78、中景 0.9、人物 1、前景 1.32；桌機滑鼠微傾最多 14 px，近景與遠景方向相反；手機只做捲動視差）、

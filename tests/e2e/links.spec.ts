@@ -1,3 +1,5 @@
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { expect, test } from './fixtures';
 import { COACHES, PUBLISHED_COURSES, basePath } from './helpers';
 
@@ -17,7 +19,6 @@ const EXPECTED_ROUTES = [
   'coaches/',
   ...COACHES.map((c) => `coaches/${c.slug}/`),
   'facility/',
-  'pricing/',
   'schedule/',
 ];
 
@@ -109,6 +110,23 @@ test('sitemap 列出所有頁面，網址帶 base', async ({ request, baseURL })
   expect(sitemap.status()).toBe(200);
   const locs = [...(await sitemap.text()).matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]).sort();
   expect(locs).toEqual(EXPECTED_ROUTES.map((r) => `https://lawa0921.github.io${base}${r}`).sort());
+});
+
+test('收費頁已取消：/pricing/ 回 404（不做轉址頁）', async ({ page }) => {
+  const response = await page.goto('./pricing/');
+  expect(response?.status()).toBe(404);
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('找不到');
+});
+
+// 收費方案不公開（業主決定）：建置產物裡不能有「收費」字樣、/pricing/ 連結或收費海報；想知道費用的人改用 LINE 詢問。
+test('建置產物：所有 HTML 不含「收費」與 /pricing/ 連結，四張收費海報不在產物裡', ({ baseURL }) => {
+  const dir = basePath(baseURL) === '/' ? 'dist-root' : 'dist';
+  const files = readdirSync(dir, { recursive: true, encoding: 'utf8' }).map((file) => file.replaceAll('\\', '/'));
+  const html = files.filter((file) => file.endsWith('.html'));
+  expect(html.length, `${dir} 有建置好的頁面`).toBeGreaterThan(10);
+  const hits = html.filter((file) => /收費|\/pricing\//.test(readFileSync(join(dir, file), 'utf8')));
+  expect(hits, '含「收費」或 /pricing/ 的 HTML').toEqual([]);
+  expect(files.filter((file) => /(^|\/)(pricing-table|vip|member-policy|refund-policy)[.-]/.test(file)), '收費海報').toEqual([]);
 });
 
 test('找不到的網址回 404 頁，頁上有回首頁的連結', async ({ page, baseURL }) => {

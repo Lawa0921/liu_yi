@@ -6,7 +6,7 @@
  *     兵器落在剪影的手上、方向與握法與剪影一致（`shapes/sample-armed.ts`）。世界座標與其他人形同一把尺（腳底 y = 0、中線 x = 0）；兵器點較密、較亮。
  *     取代了 Task 18 以來「單獨一把兵器」的單位形（使用者：苗刀、大槍等粒子應該要有人物拿著的感覺）。
  *   - `seal`：朱印遮罩 `src/assets/seal/seal-liuyi.png` 取樣（`KIND.SEAL`、深度很薄）。
- *   - `scroll`：攤開的竹簡（收費與課表段，Task 25）。程序化產生（`shapes/sample-scroll.ts`），沒有任何輸入檔，所以不含任何字；
+ *   - `scroll`：攤開的竹簡（課表段，Task 25）。程序化產生（`shapes/sample-scroll.ts`），沒有任何輸入檔，所以不含任何字；
  *     幾何見下方 `SCROLL`。`KIND.BAMBOO`（竹片）與 `KIND.DARK`（兩道綁繩）。
  *   - `crest`：燙金獅子館徽（預約段，Task 25）。由 Task 24 的透明底館徽 `src/assets/images/crest-lion.png` 依亮度取樣
  *     （`shapes/sample-crest.ts`；亮線多取、暗面少取）。`KIND.CREST`（金）。

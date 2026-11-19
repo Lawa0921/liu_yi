@@ -10,7 +10,7 @@ import {
   homeTitles,
 } from './helpers';
 
-// 首頁（「氣聚成人」）的 DOM 骨架：開場、課程六個 beat、其他課程、師資、收費課表、預約，以及大人／小孩切換。
+// 首頁（「氣聚成人」）的 DOM 骨架：開場、課程六個 beat、其他課程、師資、課表、預約，以及大人／小孩切換。
 // 光點引擎在後面的任務才接上，這裡只驗 DOM 與版面；每段的內容都是 DOM 文字，不依賴 canvas。
 
 const DEVICES = [
@@ -119,15 +119,39 @@ for (const device of DEVICES) {
       await expect(page.locator('#coaches [data-coach="owen"]')).toContainText('巴西柔術');
     });
 
-    test('收費課表：導引文案與三個連結，不含任何金額或時段', async ({ page, baseURL }) => {
+    test('課表：導引文案、看課表、費用洽詢（LINE）與看場地，沒有收費頁連結，不含任何金額或時段', async ({ page, baseURL }) => {
       await page.goto('./');
-      const section = page.locator('section#pricing[data-beat="pricing"]');
-      await expect(section.getByRole('heading', { level: 2 })).toHaveText('收費與課表');
+      // 網址錨點是 #schedule；引擎的 beat id 仍是 pricing（內部識別字）
+      const section = page.locator('section#schedule[data-beat="pricing"]');
+      await expect(section.getByRole('heading', { level: 2 })).toHaveText('課表');
       const base = basePath(baseURL);
-      await expect(section.getByRole('link', { name: '看收費' })).toHaveAttribute('href', `${base}pricing/`);
+      await expect(section.getByRole('link', { name: '看收費' })).toHaveCount(0);
+      await expect(section.locator('a[href*="pricing"]')).toHaveCount(0);
       await expect(section.getByRole('link', { name: '看課表' })).toHaveAttribute('href', `${base}schedule/`);
+      const ask = section.getByRole('link', { name: '費用洽詢' });
+      await expect(ask).toHaveAttribute('href', '#line');
+      await expect(ask).toHaveAttribute('data-line-open', '');
+      await expect(section).toContainText('費用與方案，歡迎用 LINE 詢問。');
       await expect(section.getByRole('link', { name: '看場地' })).toHaveAttribute('href', `${base}facility/`);
-      expect(await section.innerText()).not.toMatch(/NT|\$|元|\d{3,}/);
+      const text = await section.innerText();
+      expect(text).not.toMatch(/NT|\$|元|\d{3,}/);
+      expect(text).not.toContain('收費');
+    });
+
+    test('費用洽詢按鈕開啟 LINE 視窗', async ({ page }) => {
+      await page.goto('./');
+      const dialog = page.locator('#line-dialog');
+      await expect(dialog).toBeHidden();
+      const ask = page.locator('section#schedule').getByRole('link', { name: '費用洽詢' });
+      await ask.scrollIntoViewIfNeeded();
+      await ask.click();
+      await expect(dialog).toBeVisible();
+    });
+
+    test('導覽與首頁沒有通往收費頁的連結', async ({ page }) => {
+      await page.goto('./');
+      await expect(page.locator('a[href*="pricing"]')).toHaveCount(0);
+      await expect(page.getByRole('navigation', { name: '主要導覽' }).getByRole('link', { name: '收費' })).toHaveCount(0);
     });
 
     test('預約：按鈕開啟 LINE 視窗，Esc 關閉', async ({ page }) => {
@@ -230,7 +254,8 @@ test.describe('段落跳轉', () => {
     await page.goto('./');
     const rail = page.getByRole('navigation', { name: '首頁段落' });
     await expect(rail).toBeVisible();
-    await expect(rail.getByRole('link')).toHaveText(['開場', '課程', '師資', '收費課表', '預約']);
+    await expect(rail.getByRole('link')).toHaveText(['開場', '課程', '師資', '課表', '預約']);
+    await expect(rail.getByRole('link', { name: '課表' })).toHaveAttribute('href', '#schedule');
     await rail.getByRole('link', { name: '預約' }).click();
     await expect(page.locator('#booking')).toBeInViewport();
 

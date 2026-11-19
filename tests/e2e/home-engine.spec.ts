@@ -625,8 +625,8 @@ for (const device of CREST_DEVICES) {
       // 捲離預約段：館徽散了又換姿勢，矩形回到 null、.crest-hit 不可點
       await scrollToBeat(page, 'pricing');
       await run(page, 300);
-      expect(await crestRect(page), '回到收費段').toBeNull();
-      await expect(hit, '回到收費段').toBeHidden();
+      expect(await crestRect(page), '回到課表段').toBeNull();
+      await expect(hit, '回到課表段').toBeHidden();
     });
 
     test('點光點館徽（.crest-hit 的中心）開啟 LINE 視窗，Esc 關閉', async ({ page }) => {
@@ -653,7 +653,7 @@ for (const device of CREST_DEVICES) {
       await expect(hit).toHaveAttribute('href', '#line');
       await expect(hit).toHaveAttribute('data-line-open', '');
 
-      await page.locator('#pricing a').last().focus();
+      await page.locator('#schedule a').last().focus();
       await page.keyboard.press('Tab');
       await expect(page.locator(BOOKING_BUTTON)).toBeFocused();
       await page.keyboard.press('Enter');

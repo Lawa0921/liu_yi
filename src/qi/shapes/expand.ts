@@ -63,7 +63,7 @@ export const CREST_JITTER = 0.002;
 const CREST_W = kindToW(KIND.CREST);
 const JITTER_SEED = 0x6a17;
 
-/** 收費段的氣流範圍（世界單位）：每個軸都比環境煙（x ±5.8、y −0.2–3.4、z −5.4–3.8）寬。 */
+/** 入館閘門背景的氣流範圍（世界單位）：每個軸都比環境煙（x ±5.8、y −0.2–3.4、z −5.4–3.8）寬。 */
 const FLOW_SEED = 0x0f10;
 const FLOW_HALF_WIDTH = 7.5;
 const FLOW_Z_CENTER = -0.8;
@@ -252,7 +252,7 @@ export function expandTargets(shape: Shape, size: number, ambient: AmbientField,
 }
 
 /**
- * 收費段的氣流目標（`flow` 姿勢）：全部的點都是緩流（w ＝ −1，著色器當低亮度的氣畫）。
+ * 入館閘門背景的氣流目標（`flow` 姿勢）：全部的點都是緩流（w ＝ −1，著色器當低亮度的氣畫）。
  * 環境煙那批格子沿用共用的位置；其餘的點散在比環境煙更寬的一帶（x 兩側、y 上下、z 前後都更遠），
  * 沿 x 帶一點起伏，讀起來像一道緩緩流過的氣。程序化、固定種子，沒有形體檔。
  */

@@ -118,10 +118,10 @@ test('404 頁不輸出 canonical 與 og:url，並標 noindex', async ({ page }) 
 });
 
 test('一般頁面仍有 canonical，且沒有 noindex', async ({ page, baseURL }) => {
-  await page.goto('./pricing/');
+  await page.goto('./schedule/');
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
     'href',
-    `https://lawa0921.github.io${basePath(baseURL)}pricing/`,
+    `https://lawa0921.github.io${basePath(baseURL)}schedule/`,
   );
   await expect(page.locator('meta[name="robots"]')).toHaveCount(0);
 });
@@ -130,7 +130,7 @@ test.describe('手機寬度：海報放大', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
   test('放大後的海報比螢幕寬很多，可以橫向捲動看清楚字', async ({ page }) => {
-    await page.goto('./pricing/');
+    await page.goto('./schedule/');
     await page.locator('[data-poster]').first().click();
     const dialog = page.locator('#poster-dialog');
     await expect(dialog).toBeVisible();

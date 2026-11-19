@@ -20,7 +20,6 @@ const SCENE_PAGES = [
   { name: '師資總覽', path: './coaches/', kind: 'coaches' },
   { name: '教練頁', path: './coaches/chan/', kind: 'coach' },
   { name: '場地', path: './facility/', kind: 'facility' },
-  { name: '收費', path: './pricing/', kind: 'pricing' },
   { name: '課表', path: './schedule/', kind: 'schedule' },
   { name: '404', path: './no-such-page/', kind: 'lost' },
 ];

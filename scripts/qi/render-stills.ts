@@ -280,7 +280,7 @@ function pointLook(kind: number, tone: number, veinValue: number): { color: Vec3
       return { color: [C_GOLD[0] * 0.85, C_GOLD[1] * 0.85, C_GOLD[2] * 0.85], alpha: 0.6, size: 1 };
     case KIND.SEAL:
       return { color: [C_SEAL[0] * 1.25, C_SEAL[1] * 1.25, C_SEAL[2] * 1.25], alpha: 0.6, size: 1.25 };
-    case KIND.BAMBOO: // 竹簡的竹片：比人形淡（收費段要讓資訊浮在上面），略偏暗金
+    case KIND.BAMBOO: // 竹簡的竹片：比人形淡（課表段要讓資訊浮在上面），略偏暗金
       return { color: mixColor([C_GOLD[0] * 0.9, C_GOLD[1] * 0.9, C_GOLD[2] * 0.9], C_PAPER, tone * 0.25), alpha: 0.1, size: 1 };
     case KIND.CREST: // 光點館徽：金，只帶一點米白的高光
       return { color: mixColor(C_GOLD, C_PAPER, tone * 0.3), alpha: 0.36, size: 1 };

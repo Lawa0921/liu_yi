@@ -9,7 +9,6 @@ const PAGES = [
   { path: './coaches/', title: /^師資/ },
   { path: './coaches/monkey/', title: /^猴子/ },
   { path: './facility/', title: /^場地/ },
-  { path: './pricing/', title: /^收費/ },
   { path: './schedule/', title: /^課表/ },
 ];
 

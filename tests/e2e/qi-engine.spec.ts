@@ -224,7 +224,7 @@ test.describe('光點引擎核心（桌機，tier=min）', () => {
     expect(await meanError(page)).toBeLessThan(0.05);
   });
 
-  test('每個姿勢都畫得出來並聚得回目標（含入館閘門的氣流、朱印的向內收衝量、收費段的竹簡、預約段的光點館徽）', async ({ page }) => {
+  test('每個姿勢都畫得出來並聚得回目標（含入館閘門的氣流、朱印的向內收衝量、課表段的竹簡、預約段的光點館徽）', async ({ page }) => {
     await open(page);
     const poses = [
       'lift', 'land', 'dingzhou', 'chengchui', 'kao', 'jian', 'miaodao', 'spear', 'others', 'salute', 'flow', 'seal', 'scroll', 'crest',

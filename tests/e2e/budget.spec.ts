@@ -225,7 +225,6 @@ const PAGE_TYPES = [
   { name: '師資總覽', path: './coaches/', three: false },
   { name: '教練頁', path: './coaches/chan/', three: false },
   { name: '場地', path: './facility/', three: false },
-  { name: '收費', path: './pricing/', three: false },
   { name: '課表', path: './schedule/', three: false },
   { name: '404', path: './no-such-page/', three: false },
 ];

@@ -29,7 +29,6 @@ export const NAV_ITEMS = [
   { label: '課程', path: '/courses/' },
   { label: '師資', path: '/coaches/' },
   { label: '場地', path: '/facility/' },
-  { label: '收費', path: '/pricing/' },
   { label: '課表', path: '/schedule/' },
 ] as const;
 

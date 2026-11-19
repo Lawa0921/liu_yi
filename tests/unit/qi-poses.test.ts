@@ -37,7 +37,7 @@ const ALL_POSES: PoseId[] = [
 ];
 
 describe('BEATS', () => {
-  it('恰有 11 個，依序為開場、拳、格鬥×2、兵器×3、其他、師資、收費、預約', () => {
+  it('恰有 11 個，依序為開場、拳、格鬥×2、兵器×3、其他、師資、課表、預約', () => {
     expect(BEATS).toEqual([
       'opening',
       'fist',
@@ -103,7 +103,7 @@ describe('POSE_BY_BEAT', () => {
     expect(BURSTS.flow, 'flow 仍是合法姿勢（setPose 需要衝量表）').toBeDefined();
   });
 
-  it('收費課表是竹簡（scroll）、預約是光點館徽（crest）；朱印（seal）不再屬於任何 beat', () => {
+  it('課表段是竹簡（scroll）、預約是光點館徽（crest）；朱印（seal）不再屬於任何 beat', () => {
     for (const audience of AUDIENCES) {
       expect(POSE_BY_BEAT[audience].pricing).toBe('scroll');
       expect(POSE_BY_BEAT[audience].booking).toBe('crest');

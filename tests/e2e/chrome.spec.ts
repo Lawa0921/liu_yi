@@ -1,10 +1,10 @@
 import { expect, test } from './fixtures';
 import { ADULT_COURSES, KID_COURSES, basePath, cardTitles } from './helpers';
 
-const NAV_LABELS = ['課程', '師資', '場地', '收費', '課表'];
+const NAV_LABELS = ['課程', '師資', '場地', '課表'];
 
 test.describe('導覽', () => {
-  test('桌機：導覽列直接可見，五個項目加預約體驗', async ({ page, baseURL }) => {
+  test('桌機：導覽列直接可見，四個項目加預約體驗', async ({ page, baseURL }) => {
     await page.goto('./');
     const nav = page.getByRole('navigation', { name: '主要導覽' });
     await expect(nav.getByRole('listitem')).toHaveText(NAV_LABELS);
@@ -44,7 +44,7 @@ test.describe('導覽', () => {
     });
 
     test('頁面沒有水平捲軸', async ({ page }) => {
-      for (const path of ['./', './courses/', './courses/bjj/', './coaches/chan/', './pricing/']) {
+      for (const path of ['./', './courses/', './courses/bjj/', './coaches/chan/', './schedule/']) {
         await page.goto(path);
         const overflow = await page.evaluate(
           () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -75,8 +75,28 @@ test.describe('預約體驗', () => {
     await expect(dialog).toBeHidden();
   });
 
+  test('課表頁：費用與方案引導用 LINE 詢問（找價格的人會到這一頁）', async ({ page }) => {
+    await page.goto('./schedule/');
+    const lead = page.locator('.page-head');
+    await expect(lead).toContainText('費用與方案歡迎用 LINE 詢問。');
+    const link = lead.getByRole('link', { name: '用 LINE 詢問' }).last();
+    await expect(link).toHaveAttribute('href', '#line');
+    await expect(link).toHaveAttribute('data-line-open', '');
+    await link.click();
+    await expect(page.locator('#line-dialog')).toBeVisible();
+  });
+
+  test('課程內頁頁尾沒有收費按鈕，仍有預約體驗與課表', async ({ page }) => {
+    await page.goto('./courses/bajiquan/');
+    const links = page.locator('.course-links');
+    await expect(links.getByRole('link', { name: '收費' })).toHaveCount(0);
+    await expect(links.getByRole('link', { name: '預約體驗' })).toHaveAttribute('data-line-open', '');
+    await expect(links.getByRole('link', { name: '課表' })).toBeVisible();
+    await expect(page.locator('a[href*="pricing"]')).toHaveCount(0);
+  });
+
   test('站上沒有範本假聯絡資訊', async ({ page }) => {
-    for (const path of ['./', './facility/', './pricing/']) {
+    for (const path of ['./', './facility/', './schedule/']) {
       await page.goto(path);
       const text = await page.locator('body').innerText();
       expect(text).not.toMatch(/Nashville|Somewhere Road|555-5555|info@liuyiwushu\.com/);

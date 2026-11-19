@@ -218,7 +218,7 @@ describe('prefetchPlan（目前＋前後各 2 個 beat）', () => {
 
   it('目前這一格排最前面（先載最近的）', () => {
     expect(prefetchPlan(1, 'adult', false)[0]).toBe('dingzhou');
-    expect(prefetchPlan(9, 'adult', false)[0]).toBe('scroll'); // beat 9（收費課表）是竹簡
+    expect(prefetchPlan(9, 'adult', false)[0]).toBe('scroll'); // beat 9（課表）是竹簡
   });
 
   it('beatIndex 超出範圍時夾到 0..最後一個 beat（不丟錯）', () => {

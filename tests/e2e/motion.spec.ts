@@ -25,7 +25,7 @@ test.describe('沒有 JavaScript：桌機', () => {
   test.use({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
 
   test('海報仍是連到圖檔的連結，照片切換按鈕不顯示', async ({ page, request }) => {
-    await page.goto('./pricing/');
+    await page.goto('./schedule/');
     const href = await page.locator('[data-poster]').first().getAttribute('href');
     expect(href).toMatch(/\.(webp|png|jpe?g|avif)$/);
     expect((await request.get(new URL(href!, page.url()).href)).status()).toBe(200);
@@ -38,32 +38,32 @@ test.describe('沒有 JavaScript：桌機', () => {
 
 test.describe('海報站內放大', () => {
   test('點海報在站內開啟放大視窗，可用按鈕、Esc、點背景關閉', async ({ page }) => {
-    await page.goto('./pricing/');
+    await page.goto('./schedule/');
     const url = page.url();
     const dialog = page.locator('#poster-dialog');
     await expect(dialog).toBeHidden();
 
     const posters = page.locator('[data-poster]');
-    await expect(posters).toHaveCount(4);
+    await expect(posters).toHaveCount(1);
 
     await posters.first().click();
     await expect(dialog).toBeVisible();
     expect(page.url()).toBe(url);
     const image = dialog.getByRole('img');
-    await expect(image).toHaveAttribute('alt', /課程收費表/);
+    await expect(image).toHaveAttribute('alt', /常態班課表/);
     await expect.poll(() => image.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(900);
 
     await dialog.getByRole('button', { name: '關閉' }).click();
     await expect(dialog).toBeHidden();
 
     // 鍵盤：聚焦連結按 Enter 開啟，Esc 關閉，焦點回到原本的海報。
-    await posters.nth(1).focus();
+    await posters.first().focus();
     await page.keyboard.press('Enter');
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole('img')).toHaveAttribute('alt', /VIP/);
+    await expect(dialog.getByRole('img')).toHaveAttribute('alt', /常態班課表/);
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
-    await expect(posters.nth(1)).toBeFocused();
+    await expect(posters.first()).toBeFocused();
 
     // 點背景關閉。
     await posters.first().click();
@@ -72,8 +72,8 @@ test.describe('海報站內放大', () => {
     await expect(dialog).toBeHidden();
   });
 
-  test('課表與教練海報也用同一個放大視窗', async ({ page }) => {
-    for (const path of ['./schedule/', './coaches/chan/']) {
+  test('教練海報也用同一個放大視窗', async ({ page }) => {
+    for (const path of ['./coaches/chan/']) {
       await page.goto(path);
       await page.locator('[data-poster]').first().click();
       await expect(page.locator('#poster-dialog')).toBeVisible();
