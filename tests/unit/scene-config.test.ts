@@ -47,7 +47,7 @@ function readCourses(): CourseRow[] {
     });
 }
 
-const PAGE_KINDS: PageSceneKind[] = ['courses', 'coaches', 'coach', 'facility', 'pricing', 'schedule', 'lost'];
+const PAGE_KINDS: PageSceneKind[] = ['courses', 'coaches', 'coach', 'facility', 'schedule', 'lost'];
 const published = readCourses().filter((course) => course.published);
 
 describe('場景配對表', () => {
@@ -146,7 +146,7 @@ describe('首頁景深（HOME_DEPTH、MID_BY_BEAT）', () => {
     expect(new Set(Object.values(MID_BY_BEAT)).size).toBeGreaterThanOrEqual(3);
   });
 
-  it('左下角的窗櫺只在左下角沒有字的段落出現：都是真的 beat，不含開場（站名垂直排到畫面底）與整寬內容的收費、預約', () => {
+  it('左下角的窗櫺只在左下角沒有字的段落出現：都是真的 beat，不含開場（站名垂直排到畫面底）與整寬內容的課表、預約', () => {
     for (const beat of HOME_FG_LEFT_BEATS) expect(BEATS, beat).toContain(beat);
     expect(HOME_FG_LEFT_BEATS).not.toContain('opening');
     expect(HOME_FG_LEFT_BEATS).not.toContain('pricing');
@@ -198,14 +198,13 @@ describe('前景的錨點（FG_ANCHOR）', () => {
     }
   });
 
-  it('具名場景對照（回歸）：兒童武術不再是兩張都在左下；教練頁、收費、兒童防身、核心瑜珈也都左右各一', () => {
+  it('具名場景對照（回歸）：兒童武術不再是兩張都在左下；教練頁、兒童防身、核心瑜珈也都左右各一', () => {
     expect(COURSE_SCENES['kids-martial-arts']!.fg.map(fgCorner)).not.toEqual(['bottom-left', 'bottom-left']);
     for (const [name, spec] of [
       ['kids-martial-arts', COURSE_SCENES['kids-martial-arts']!],
       ['kids-self-defense', COURSE_SCENES['kids-self-defense']!],
       ['core-yoga', COURSE_SCENES['core-yoga']!],
       ['coach', PAGE_SCENES.coach],
-      ['pricing', PAGE_SCENES.pricing],
     ] as const) {
       expect(new Set(spec.fg.map((layer) => fgCorner(layer).split('-')[1])).size, name).toBe(2);
     }

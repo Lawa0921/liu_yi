@@ -1,6 +1,6 @@
 // 2026-11-18 依 Facebook 粉專（facebook.com/ourLucal）核對後同步到網站的資訊。
 // 來源整理在 docs/fb-sync-2026-11-18.md；粉專再更新時，改這裡的期望值與該文件。
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import jsQR from 'jsqr';
 import sharp from 'sharp';
@@ -82,15 +82,17 @@ describe('課程文案（粉專貼文）', () => {
   });
 });
 
-describe('外派與機構合作、收費頁', () => {
+describe('外派與機構合作、課表頁', () => {
   it('課程總覽有外派與機構合作段落', () => {
     const page = read('src/pages/courses/index.astro');
     expect(page).toContain('外派與機構合作');
     expect(page).toContain('安親班');
   });
 
-  it('收費頁有體驗預約表單；不寫粉專沒有明訂的停課規定', () => {
-    const page = read('src/pages/pricing.astro');
+  // 收費頁已取消（業主決定收費方案不公開）；體驗預約表單留在課表頁。
+  it('收費頁已取消；課表頁有體驗預約表單；不寫粉專沒有明訂的停課規定', () => {
+    expect(existsSync(new URL('../../src/pages/pricing.astro', import.meta.url))).toBe(false);
+    const page = read('src/pages/schedule.astro');
     expect(page).toContain('SITE.trialFormUrl');
     expect(page).not.toContain('停班停課');
   });

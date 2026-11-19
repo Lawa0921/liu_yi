@@ -2,13 +2,13 @@
  * 首頁文案（設計 §7、決定 D24）。
  *
  * 這些是「提案」：課程名、教練、職稱來自內容集合，這裡只放首頁特有的短句——
- * 每一式的名稱與一行註解、三件兵器各一行、收費課表與預約的導引句。
+ * 每一式的名稱與一行註解、三件兵器各一行、課表與預約的導引句。
  * 交付清單標「待業主確認」，八極招式名稱與說法尤其要業主看過。
  *
  * 守則（tests/unit/home-copy.test.ts 把關）：
  *   - 每行 ≤ 18 個字。
  *   - 不出現設計 §4 的反目標語彙。
- *   - 不放金額與時段（收費、課表只有海報，不轉成文字，避免抄錯）。
+ *   - 不放金額與時段（課表只有海報，不轉成文字，避免抄錯；收費方案不公開，只引導用 LINE 詢問）。
  */
 import type { BeatId } from './poses';
 
@@ -36,7 +36,8 @@ export const COPY: {
   /** 鍵是姿勢 id（config/poses.ts 的 PoseId）。 */
   moves: Record<string, MoveCopy>;
   weapons: Record<'jian' | 'miaodao' | 'spear', string>;
-  pricing: { lead: string; facility: string };
+  /** 課表段（鍵沿用 beat id `pricing`）。ask：費用改用 LINE 詢問的引導句。 */
+  pricing: { lead: string; ask: string; facility: string };
   booking: { lead: string };
   others: { lead: string; all: string };
 } = {
@@ -66,7 +67,8 @@ export const COPY: {
   },
 
   pricing: {
-    lead: '大人、兒童分班，月繳與堂數方案。',
+    lead: '大人、兒童分班，各班時段請看課表。',
+    ask: '費用與方案，歡迎用 LINE 詢問。',
     facility: '寬敞明亮的訓練場地，鏡面牆與地墊。',
   },
 

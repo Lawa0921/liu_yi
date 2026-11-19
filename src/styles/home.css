@@ -788,7 +788,7 @@ html:not([data-audience]) .beat--course {
   font-size: var(--text-sm);
 }
 
-/* ── 收費與課表 ───────────────────────────────────── */
+/* ── 課表（class 沿用 beat id pricing）──────────────── */
 
 .pricing__links {
   display: flex;

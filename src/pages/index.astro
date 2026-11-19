@@ -1,6 +1,6 @@
 ---
 // 首頁「氣聚成人」：金色光點組成的八極拳師當主角，內容跟著招式長出來（設計文件 2026-11-16-qi-homepage-design.md）。
-// 段落：開場 → 課程（拳、格鬥、兵器，大人／小孩切換）→ 其他課程 → 師資 → 收費與課表 → 預約。
+// 段落：開場 → 課程（拳、格鬥、兵器，大人／小孩切換）→ 其他課程 → 師資 → 課表 → 預約。
 // 內容全是 DOM 文字；光點引擎畫在固定的 canvas 上（src/scripts/home/init-home.ts 接線），
 // 引擎失效或減少動態時，靜態圖就是畫面。
 import '../styles/home.css';
@@ -24,7 +24,7 @@ const rail = [
   { id: 'opening', label: '開場' },
   ...(steps.length > 0 ? [{ id: 'courses', label: '課程' }] : []),
   ...(coaches.length > 0 ? [{ id: 'coaches', label: '師資' }] : []),
-  { id: 'pricing', label: '收費課表' },
+  { id: 'schedule', label: '課表' },
   { id: 'booking', label: '預約' },
 ];
 ---

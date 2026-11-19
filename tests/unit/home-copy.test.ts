@@ -31,8 +31,14 @@ describe('首頁文案（設計 §4 閘門）', () => {
     expect(ALL.filter((text) => text.trim() === '' || text !== text.trim())).toEqual([]);
   });
 
-  it('文案沒有金額與時段（收費、課表只有海報，不轉成文字）', () => {
+  it('文案沒有金額與時段（課表只有海報，不轉成文字；收費方案不公開）', () => {
     expect(ALL.filter((text) => /NT|\$|元|\d{3,}/.test(text))).toEqual([]);
+  });
+
+  it('課表段不提收費方案，改引導用 LINE 詢問費用', () => {
+    expect(COPY.pricing.lead).toBe('大人、兒童分班，各班時段請看課表。');
+    expect(COPY.pricing.ask).toBe('費用與方案，歡迎用 LINE 詢問。');
+    expect(ALL.filter((text) => /收費|月繳|堂數/.test(text))).toEqual([]);
   });
 });
 
@@ -63,6 +69,7 @@ describe('首頁文案的結構', () => {
     expect(COPY.opening.hint).toBe('往下捲');
     expect(COPY.pricing.lead).toBeTruthy();
     expect(COPY.pricing.facility).toBeTruthy();
+    expect(COPY.pricing.ask).toBeTruthy();
     expect(COPY.booking.lead).toBeTruthy();
     expect(COPY.others.lead).toBeTruthy();
     expect(COPY.others.all).toBe('所有課程');

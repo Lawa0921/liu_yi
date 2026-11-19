@@ -121,8 +121,8 @@ test.describe('減少動態：關閉轉場', () => {
     await page.goto('./courses/');
     const rule = await activeViewTransition(page);
     expect(rule.navigation, '減少動態時沒有有效的規則').toBe('');
-    await page.getByRole('link', { name: '收費', exact: true }).first().click();
-    await expect(page).toHaveURL(/\/pricing\/$/);
+    await page.getByRole('link', { name: '課表', exact: true }).first().click();
+    await expect(page).toHaveURL(/\/schedule\/$/);
     const n = await note(page);
     expect(n === null || n.has === false, '沒有 viewTransition').toBe(true);
   });
@@ -131,7 +131,7 @@ test.describe('減少動態：關閉轉場', () => {
 test.describe('真的換頁：站內連結', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
-  test('課程總覽 → 收費：新頁的 pagereveal 帶 viewTransition，舊頁關門（view-transition-old）與新頁開門（view-transition-new）的動畫都在，約 0.3 s 一段，轉場會結束', async ({ page }) => {
+  test('課程總覽 → 課表：新頁的 pagereveal 帶 viewTransition，舊頁關門（view-transition-old）與新頁開門（view-transition-new）的動畫都在，約 0.3 s 一段，轉場會結束', async ({ page }) => {
     await recordTransitions(page);
     // Chrome 在機器忙的時候（整套 e2e 兩個 worker 一起跑）偶爾會整個跳過跨頁轉場：新頁的 pagereveal 沒有 viewTransition。
     // 那是瀏覽器的決定，網站管不到；這裡要守的是「網站有宣告、轉場會跑完」，所以被跳過就重來，最多 3 次，
@@ -140,15 +140,15 @@ test.describe('真的換頁：站內連結', () => {
     let n: Awaited<ReturnType<typeof note>> = null;
     for (let attempt = 0; attempt < 3; attempt++) {
       await page.goto('./courses/');
-      await page.getByRole('link', { name: '收費', exact: true }).first().click();
-      await expect(page).toHaveURL(/\/pricing\/$/);
+      await page.getByRole('link', { name: '課表', exact: true }).first().click();
+      await expect(page).toHaveURL(/\/schedule\/$/);
       await expect
         .poll(
           async () => {
             const current = await note(page);
-            return current !== null && current.path.endsWith('/pricing/') && (current.finished || !current.has || current.errors.length > 0);
+            return current !== null && current.path.endsWith('/schedule/') && (current.finished || !current.has || current.errors.length > 0);
           },
-          { timeout: 8000, message: '收費頁的轉場紀錄：已結束、被跳過或 reject（不能一直停在進行中）' },
+          { timeout: 8000, message: '課表頁的轉場紀錄：已結束、被跳過或 reject（不能一直停在進行中）' },
         )
         .toBe(true);
       n = await note(page);
@@ -175,8 +175,8 @@ test.describe('真的換頁：站內連結', () => {
   test('上一頁：回到課程總覽，內容正常、沒有殘留的轉場遮罩（頁面可互動）', async ({ page }) => {
     await recordTransitions(page);
     await page.goto('./courses/');
-    await page.getByRole('link', { name: '收費', exact: true }).first().click();
-    await expect(page).toHaveURL(/\/pricing\/$/);
+    await page.getByRole('link', { name: '課表', exact: true }).first().click();
+    await expect(page).toHaveURL(/\/schedule\/$/);
     await page.goBack();
     await expect(page).toHaveURL(/\/courses\/$/);
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();

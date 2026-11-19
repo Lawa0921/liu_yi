@@ -667,7 +667,7 @@ for (const device of DEVICES) {
       expect(total).toBeGreaterThanOrEqual(10);
       for (let i = 0; i < total; i++) {
         const still = panels.nth(i).locator('img.beat__still');
-        if ((await still.count()) === 0) continue; // 收費課表沒有靜態圖
+        if ((await still.count()) === 0) continue; // 沒有靜態圖的面板跳過
         await still.scrollIntoViewIfNeeded();
         await expect(still, `面板 #${i}`).toBeVisible();
         await expect.poll(() => still.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth), `面板 #${i}`).toBeGreaterThan(0);
@@ -690,7 +690,7 @@ for (const device of DEVICES) {
         await expect(rail).toBeHidden();
         return;
       }
-      await expect(rail.getByRole('link')).toHaveText(['開場', '課程', '師資', '收費課表', '預約']);
+      await expect(rail.getByRole('link')).toHaveText(['開場', '課程', '師資', '課表', '預約']);
       await rail.getByRole('link', { name: '預約' }).click();
       await expect(page).toHaveURL(/#booking$/);
       await expect(page.locator('#booking')).toBeInViewport();

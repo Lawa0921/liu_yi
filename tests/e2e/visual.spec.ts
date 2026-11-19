@@ -722,7 +722,7 @@ for (const device of DEVICES) {
       expect(overlapRatio, `亮點外框與 DOM 文字矩形重疊 ≤ 文字面積的 5%：${note}`).toBeLessThanOrEqual(0.05);
     });
 
-    test('scroll（收費課表的竹簡）：亮點外框與文字矩形重疊 ≤ 5%、文字區域亮度 > 100 的像素 ≤ 4%、外框是橫的長方形、完整在畫布內', async ({ page }) => {
+    test('scroll（課表段的竹簡）：亮點外框與文字矩形重疊 ≤ 5%、文字區域亮度 > 100 的像素 ≤ 4%、外框是橫的長方形、完整在畫布內', async ({ page }) => {
       await open(page, device);
       await settlePose(page, 'pricing', 'scroll');
       // 竹簡淡（亮度 > 100 的像素很少）：外框改量「亮度 > 35 的光點在一欄／一列裡至少有 10 個」的範圍（denseBox）——
@@ -739,7 +739,7 @@ for (const device of DEVICES) {
       expectPlacement(metrics, device);
       // 外框比例：竹簡是橫的長方形（寬 ÷ 高 1.2–1.9，兩端略捲所以略窄於攤平時的 1.6）
       const aspect = (figure.right - figure.left) / (figure.bottom - figure.top);
-      // 文字區域：該段文字矩形（裁在 canvas 內）底下，canvas 上亮度 > 100 的像素比例（竹簡淡到不影響收費導引文字的對比）
+      // 文字區域：該段文字矩形（裁在 canvas 內）底下，canvas 上亮度 > 100 的像素比例（竹簡淡到不影響課表導引文字的對比）
       const { inCanvas, inText, underText } = await textBrightness(page, rect, texts);
       test.info().annotations.push({
         type: 'scroll',
@@ -848,7 +848,7 @@ async function checkStills(page: Page, audience: 'adult' | 'kid', device: Device
     await expect(section, `${beat} 段存在`).toHaveCount(1);
     await section.scrollIntoViewIfNeeded();
     await scrollToBeat(page, beat);
-    // 開場的靜態圖是海報；收費課表是竹簡（scroll）的靜態圖、預約是光點館徽（crest）的靜態圖，各段都至少有一張可見的圖
+    // 開場的靜態圖是海報；課表段是竹簡（scroll）的靜態圖、預約是光點館徽（crest）的靜態圖，各段都至少有一張可見的圖
     const stills =
       beat === 'opening'
         ? page.locator('.opening__poster img')

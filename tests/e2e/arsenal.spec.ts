@@ -113,8 +113,8 @@ test.describe('中式兵器課程頁：拖曳與鍵盤', () => {
   test('3D 沒有把頁面撐寬，也沒有擋住導覽', async ({ page }) => {
     await openFirstRow(page);
     expect(await overflow(page)).toBeLessThanOrEqual(0);
-    await page.getByRole('navigation', { name: '主要導覽' }).getByRole('link', { name: '收費' }).click();
-    await expect(page).toHaveURL(/pricing\/$/);
+    await page.getByRole('navigation', { name: '主要導覽' }).getByRole('link', { name: '課表' }).click();
+    await expect(page).toHaveURL(/schedule\/$/);
   });
 });
 
@@ -207,9 +207,9 @@ test.describe('three 的載入時機', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
   // 首頁首屏的載入量（新前提是首屏載入 three）由 budget.spec.ts 驗。
-  test('沒有 3D 的頁面（收費）完全不載入 three', async ({ page }) => {
+  test('沒有 3D 的頁面（課表）完全不載入 three', async ({ page }) => {
     const transfers = trackTransfers(page);
-    await page.goto('./pricing/');
+    await page.goto('./schedule/');
     await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
     await page.mouse.wheel(0, 400);
     await page.waitForLoadState('networkidle');

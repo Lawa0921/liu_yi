@@ -2,7 +2,7 @@
  * 剪影場景的配對表（Task 27，使用者要求「每一頁都是粒子感覺稍微有點審美疲勞、前中後遠景的效果沒有出現、整體太抽象」）。
  * 純資料與查表，不碰 DOM／Astro；元件（`components/Scene.astro`、`components/home/Depth.astro`）與單元測試共用。
  *
- * 子頁（課程總覽、課程內頁、師資、教練、場地、收費、課表、404）頁首是一幕分層剪影，由後到前四層：
+ * 子頁（課程總覽、課程內頁、師資、教練、場地、課表、404）頁首是一幕分層剪影，由後到前四層：
  *   1. far     遠景：屋脊與院牆（`bg-far-roofs`），最慢、最淡、略帶霧色。
  *   2. mid     中景：院門、兵器架、鼓、旗、木人樁，依頁面。
  *   3. subject 人物：該頁對應的剪影（課程內頁＝該課程的 `fig-*`／`kid-*`，師資與 404＝抱拳收勢 `fig-salute`）；
@@ -32,7 +32,7 @@ export interface SceneSpec {
 }
 
 /** 沒有「課程」維度的頁面種類（課程內頁另由 `sceneForCourse` 依課程決定）。 */
-export type PageSceneKind = 'courses' | 'coaches' | 'coach' | 'facility' | 'pricing' | 'schedule' | 'lost';
+export type PageSceneKind = 'courses' | 'coaches' | 'coach' | 'facility' | 'schedule' | 'lost';
 
 const ROOFS = 'bg-far-roofs';
 
@@ -53,7 +53,6 @@ export const PAGE_SCENES: Record<PageSceneKind, SceneSpec> = {
   coach: scene('mid-drum', 'fig-salute', ['fg-lattice', 'fg-eave']),
   // 場地：空場。主體是場上的木人樁（石鎖看起來像「禁止」的符號，已拿掉）
   facility: scene('bg-mid-gate', 'mid-dummy', ['fg-steps', 'fg-eave']),
-  pricing: scene('mid-banner', 'fig-zhenjiao', ['fg-lattice', ['fg-steps', 'flip']]),
   schedule: scene('mid-drum', 'fig-zhenjiao-land', [['fg-eave', 'flip']]),
   // 404：一個人收勢站在空院子裡
   lost: scene('mid-dummy', 'fig-salute', ['fg-steps']),
@@ -160,12 +159,12 @@ export const HOME_DEPTH: {
 };
 
 /**
- * 左下角的窗櫺（前景第二張）只在這幾段出現：開場的站名、副標垂直排在左側一路到畫面底，收費與預約等段的內容是整寬的，左下角都有字。
+ * 左下角的窗櫺（前景第二張）只在這幾段出現：開場的站名、副標垂直排在左側一路到畫面底，課表與預約等段的內容是整寬的，左下角都有字。
  * 其餘段落左下角是空的（文字在視窗中間偏左），窗櫺才不壓到字；e2e 每段量過。
  */
 export const HOME_FG_LEFT_BEATS: readonly BeatId[] = ['fist', 'combat-a', 'combat-b', 'weapon-a', 'weapon-b', 'weapon-c'];
 
-/** 每個段落（beat）的中景：開場與拳是院門、格鬥是木人樁、兵器三段是兵器架、其他課程是鼓、師資與收費是旗、預約回到院門。 */
+/** 每個段落（beat）的中景：開場與拳是院門、格鬥是木人樁、兵器三段是兵器架、其他課程是鼓、師資與課表是旗、預約回到院門。 */
 export const MID_BY_BEAT: Record<BeatId, HomeMidKey> = {
   opening: 'gate',
   fist: 'gate',

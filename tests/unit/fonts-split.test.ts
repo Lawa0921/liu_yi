@@ -11,7 +11,7 @@ describe('splitCharset：首頁用到的字進核心檔，只出現在其他頁�
     ['劍', ['courses/chinese-weapons/index.html']],
     ['煩', ['facility/index.html', '404.html']],
     ['氣', ['_astro/qi-stage.js']],
-    ['館', ['_astro/home.css', 'pricing/index.html']],
+    ['館', ['_astro/home.css', 'schedule/index.html']],
   ]);
 
   it('出現在首頁或任何非 .html 檔（共用的 JS／CSS）就算核心', () => {
