@@ -8,6 +8,11 @@ photos:
     alt: 一群孩子在教室裡整齊地練習馬步
   - src: ../../assets/images/toddler_training_1.jpg
     alt: 幾位年紀較小的學員練習弓步推掌
+video:
+  src: /videos/kids-martial-arts.mp4
+  poster: ../../assets/images/video/kids-martial-arts-poster.jpg
+  width: 1280
+  height: 720
 coaches: [monkey]
 published: true
 order: 5

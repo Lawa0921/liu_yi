@@ -14,6 +14,11 @@ photos:
     alt: 比賽場上，兩個孩子持長槍對戰，旁邊站著穿紅背心的工作人員
   - src: ../../assets/images/kids_weapon_award.jpg
     alt: 2026 年武踐盃兵器技擊公開賽的舞台上，四個孩子和一位大人拿著獎狀合照
+video:
+  src: /videos/kids-weapons.mp4
+  poster: ../../assets/images/video/kids-weapons-poster.jpg
+  width: 720
+  height: 1280
 coaches: [monkey]
 subItems:
   - name: 中國劍

@@ -6,8 +6,11 @@
 //            不放任何替代圖（設計文件 §6「缺照片時」）。
 //            兵器類的字牌是 3D 兵器的宿主（data-weapon3d="card"，設計文件 §15.2-4）：
 //            3D 就緒後線稿退場、單字淡到後面；沒有 WebGL／沒有 JS 時就是原本的線稿字牌。
+// 有站內影片（course.data.video）時，圖片區右下角多一顆「影片」播放鈕：
+//   它是卡片連結的兄弟節點（互動元素不巢狀），用定位疊在圖片區上；本身是指向 mp4 的連結（沒有 JS 時直接開影片檔），
+//   有 JS 時由 CourseVideoDialog.astro 的腳本攔下、在站內視窗播放。封面網址與尺寸放在 data-* 給腳本，按下前不載任何影片位元組。
 // class 名稱與 data-* 屬性是測試與腳本的約定，請保留。
-import { Image } from 'astro:assets';
+import { Image, getImage } from 'astro:assets';
 import Weapon from './ornament/Weapon.astro';
 import Bafang from './ornament/Bafang.astro';
 import Leitai from './ornament/Leitai.astro';
@@ -21,11 +24,13 @@ interface Props {
 }
 
 const { course } = Astro.props;
-const { title, summary, photos, category, audience } = course.data;
+const { title, summary, photos, category, audience, video } = course.data;
 const hasPhotos = photos.length > 0;
 const glyph = category === 'other' ? undefined : CATEGORY_GLYPH[category];
 // data-scene-card（Task 27）：課程總覽頁首的剪影場景讀它，滑過或聚焦這張卡時人物換成這門課的剪影（scripts/scene.ts）。
 const sceneSubject = sceneForCourse({ id: course.id, category, audience }).subject.asset;
+// 視窗打開時才設定的封面（影片原比例的一格）；這裡只產生網址，不會讓頁面先下載它。
+const videoPoster = video ? await getImage({ src: video.poster, width: Math.min(video.width, 1280), format: 'webp' }) : undefined;
 ---
 
 <article class:list={['course-card', 'cornered', hasPhotos ? 'course-card--photo' : 'course-card--text']} data-carousel-host data-scene-card={sceneSubject}>
@@ -96,10 +101,31 @@ const sceneSubject = sceneForCourse({ id: course.id, category, audience }).subje
       <p class="course-card__summary">{summary}</p>
     </div>
   </a>
+  {
+    video && videoPoster && (
+      <a
+        class="course-card__play"
+        href={url(video.src)}
+        aria-label={`播放${title}課程影片`}
+        data-course-video
+        data-video-title={title}
+        data-video-poster={videoPoster.src}
+        data-video-width={video.width}
+        data-video-height={video.height}
+      >
+        <svg class="course-card__play-icon" viewBox="0 0 12 14" width="9" height="11" aria-hidden="true">
+          <path d="M1 1L11 7L1 13Z" fill="currentColor" />
+        </svg>
+        <span aria-hidden="true">影片</span>
+      </a>
+    )
+  }
 </article>
 
 <style>
   .course-card {
+    /* 播放鈕要疊在圖片區（寬 5：高 4）的右下角：以卡片內寬（cqi）推算圖片區的高度。 */
+    container-type: inline-size;
     height: 100%;
     border: var(--line) solid var(--color-line-faint);
     background: var(--color-surface);
@@ -363,6 +389,61 @@ const sceneSubject = sceneForCourse({ id: course.id, category, audience }).subje
 
   .course-card:hover .course-card__glyph {
     transform: scale(1.05);
+  }
+
+  /* ── 影片播放鈕（疊在圖片區右下角；左下是輪播刻度） ── */
+  .course-card__play {
+    position: absolute;
+    top: calc(80cqi - var(--space-3) - 2.75rem);
+    right: var(--space-3);
+    z-index: 3;
+    isolation: isolate;
+    overflow: hidden;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+    padding: 0 var(--space-3) 0 var(--space-4);
+    border: var(--line) solid var(--color-line);
+    background: var(--color-veil);
+    color: var(--color-accent-strong);
+    font-family: var(--font-display);
+    font-size: var(--text-sm);
+    font-weight: 400;
+    letter-spacing: 0.28em;
+    line-height: 1;
+    text-decoration: none;
+    transition:
+      color 0.35s var(--ease-out),
+      border-color 0.35s var(--ease-out);
+  }
+
+  /* hover／focus：金色由左鋪滿（與站上 .button 同一個語彙）。 */
+  .course-card__play::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: var(--color-accent);
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform 0.45s var(--ease-out);
+  }
+
+  .course-card__play:hover,
+  .course-card__play:focus-visible {
+    border-color: var(--color-accent);
+    color: var(--color-on-accent);
+  }
+
+  .course-card__play:hover::before,
+  .course-card__play:focus-visible::before {
+    transform: scaleX(1);
+  }
+
+  .course-card__play-icon {
+    flex: none;
   }
 
   /* ── 文字區 ───────────────────────────────────────── */

@@ -27,7 +27,7 @@ for (const path of ['./courses/']) {
       for (const card of await cardTitles(page, 'adult').all()) await expect(card).toBeHidden();
 
       const hrefs = await page
-        .locator('[data-audience-panel="kid"] .course-card a')
+        .locator('[data-audience-panel="kid"] .course-card__link')
         .evaluateAll((links) => links.map((a) => a.getAttribute('href')));
       expect(hrefs).toEqual(KID_COURSES.map((c) => `${basePath(baseURL)}courses/${c.slug}/`));
 

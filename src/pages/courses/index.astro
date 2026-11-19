@@ -3,6 +3,7 @@
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import AudienceCards from '../../components/AudienceCards.astro';
 import CourseCard from '../../components/CourseCard.astro';
+import CourseVideoDialog from '../../components/CourseVideoDialog.astro';
 import Plaque from '../../components/Plaque.astro';
 import { getPublishedCourses } from '../../lib/content';
 import { otherCourses } from '../../lib/courses';
@@ -92,6 +93,9 @@ const scene = {
       </div>
     </div>
   </section>
+
+  {/* 課程卡的播放鈕共用的站內影片視窗（有帶影片的課程才需要）。 */}
+  {courses.some((course) => course.data.video) && <CourseVideoDialog />}
 </BaseLayout>
 
 <style>

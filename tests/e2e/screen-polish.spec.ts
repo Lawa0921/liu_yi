@@ -394,7 +394,8 @@ test.describe('課程總覽的卡片大字', () => {
   test('是平面古金：靜止時沒有 background-clip:text、沒有漸層底（computed background-image 為 none）', async ({ page }) => {
     await page.goto('./courses/');
     const glyphs = page.locator('.course-card__glyph');
-    expect(await glyphs.allTextContents(), '課程總覽的文字卡有兵、拳、搏三個大字').toEqual(expect.arrayContaining(['兵', '拳', '搏']));
+    // 八極專修、散手技擊改成照片卡後，總覽上的文字卡只剩中式兵器（3D 兵器字牌）的「兵」。
+    expect(await glyphs.allTextContents(), '課程總覽的文字卡有「兵」字').toEqual(['兵']);
     for (const glyph of await glyphs.all()) {
       const style = await glyph.evaluate((el) => {
         const s = getComputedStyle(el);

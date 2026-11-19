@@ -1,18 +1,24 @@
 ---
-// 課程影片區。沒有影片網址（videoEmbed 回傳 null）時「整個區塊不輸出」。
+// 課程影片區。沒有站內影片也沒有影片網址（courseVideo 回傳 null）時「整個區塊不輸出」。
+// 站內影片（course.data.video，優先）：<video controls playsinline preload="none">，原比例；
+//   按下播放前只載封面、不載影片位元組。直式／方形限制寬度，讓高度不超過一屏。
 // YouTube：先只放一個連結，點擊後才由 src/scripts/lite-video.ts 換成播放器（不預載 iframe）；
 // 沒有 JS 時就是連到 YouTube 的普通連結。其他網址：普通連結。
 // data-video-section、data-lite-video 是測試與腳本的約定，請保留。
 import Plaque from './Plaque.astro';
-import { videoEmbed } from '../lib/video';
+import { getImage } from 'astro:assets';
+import { courseVideo, type VideoFile } from '../lib/video';
+import { url } from '../lib/url';
 
 interface Props {
+  video?: VideoFile<ImageMetadata> | undefined;
   videoUrl: string | undefined;
   courseTitle: string;
 }
 
-const { videoUrl, courseTitle } = Astro.props;
-const embed = videoEmbed(videoUrl);
+const { video, videoUrl, courseTitle } = Astro.props;
+const embed = courseVideo(video, videoUrl);
+const poster = embed?.kind === 'file' ? await getImage({ src: embed.file.poster, width: Math.min(embed.file.width, 1280), format: 'webp' }) : undefined;
 ---
 
 {
@@ -20,23 +26,39 @@ const embed = videoEmbed(videoUrl);
     <section class="section section--tight video-section" data-video-section aria-labelledby="video-heading">
       <div class="container">
         <Plaque id="video-heading">課程影片</Plaque>
-        <div class="lite-video">
-          {embed.kind === 'youtube' ? (
-            <a
-              class="button lite-video__play"
-              href={embed.url}
-              data-lite-video
-              data-embed-url={embed.embedUrl}
-              data-title={`${courseTitle}課程影片`}
-            >
-              播放{courseTitle}課程影片
-            </a>
-          ) : (
-            <a class="button" href={embed.url} target="_blank" rel="noopener noreferrer">
-              觀看{courseTitle}課程影片
-            </a>
-          )}
-        </div>
+        {embed.kind === 'file' ? (
+          <div class="course-video" style={`--video-w:${embed.file.width};--video-h:${embed.file.height}`}>
+            <video
+              class="course-video__player"
+              src={url(embed.file.src)}
+              poster={poster?.src}
+              width={embed.file.width}
+              height={embed.file.height}
+              controls
+              playsinline
+              preload="none"
+              aria-label={`${courseTitle}課程影片`}
+            />
+          </div>
+        ) : (
+          <div class="lite-video">
+            {embed.kind === 'youtube' ? (
+              <a
+                class="button lite-video__play"
+                href={embed.url}
+                data-lite-video
+                data-embed-url={embed.embedUrl}
+                data-title={`${courseTitle}課程影片`}
+              >
+                播放{courseTitle}課程影片
+              </a>
+            ) : (
+              <a class="button" href={embed.url} target="_blank" rel="noopener noreferrer">
+                觀看{courseTitle}課程影片
+              </a>
+            )}
+          </div>
+        )}
       </div>
     </section>
   )
@@ -49,6 +71,23 @@ const embed = videoEmbed(videoUrl);
     max-width: 60rem;
     margin-inline: auto;
     aspect-ratio: 16 / 9;
+    border: var(--line) solid var(--color-line);
+    background: var(--color-surface);
+  }
+
+  /* 站內影片：寬度取「版面寬」「60rem」「可見高度 × 寬高比」三者最小，直式與方形不撐出一整屏；
+     可見高度扣掉固定的頁首與底欄（約 14rem），整支影片捲到畫面中時不被它們蓋住。 */
+  .course-video {
+    width: min(100%, 60rem, (100vh - 14rem) * var(--video-w) / var(--video-h));
+    width: min(100%, 60rem, (100svh - 14rem) * var(--video-w) / var(--video-h));
+    margin-inline: auto;
+  }
+
+  .course-video__player {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: var(--video-w) / var(--video-h);
     border: var(--line) solid var(--color-line);
     background: var(--color-surface);
   }

@@ -1,0 +1,122 @@
+---
+// 課程影片的站內視窗（一頁一個，哪張課程卡按了播放就播哪支）。由 src/scripts/course-video.ts 接到每個 a[data-course-video] 上。
+// 平常 <video> 沒有 src（preload="none"）：按下播放之前不下載任何影片位元組。
+// 影片以原比例顯示：寬度取「可用寬度」與「可用高度 × 寬高比」較小者，直式與方形不拉伸、不裁切。
+// 只放在有帶影片的課程卡的頁面（課程總覽）；沒有這個視窗時，播放鈕就是普通的影片檔連結。
+---
+
+<dialog id="course-video-dialog" class="course-video-dialog" aria-label="課程影片" data-label-suffix="課程影片">
+  <div class="course-video-dialog__frame">
+    <div class="course-video-dialog__bar">
+      <p class="course-video-dialog__title" data-course-video-title></p>
+      <form method="dialog">
+        <button class="button course-video-dialog__close" type="submit">關閉</button>
+      </form>
+    </div>
+    <video class="course-video-dialog__video" controls playsinline preload="none"></video>
+  </div>
+</dialog>
+
+<script>
+  import { initCourseVideoDialog } from '../scripts/course-video';
+
+  initCourseVideoDialog();
+</script>
+
+<style>
+  .course-video-dialog {
+    --video-w: 16;
+    --video-h: 9;
+    /* 視窗上下留白＋標題列（關閉鈕 2.75rem）＋與影片的間距 */
+    --video-chrome: calc(2 * var(--space-4) + 2.75rem + var(--space-3));
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    max-height: none;
+    margin: 0;
+    padding: var(--space-4) var(--gutter);
+    border: 0;
+    background: transparent;
+    color: var(--color-text);
+    overflow: hidden;
+    overscroll-behavior: contain;
+  }
+
+  .course-video-dialog[open] {
+    display: grid;
+    place-items: center;
+  }
+
+  .course-video-dialog::backdrop {
+    background: var(--color-veil);
+  }
+
+  .course-video-dialog__frame {
+    width: min(100%, 64rem, (100vh - var(--video-chrome)) * var(--video-w) / var(--video-h));
+    width: min(100%, 64rem, (100dvh - var(--video-chrome)) * var(--video-w) / var(--video-h));
+    min-width: 0;
+  }
+
+  .course-video-dialog__bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    margin-bottom: var(--space-3);
+  }
+
+  .course-video-dialog__title {
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    color: var(--color-accent-strong);
+    font-family: var(--font-display);
+    font-size: var(--text-sm);
+    font-weight: 400;
+    letter-spacing: 0.3em;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .course-video-dialog__close {
+    flex: none;
+    padding-inline: var(--space-5);
+    background: var(--color-bg);
+  }
+
+  .course-video-dialog__video {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: var(--video-w) / var(--video-h);
+    border: var(--line) solid var(--color-line);
+    background: var(--color-bg);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .course-video-dialog[open] .course-video-dialog__frame {
+      animation: course-video-in 0.5s var(--ease-out) both;
+    }
+
+    .course-video-dialog[open]::backdrop {
+      animation: course-video-fade 0.4s var(--ease-out) both;
+    }
+  }
+
+  @keyframes course-video-in {
+    from {
+      opacity: 0;
+      transform: translate3d(0, 1.25rem, 0) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes course-video-fade {
+    from {
+      opacity: 0;
+    }
+  }
+</style>
