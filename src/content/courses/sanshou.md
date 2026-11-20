@@ -3,12 +3,19 @@ title: 散手技擊
 audience: adult
 category: combat
 summary: 八極拳風格的散手。
-photos: []
+photos:
+  - src: ../../assets/images/video/sanshou-card.jpg
+    alt: 兩位學員戴著拳套與手靶對練
+video:
+  src: /videos/sanshou.mp4
+  poster: ../../assets/images/video/sanshou-poster.jpg
+  width: 1280
+  height: 720
 coaches: [chan]
 published: true
 order: 3
 # 文案改寫自粉專 2026-10-08「散手技擊班｜新班招生」貼文（docs/fb-sync-2026-11-18.md）。
-# 授課教練照粉專 2026-06 課表海報：詹前賢老師。待業主補：實拍照、影片。
+# 授課教練照粉專 2026-06 課表海報：詹前賢老師。課程卡照片與課程簡介影片由業主提供（2026-11）。
 needsOwnerCopy: false
 ---
 

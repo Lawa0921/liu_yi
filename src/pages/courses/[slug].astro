@@ -27,7 +27,7 @@ interface Props {
 }
 
 const { course } = Astro.props;
-const { title, summary, photos, subItems, videoUrl, category, audience } = course.data;
+const { title, summary, photos, subItems, video, videoUrl, category, audience } = course.data;
 const { Content } = await render(course);
 const coaches = coachesOfCourse(course, await getPublishedCoaches());
 const glyph = category === 'other' ? undefined : CATEGORY_GLYPH[category];
@@ -162,7 +162,7 @@ const WEAPON_KIND: Record<string, 'jian' | 'miaodao' | 'spear'> = { 中國劍: '
       )
     }
 
-    <VideoSection videoUrl={videoUrl} courseTitle={title} />
+    <VideoSection video={video} videoUrl={videoUrl} courseTitle={title} />
 
     {
       coaches.length > 0 && (

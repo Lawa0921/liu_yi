@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { videoEmbed } from '../../src/lib/video';
+import { courseVideo, videoEmbed } from '../../src/lib/video';
 
 describe('videoEmbed', () => {
   it('returns null when there is no URL, so the video section is not rendered', () => {
@@ -36,5 +36,24 @@ describe('videoEmbed', () => {
   it('rejects things that are not http(s) URLs', () => {
     expect(videoEmbed('javascript:alert(1)')).toBeNull();
     expect(videoEmbed('not a url')).toBeNull();
+  });
+});
+
+describe('courseVideo（課程影片區要顯示什麼）', () => {
+  const file = { src: '/videos/bajiquan.mp4', poster: 'poster', width: 720, height: 720 };
+
+  it('有站內影片時用站內影片，優先於 YouTube 網址', () => {
+    expect(courseVideo(file, 'https://youtu.be/dQw4w9WgXcQ')).toEqual({ kind: 'file', file });
+    expect(courseVideo(file, undefined)).toEqual({ kind: 'file', file });
+  });
+
+  it('沒有站內影片時照舊看 videoUrl', () => {
+    expect(courseVideo(undefined, 'https://youtu.be/dQw4w9WgXcQ')).toEqual(videoEmbed('https://youtu.be/dQw4w9WgXcQ'));
+    expect(courseVideo(undefined, 'https://vimeo.com/123')).toEqual({ kind: 'link', url: 'https://vimeo.com/123' });
+  });
+
+  it('兩者都沒有時回傳 null（整個影片區不輸出）', () => {
+    expect(courseVideo(undefined, undefined)).toBeNull();
+    expect(courseVideo(undefined, '  ')).toBeNull();
   });
 });

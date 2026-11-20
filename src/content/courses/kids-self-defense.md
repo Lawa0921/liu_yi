@@ -10,6 +10,11 @@ photos:
     alt: 戴著紅色拳套的孩子擺出預備架式
   - src: ../../assets/images/kids_training_1.jpg
     alt: 教練幫孩子穿戴護具
+video:
+  src: /videos/kids-self-defense.mp4
+  poster: ../../assets/images/video/kids-self-defense-poster.jpg
+  width: 1280
+  height: 720
 coaches: [monkey]
 published: true
 order: 6

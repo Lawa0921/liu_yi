@@ -3,11 +3,18 @@ title: 八極專修
 audience: adult
 category: fist
 summary: 八極拳的套路與應用。
-photos: []
+photos:
+  - src: ../../assets/images/video/bajiquan-card.jpg
+    alt: 兩位學員在教室裡面對面練習對練
+video:
+  src: /videos/bajiquan.mp4
+  poster: ../../assets/images/video/bajiquan-poster.jpg
+  width: 720
+  height: 720
 coaches: [chan]
 published: true
 order: 2
-# 待業主補：實拍照、影片。
+# 課程卡照片與課程簡介影片由業主提供（2026-11）；照片是影片畫面的乾淨裁切。
 needsOwnerCopy: false
 ---
 

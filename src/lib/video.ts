@@ -38,3 +38,19 @@ export function videoEmbed(rawUrl: string | null | undefined): VideoEmbed | null
   }
   return { kind: 'link', url };
 }
+
+/** 站內影片檔（public/ 底下）：src 是站內路徑（渲染時經過 url() 加 base），width／height 是影片像素尺寸。 */
+export interface VideoFile<Poster = unknown> {
+  src: string;
+  poster: Poster;
+  width: number;
+  height: number;
+}
+
+export type CourseVideo<Poster = unknown> = { kind: 'file'; file: VideoFile<Poster> } | VideoEmbed;
+
+/** 課程影片區要顯示什麼：站內影片優先於 videoUrl；兩者都沒有回傳 null（整個影片區不輸出）。 */
+export function courseVideo<Poster>(file: VideoFile<Poster> | undefined, videoUrl: string | null | undefined): CourseVideo<Poster> | null {
+  if (file) return { kind: 'file', file };
+  return videoEmbed(videoUrl);
+}

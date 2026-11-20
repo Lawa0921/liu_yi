@@ -5,6 +5,11 @@ category: weapon
 summary: 中國劍、苗刀、大槍，三種兵器。
 # photos 刻意留空：大人中式兵器的課程卡用 3D 兵器（沒有照片才會顯示，tests/e2e/arsenal.spec.ts），粉專照片放在內文。
 photos: []
+video:
+  src: /videos/chinese-weapons.mp4
+  poster: ../../assets/images/video/chinese-weapons-poster.jpg
+  width: 1280
+  height: 720
 coaches: [chan]
 subItems:
   - name: 中國劍

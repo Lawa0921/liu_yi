@@ -1,8 +1,20 @@
 import { expect, test } from './fixtures';
-import { COACHES, PUBLISHED_COURSES, UNPUBLISHED_COURSE_SLUGS } from './helpers';
+import { ADULT_COURSES, COACHES, KID_COURSES, OTHER_COURSES, UNPUBLISHED_COURSE_SLUGS } from './helpers';
 
-for (const course of PUBLISHED_COURSES) {
-  test(`課程頁 ${course.slug}：有標題與內文，沒有影片網址所以沒有影片區`, async ({ page }) => {
+// 六門主課有站內影片（影片區的行為見 course-video.spec.ts）；其他課程沒有影片，就沒有影片區。
+for (const course of [...ADULT_COURSES, ...KID_COURSES]) {
+  test(`課程頁 ${course.slug}：有標題與內文`, async ({ page }) => {
+    const response = await page.goto(`./courses/${course.slug}/`);
+    expect(response?.status()).toBe(200);
+
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(course.title);
+    await expect(page.locator('[data-course-body]')).not.toBeEmpty();
+    await expect(page.getByRole('link', { name: '返回課程總覽' })).toBeVisible();
+  });
+}
+
+for (const course of OTHER_COURSES) {
+  test(`課程頁 ${course.slug}：有標題與內文，沒有影片所以沒有影片區`, async ({ page }) => {
     const response = await page.goto(`./courses/${course.slug}/`);
     expect(response?.status()).toBe(200);
 
