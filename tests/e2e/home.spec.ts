@@ -60,8 +60,10 @@ for (const device of DEVICES) {
       }
     });
 
-    test('兵器：兩個對象各有三個子項（中國劍、苗刀、大槍），「看真兵器」連到中式兵器課程頁', async ({ page }) => {
+    test('兵器：兩個對象各有三個子項（中國劍、苗刀、大槍），「看真兵器」連到該對象自己的兵器課（大人＝中式兵器，小孩＝防身兵器）', async ({ page }) => {
       await page.goto('./');
+      // 業主 2026-11-19 回報：小孩版點「看真兵器」進到大人課、看到詹教練，應該是小孩課（猴子老師）。
+      const realWeaponSlug = { adult: 'chinese-weapons', kid: 'kids-weapons' } as const;
       for (const audience of ['adult', 'kid'] as const) {
         const items = page.locator(`#courses [data-audience-panel="${audience}"] [data-sub-item]`);
         await expect(items, audience).toHaveCount(3);
@@ -73,8 +75,19 @@ for (const device of DEVICES) {
         // 非作用中的那組是隱藏的，getByRole 會略過它，所以用 CSS 選取（它仍是 DOM 裡可抓取的連結）。
         const real = page.locator(`[data-beat="weapon-c"] [data-audience-panel="${audience}"] a`, { hasText: '看真兵器' });
         await expect(real, audience).toHaveCount(1);
-        await expect(real, audience).toHaveAttribute('href', /courses\/chinese-weapons\/$/);
+        await expect(real, audience).toHaveAttribute('href', new RegExp(`courses/${realWeaponSlug[audience]}/$`));
       }
+    });
+
+    test('小孩版「看真兵器」進到的課程頁是小孩的防身兵器：有三件兵器、授課教練是猴子而不是詹前賢', async ({ page }) => {
+      await page.goto('./');
+      const href = await page.locator('[data-beat="weapon-c"] [data-audience-panel="kid"] a', { hasText: '看真兵器' }).getAttribute('href');
+      expect(href).toBeTruthy();
+      await page.goto(href!);
+      await expect(page.locator('h1')).toHaveText('防身兵器');
+      await expect(page.locator('[data-weapon-kind]')).toHaveCount(3);
+      await expect(page.getByText('猴子').first()).toBeVisible();
+      await expect(page.getByText('詹前賢')).toHaveCount(0);
     });
 
     test('兵器三段：小孩版各有一句小孩語氣的說明（持劍、持刀、持槍，編號四、五、六），大人版仍是大人的說明；名稱都是課程子項的名稱', async ({ page }) => {
