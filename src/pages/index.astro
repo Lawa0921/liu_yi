@@ -47,7 +47,9 @@ const rail = [
 <script>
   import { initHome } from '../scripts/home/init-home';
   import { initDepth } from '../scripts/home/depth';
+  import { initAudienceAnchor } from '../scripts/home/audience-anchor';
 
   initDepth();
+  initAudienceAnchor(); // 要在 initHome 之前：切換對象時先移好捲動位置，引擎才讀到對的段落
   void initHome();
 </script>

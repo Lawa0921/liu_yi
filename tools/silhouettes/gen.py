@@ -12,8 +12,8 @@ Usage:
   --tag TAG         raw file version tag, e.g. "v" -> <name>-v1.png, "b3v" -> <name>-b3v1.png (default: v)
   --dry-run         print model/size/ref/prompt sha256 per name; no key read, no request, no ledger write
 
-Every asset is also capped at 3 requests (failed requests count). Only the assets listed in CAP_EXCEPTIONS (fig-guard,
-fig-jab: the user approved 5 on 2026-11-20 after two failed Codex reviews) may raise it with "request_cap" (<= 5) in the
+Every asset is also capped at 3 requests (failed requests count). Only the assets listed in CAP_EXCEPTIONS (fig-guard:
+the user approved 5 on 2026-11-20 after two failed Codex reviews) may raise it with "request_cap" (<= 5) in the
 prompt table, and only together with a non-empty "request_cap_reason"; anything else stops before any request.
 Tests: tools/silhouettes/test_gen.py.
 The OpenAI key is read ONLY at run time from %APPDATA%/agent-sprite-forge/config.json and is never printed:
@@ -29,8 +29,9 @@ PER_ASSET_CAP = 3
 DEFAULT_CAP = 20
 # The only assets allowed to raise their own cap (prompts.json "request_cap" + "request_cap_reason"), and to how much at most.
 # Written here, not in the prompt table, so a prompt edit can never unlock more paid requests:
-# fig-guard / fig-jab (sanshou): the user approved 5 on 2026-11-20 after two failed Codex reviews.
-CAP_EXCEPTIONS = {"fig-guard": 5, "fig-jab": 5}
+# fig-guard (sanshou): the user approved 5 on 2026-11-20 after two failed Codex reviews.
+# fig-jab had the same exception until the owner asked on 2026-11-20 to drop the adult jab from the home page (asset removed).
+CAP_EXCEPTIONS = {"fig-guard": 5}
 MAX_EXCEPTION_CAP = 5
 LOCK = threading.Lock()
 

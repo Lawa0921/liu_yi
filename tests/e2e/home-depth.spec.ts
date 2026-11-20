@@ -335,9 +335,10 @@ for (const size of [
         await expect(page.locator('html')).toHaveClass(/qi-static/);
         await page.waitForTimeout(500);
         expectVisibleDepth(await measureDepth(page), '減少動態：開場（海報）');
-        await scrollToBeat(page, 'combat-b');
+        // 大人的格鬥只有護架一段（combat-a；業主 2026-11-20 刪掉直拳，combat-b 只屬於小孩）
+        await scrollToBeat(page, 'combat-a');
         await page.waitForTimeout(500);
-        await expect(page.locator('[data-beat="combat-b"] .beat__still:visible')).toHaveCount(1);
+        await expect(page.locator('[data-beat="combat-a"] .beat__still:visible')).toHaveCount(1);
         expectVisibleDepth(await measureDepth(page), '減少動態：格鬥（靜態圖）');
       });
     });
@@ -445,12 +446,11 @@ const textBoxes = (page: Page): Promise<Box[]> =>
     return out;
   });
 
-/** 每一段都量（不只是有光點人形的那幾段）：前景是固定在視窗角落的，每一段停下來時都不得壓到文字。 */
+/** 每一段都量（不只是有光點人形的那幾段）：前景是固定在視窗角落的，每一段停下來時都不得壓到文字。大人沒有 combat-b（只屬於小孩）。 */
 const ALL_BEATS: { beat: BeatId; pose: string }[] = [
   { beat: 'opening', pose: 'land' },
   { beat: 'fist', pose: 'dingzhou' },
   { beat: 'combat-a', pose: 'guard' },
-  { beat: 'combat-b', pose: 'jab' },
   { beat: 'weapon-a', pose: 'jian' },
   { beat: 'weapon-b', pose: 'miaodao' },
   { beat: 'weapon-c', pose: 'spear' },
@@ -1020,7 +1020,7 @@ test.describe('重新整理還原捲動位置之後，前景照樣出現：桌�
   test.use({ viewport: { width: 1440, height: 900 } });
   test.describe.configure({ timeout: 240_000 });
 
-  test('在 15 個位置重新整理（瀏覽器還原捲動位置；含複審員量到的 4500），附近沒有文字的前景都看得見', async ({ page }) => {
+  test('在 15 個位置與每個課程段的段內位置重新整理（瀏覽器還原捲動位置；含複審員量到的 4500），還原不偏移、附近沒有文字的前景都看得見', async ({ page }) => {
     await page.addInitScript(() => {
       sessionStorage.setItem('liuyi:qi-intro', '1');
       const w = window as unknown as { __lastScroll: number };
@@ -1033,7 +1033,17 @@ test.describe('重新整理還原捲動位置之後，前景照樣出現：桌�
     const max = await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight);
     const stops: Stop[] = [];
     const stale: string[] = [];
-    const targets = [1500, 3000, 4500, 6000, 7500, ...Array.from({ length: 10 }, (_, i) => Math.round(max * (0.1 + (0.85 * i) / 10)))].filter((y) => y < max);
+    // 段內位置（每個課程段的上緣往下 1/4 段高）：這個測試擋掉了引擎，載入後會退回靜態圖（html.qi-static），段內的文字與靜態圖跟著換位置、段高不變。
+    // 若捲動錨定選中段內的子元素，Chrome 會跟著它把還原後的位置錯調約 150 px（2026-11-20 驗收抓到：大人少一段後取樣點踩進兵器段內才露出來）；
+    // home.css 讓段內子元素不當錨點（overflow-anchor: none），錨點落在段落本身。這些取樣點固定踩在段內，防回歸。
+    const inBeat = await page.evaluate(() =>
+      [...document.querySelectorAll<HTMLElement>('#courses [data-beat]')]
+        .map((el) => el.getBoundingClientRect())
+        .filter((r) => r.height > 0)
+        .map((r) => Math.round(r.top + window.scrollY + r.height / 4)),
+    );
+    expect(inBeat.length, '段內取樣點：每個看得見的課程段一個').toBeGreaterThanOrEqual(5);
+    const targets = [1500, 3000, 4500, 6000, 7500, ...Array.from({ length: 10 }, (_, i) => Math.round(max * (0.1 + (0.85 * i) / 10))), ...inBeat].filter((y) => y < max);
     for (const target of targets) {
       await page.evaluate((y) => window.scrollTo({ top: y, behavior: 'instant' }), target);
       await page.waitForTimeout(1000);
@@ -1044,7 +1054,8 @@ test.describe('重新整理還原捲動位置之後，前景照樣出現：桌�
         .poll(() => page.evaluate(() => document.getAnimations().filter((a) => a.playState !== 'finished' && a.effect?.getTiming().iterations !== Infinity).length), { timeout: 10_000 })
         .toBe(0);
       const rest = await restState(page);
-      expect(Math.abs(rest.y - target), `重新整理後還原到 ${target} 附近（版面高度在載入過程中會微調，差個十幾 px）`).toBeLessThan(150);
+      // 門檻 30 px：段高固定，正常只會差個十幾 px（升起動畫的 0.9rem 位移）；段內子元素被當成錨點時是 129–165 px，必須紅
+      expect(Math.abs(rest.y - target), `重新整理後還原到 ${target} 附近（捲動錨定不得跟著段內位移的子元素走）`).toBeLessThan(30);
       stops.push({ label: `重新整理於 ${target}`, fgs: rest.fgs });
       // 停住的狀態要是「最新的」：叫腳本照現在的版面再算一次（resize），任何一張前景的隱藏與否都不能變（文字離前景 6–12 px 的情況上面的幾何判斷不驗，這裡驗）
       const hidden = () => page.evaluate(() => [...document.querySelectorAll<HTMLImageElement>('.depth-fg img')].map((img) => `${img.dataset.asset}:${img.hasAttribute('data-fg-hide') ? 'hide' : 'show'}`));

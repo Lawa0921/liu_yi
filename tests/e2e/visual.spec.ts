@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
-import { BEATS, type BeatId } from '../../src/qi/config/poses';
+import { BEATS_FOR, type BeatId } from '../../src/qi/config/poses';
 import type { QiDebug } from '../../src/qi/engine/qi-stage';
 import { GATE_FADE_MS } from '../../src/scripts/home/gate';
 
@@ -469,8 +469,8 @@ function metricsOf(m: Measured, device: Device, texts: Box[], label: string): Me
 
 /**
  * 人形亮點外框高占 canvas 高的下限，依架勢與裝置分（依控制者裁定，取代計畫表的單一 45%–90%）：
- *   - 桌機：站姿（land、salute、guard）45%–90%；蹲低架勢（dingzhou、jab、kid-*）與 others（四個小人形）25%–90%。
- *     散手的直拳（jab）步型與護架相同，但出拳時重心前壓、主體高只有 land 的 91%，歸在蹲低架勢這一檔。
+ *   - 桌機：站姿（land、salute、guard）45%–90%；蹲低架勢（dingzhou、kid-*）與 others（四個小人形）25%–90%。
+ *     （散手原本的第二式直拳 jab 業主 2026-11-20 要求刪掉，大人格鬥只剩護架。）
  *   - 手機直向：站姿 35%–90%、蹲低架勢與 others 20%–90%。直向要讓位給下方的文字，取景（`engine/framing.ts`：可視寬固定 2.75 世界單位）
  *     是使用者看過的，所以不把取景拉近，改放寬門檻（實測：land 37.6%、salute 37.4%、kao 22.3%；kao 是散手改版前的貼山靠）。
  */
@@ -580,7 +580,6 @@ const HUMAN_CASES: HumanCase[] = [
   { pose: 'land', beat: 'opening', label: '開場落地後（land）', stance: 'stand', intro: true },
   { pose: 'dingzhou', beat: 'fist', label: 'dingzhou', stance: 'crouch' },
   { pose: 'guard', beat: 'combat-a', label: 'guard（散手護架）', stance: 'stand' },
-  { pose: 'jab', beat: 'combat-b', label: 'jab（散手直拳）', stance: 'crouch' },
   { pose: 'kid-wushu', beat: 'fist', label: 'kid-wushu（切小孩）', stance: 'crouch', kid: true },
   { pose: 'salute', beat: 'coaches', label: 'salute', stance: 'stand' },
   { pose: 'others', beat: 'others', label: 'others', stance: 'crouch' },
@@ -842,10 +841,10 @@ const hiddenRendered = (page: Page): Promise<string[]> =>
     return hidden;
   });
 
-/** 目前顯示的那組面板裡，每一段（BEATS）的靜態圖都可見、已載入；回傳每段一張視窗截圖（拼接圖用）。 */
+/** 目前顯示的那組面板裡，該對象的每一段（BEATS_FOR：大人沒有格鬥第二段）的靜態圖都可見、已載入；回傳每段一張視窗截圖（拼接圖用）。 */
 async function checkStills(page: Page, audience: 'adult' | 'kid', device: Device): Promise<Buffer[]> {
   const shots: Buffer[] = [];
-  for (const beat of BEATS) {
+  for (const beat of BEATS_FOR[audience]) {
     const section = page.locator(`[data-beat="${beat}"]`);
     await expect(section, `${beat} 段存在`).toHaveCount(1);
     await section.scrollIntoViewIfNeeded();

@@ -10,20 +10,34 @@
  *   - 不出現設計 §4 的反目標語彙。
  *   - 不放金額與時段（課表只有海報，不轉成文字，避免抄錯；收費方案不公開，只引導用 LINE 詢問）。
  */
-import type { BeatId } from './poses';
+import type { Audience, BeatId } from './poses';
 
-/** 課程段六個 beat 的序號（六藝，一路數到六）。 */
-export const BEAT_NO: Record<Extract<BeatId, 'fist' | 'combat-a' | 'combat-b' | 'weapon-a' | 'weapon-b' | 'weapon-c'>, string> = {
-  fist: '一',
-  'combat-a': '二',
-  'combat-b': '三',
-  'weapon-a': '四',
-  'weapon-b': '五',
-  'weapon-c': '六',
+type CourseBeatId = Extract<BeatId, 'fist' | 'combat-a' | 'combat-b' | 'weapon-a' | 'weapon-b' | 'weapon-c'>;
+
+/**
+ * 課程段各 beat 的序號：各對象自己從一路數下來，中間不跳號（頁面上看到的是一、二、三……）。
+ * 大人的格鬥只有護架一段（業主 2026-11-20 刪掉直拳，沒有 combat-b），所以大人是一到五；小孩仍是一到六。
+ */
+export const BEAT_NO: Record<Audience, Partial<Record<CourseBeatId, string>>> = {
+  adult: {
+    fist: '一',
+    'combat-a': '二',
+    'weapon-a': '三',
+    'weapon-b': '四',
+    'weapon-c': '五',
+  },
+  kid: {
+    fist: '一',
+    'combat-a': '二',
+    'combat-b': '三',
+    'weapon-a': '四',
+    'weapon-b': '五',
+    'weapon-c': '六',
+  },
 };
 
 export interface MoveCopy {
-  /** 序號（與 BEAT_NO 一致）。 */
+  /** 序號（與該對象的 BEAT_NO 一致）。 */
   no: string;
   /** 這一式的名稱。 */
   name: string;
@@ -49,9 +63,8 @@ export const COPY: {
   moves: {
     // 大人
     dingzhou: { no: '一', name: '頂肘', lines: ['沉身擰腰，肘尖向前頂出。'] },
-    // 散手技擊（格鬥）：拳擊／散打的實戰架式（業主附護架照片，待業主確認）
+    // 散手技擊（格鬥）：拳擊／散打的實戰架式（業主附護架照片）；第二式直拳業主 2026-11-20 要求刪掉
     guard: { no: '二', name: '護架', lines: ['雙拳護頭，側身站穩。'] },
-    jab: { no: '三', name: '直拳', lines: ['前手直線打出，後手護住下巴。'] },
     // 小孩：課程內文有首句時，頁面優先用首句（src/lib/home.ts 的 firstSentence），這裡是備用與名稱
     'kid-wushu': { no: '一', name: '起手', lines: ['雙拳護身，站穩再出手。'] },
     'kid-defense-a': { no: '二', name: '推掌', lines: ['一掌推出，守住自己的空間。'] },

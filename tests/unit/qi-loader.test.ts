@@ -212,8 +212,8 @@ describe('prefetchPlan（目前＋前後各 2 個 beat）', () => {
     expect([...prefetchPlan(1, 'kid', false)].sort()).toEqual(['kid-defense-a', 'kid-defense-b', 'kid-wushu', 'land']);
   });
 
-  it('中段（beat 5、大人）：視窗 beat 3–7，去重', () => {
-    expect([...prefetchPlan(5, 'adult', false)].sort()).toEqual(['jab', 'jian', 'miaodao', 'others', 'spear']);
+  it('中段（beat 5、大人）：視窗 beat 3–7，去重（大人沒有 combat-b，那一格延續護架）', () => {
+    expect([...prefetchPlan(5, 'adult', false)].sort()).toEqual(['guard', 'jian', 'miaodao', 'others', 'spear']);
   });
 
   it('目前這一格排最前面（先載最近的）', () => {

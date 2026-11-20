@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { BEATS, type BeatId } from '../../src/qi/config/poses';
+import { BEATS_FOR, type BeatId } from '../../src/qi/config/poses';
 import type { QiDebug } from '../../src/qi/engine/qi-stage';
 import { GATE_FADE_MS } from '../../src/scripts/home/gate';
 
@@ -13,7 +13,8 @@ const T0 = new Date('2026-01-01T08:00:00');
 const T1 = new Date('2026-01-01T09:00:00');
 const READY = { timeout: 30_000 };
 
-const ADULT_POSES = ['land', 'dingzhou', 'guard', 'jab', 'jian', 'miaodao', 'spear', 'others', 'salute', 'scroll', 'crest'];
+// 依 BEATS_FOR 的順序：大人沒有 combat-b（業主 2026-11-20 刪掉直拳，大人的格鬥只有護架），小孩是全部 11 段
+const ADULT_POSES = ['land', 'dingzhou', 'guard', 'jian', 'miaodao', 'spear', 'others', 'salute', 'scroll', 'crest'];
 const KID_POSES = ['land', 'kid-wushu', 'kid-defense-a', 'kid-defense-b', 'kid-weapon', 'kid-miaodao', 'kid-spear', 'others', 'salute', 'scroll', 'crest'];
 
 type QiGlobal = { ready: boolean; frames: number; tier: string; mode: string; debug?: QiDebug };
@@ -124,7 +125,8 @@ test.describe('捲動：beat 對應姿勢與散開量（桌機 1440×900）', ()
 
   test('逐個 beat 捲到中央：data-qi-pose 依序是大人的對應，停穩後 data-qi-scatter ≤ 0.05', async ({ page }) => {
     await open(page);
-    for (const [index, beat] of BEATS.entries()) {
+    expect(ADULT_POSES).toHaveLength(BEATS_FOR.adult.length);
+    for (const [index, beat] of BEATS_FOR.adult.entries()) {
       await scrollToBeat(page, beat);
       await run(page, 200);
       await expect(html(page), beat).toHaveAttribute('data-qi-pose', ADULT_POSES[index]!);
@@ -136,8 +138,9 @@ test.describe('捲動：beat 對應姿勢與散開量（桌機 1440×900）', ()
 
   test('捲到兩個 beat 的邊界：scatter ≥ 0.9，捲離後回到 ≤ 0.05', async ({ page }) => {
     await open(page);
-    for (let i = 1; i < BEATS.length; i++) {
-      const [before, after] = [BEATS[i - 1]!, BEATS[i]!];
+    const beats = BEATS_FOR.adult; // 大人的格鬥護架（combat-a）直接接兵器（weapon-a），中間沒有空白的一段
+    for (let i = 1; i < beats.length; i++) {
+      const [before, after] = [beats[i - 1]!, beats[i]!];
       await scrollToY(page, await boundaryY(page, before, after));
       await run(page, 200);
       expect(await scatterOf(page), `${before}｜${after} 邊界`).toBeGreaterThanOrEqual(0.9);
@@ -215,8 +218,9 @@ test.describe('大人｜小孩切換（桌機 1440×900）', () => {
     await run(page, 1500);
     expect(await scatterOf(page)).toBeLessThanOrEqual(0.05);
 
-    // 每個 beat 都換成小孩的對應
-    for (const [index, beat] of BEATS.entries()) {
+    // 每個 beat 都換成小孩的對應（小孩有全部 11 段，含格鬥第二段 combat-b）
+    expect(KID_POSES).toHaveLength(BEATS_FOR.kid.length);
+    for (const [index, beat] of BEATS_FOR.kid.entries()) {
       await scrollToBeat(page, beat);
       await run(page, 200);
       await expect(html(page), beat).toHaveAttribute('data-qi-pose', KID_POSES[index]!);
@@ -248,6 +252,39 @@ test.describe('大人｜小孩切換（桌機 1440×900）', () => {
       await expect(html(page), `${beat} 切回大人`).toHaveAttribute('data-qi-pose', adult);
       await run(page, 1500);
     }
+  });
+
+  test('大人沒有格鬥第二段：小孩停在 combat-b 時切到大人，畫面移回格鬥的護架（combat-a），不會跳到兵器；切回小孩仍在格鬥', async ({ page }) => {
+    await open(page, {
+      before: (p) => p.addInitScript(() => localStorage.setItem('liuyi:audience', 'kid')),
+    });
+    await scrollToBeat(page, 'combat-b');
+    await run(page, 1500);
+    await expect(html(page)).toHaveAttribute('data-qi-pose', 'kid-defense-b');
+
+    await page.locator('[data-audience-option="adult"]').click();
+    await expect(html(page)).toHaveAttribute('data-audience', 'adult');
+    await run(page, 200);
+    await expect(html(page)).toHaveAttribute('data-qi-beat', 'combat-a');
+    await expect(html(page)).toHaveAttribute('data-qi-pose', 'guard');
+    expect(Math.abs((await page.evaluate(() => window.scrollY)) - (await beatCenterY(page, 'combat-a'))), '護架那一段在視窗中央').toBeLessThanOrEqual(2);
+    await expect(page.locator('[data-beat="combat-b"]')).toBeHidden();
+
+    await page.locator('[data-audience-option="kid"]').click();
+    await run(page, 200);
+    await expect(html(page)).toHaveAttribute('data-qi-beat', 'combat-a');
+    await expect(html(page)).toHaveAttribute('data-qi-pose', 'kid-defense-a');
+  });
+
+  test('大人停在兵器第一段時切到小孩：上方多出格鬥第二段，畫面仍停在兵器（捲動錨定），姿勢換成小孩持劍', async ({ page }) => {
+    await open(page);
+    await scrollToBeat(page, 'weapon-a');
+    await run(page, 1500);
+    await expect(html(page)).toHaveAttribute('data-qi-pose', 'jian');
+    await page.locator('[data-audience-option="kid"]').click();
+    await run(page, 200);
+    await expect(html(page)).toHaveAttribute('data-qi-beat', 'weapon-a');
+    await expect(html(page)).toHaveAttribute('data-qi-pose', 'kid-weapon');
   });
 
   test('localStorage 預設小孩：第一個課程 beat 的 pose 就是小孩的，載入當下 scatter 不被切換觸發', async ({ page }) => {

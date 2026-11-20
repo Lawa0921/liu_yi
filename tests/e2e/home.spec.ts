@@ -90,22 +90,39 @@ for (const device of DEVICES) {
       await expect(page.getByText('詹前賢')).toHaveCount(0);
     });
 
-    test('兵器三段：小孩版各有一句小孩語氣的說明（持劍、持刀、持槍，編號四、五、六），大人版仍是大人的說明；名稱都是課程子項的名稱', async ({ page }) => {
+    test('兵器三段：小孩版各有一句小孩語氣的說明（持劍、持刀、持槍，編號四、五、六），大人版仍是大人的說明（大人格鬥只有一段，編號接著是三、四、五）；名稱都是課程子項的名稱', async ({ page }) => {
       await page.goto('./');
       const expected = {
         kid: { 'weapon-a': '雙手握穩，劍尖向前。', 'weapon-b': '低弓步，雙手握刀向前指。', 'weapon-c': '雙手持槍，穩穩向前扎。' },
         adult: { 'weapon-a': '劍走輕靈，點、刺、削、撩。', 'weapon-b': '雙手長刀，一刀一式，直來直往。', 'weapon-c': '大槍丈二，扎、攔、拿，步步進身。' },
       } as const;
-      const numbers = { 'weapon-a': '四', 'weapon-b': '五', 'weapon-c': '六' } as const;
+      const numbers = {
+        kid: { 'weapon-a': '四', 'weapon-b': '五', 'weapon-c': '六' },
+        adult: { 'weapon-a': '三', 'weapon-b': '四', 'weapon-c': '五' },
+      } as const;
       for (const audience of ['kid', 'adult'] as const) {
         for (const beat of ['weapon-a', 'weapon-b', 'weapon-c'] as const) {
           const item = page.locator(`[data-beat="${beat}"] [data-audience-panel="${audience}"] [data-sub-item]`);
           await expect(item, `${audience} ${beat}`).toHaveCount(1);
           const text = await item.innerText();
           expect(text, `${audience} ${beat}`).toContain(expected[audience][beat]);
-          expect(text, `${audience} ${beat} 編號`).toContain(numbers[beat]);
+          expect(text, `${audience} ${beat} 編號`).toContain(numbers[audience][beat]);
         }
       }
+    });
+
+    test('散手技擊（業主 2026-11-20）：大人只有「二 護架」一段，沒有直拳；小孩的防身格鬥仍是兩段（二、三）', async ({ page }) => {
+      await page.goto('./');
+      // 大人：格鬥第二段沒有大人的面板，頁面上整段不出現（高度 0），全頁沒有「直拳」
+      await expect(page.locator('[data-beat="combat-b"] [data-audience-panel="adult"]')).toHaveCount(0);
+      await expect(page.locator('[data-beat="combat-b"]')).toBeHidden();
+      await expect(page.locator('[data-beat="combat-a"] [data-audience-panel="adult"]')).toContainText('護架');
+      await expect(page.getByText('直拳')).toHaveCount(0);
+
+      await page.getByRole('button', { name: '小孩' }).click();
+      await expect(page.locator('[data-beat="combat-a"] [data-audience-panel="kid"]')).toBeVisible();
+      await expect(page.locator('[data-beat="combat-b"] [data-audience-panel="kid"]')).toBeVisible();
+      await expect(page.locator('[data-beat="combat-b"] [data-audience-panel="kid"]')).toContainText('三');
     });
 
     test('其他課程：巴西柔術、核心瑜珈，另有「所有課程」連到課程總覽', async ({ page }) => {
@@ -315,30 +332,46 @@ test.describe('段落跳轉：手機', () => {
 test.describe('課程段版面', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
-  test('切換鈕在課程段期間黏在畫面上方，離開課程段就收起；切換不改變頁面長度', async ({ page }) => {
+  test('切換鈕在課程段期間黏在畫面上方，離開課程段就收起；切換只多出（或收起）小孩才有的格鬥第二段，其餘長度不變', async ({ page }) => {
     await page.goto('./');
     const toggle = page.locator('.audience-switch__inner');
-    const heightBefore = await page.evaluate(() => document.documentElement.scrollHeight);
+    const scrollHeight = () => page.evaluate(() => document.documentElement.scrollHeight);
+    const heightBefore = await scrollHeight();
 
     await page.locator('[data-beat="combat-a"]').evaluate((el) => el.scrollIntoView({ block: 'center' }));
     await expect(toggle).toBeInViewport({ ratio: 1 });
     await page.getByRole('button', { name: '小孩' }).click();
-    expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(heightBefore);
+    const extra = await page.locator('[data-beat="combat-b"]').evaluate((el) => Math.round(el.getBoundingClientRect().height));
+    expect(extra).toBeGreaterThan(0);
+    expect(Math.abs((await scrollHeight()) - heightBefore - extra)).toBeLessThanOrEqual(1);
+    await page.getByRole('button', { name: '大人' }).click();
+    expect(await scrollHeight()).toBe(heightBefore);
 
     await page.locator('#booking').scrollIntoViewIfNeeded();
     await expect(toggle).not.toBeInViewport();
   });
 
-  test('每個課程 beat 的高度等於外框內可視高度', async ({ page }) => {
+  test('每個課程 beat 的高度等於外框內可視高度；大人沒有格鬥第二段（高度 0），小孩有', async ({ page }) => {
     await page.goto('./');
-    const heights = await page.evaluate(() =>
-      Array.from(document.querySelectorAll<HTMLElement>('#courses [data-beat]')).map((el) => ({
-        id: el.dataset.beat,
-        height: Math.round(el.getBoundingClientRect().height),
-      })),
-    );
-    expect(heights.map((h) => h.id)).toEqual(['fist', 'combat-a', 'combat-b', 'weapon-a', 'weapon-b', 'weapon-c']);
-    for (const { id, height } of heights) expect(height, id).toBeGreaterThanOrEqual(900 - 72 - 56 - 1);
+    const heights = () =>
+      page.evaluate(() =>
+        Array.from(document.querySelectorAll<HTMLElement>('#courses [data-beat]')).map((el) => ({
+          id: el.dataset.beat,
+          height: Math.round(el.getBoundingClientRect().height),
+        })),
+      );
+    const expected = {
+      adult: ['fist', 'combat-a', 'weapon-a', 'weapon-b', 'weapon-c'],
+      kid: ['fist', 'combat-a', 'combat-b', 'weapon-a', 'weapon-b', 'weapon-c'],
+    };
+    for (const audience of ['adult', 'kid'] as const) {
+      if (audience === 'kid') await page.getByRole('button', { name: '小孩' }).click();
+      const all = await heights();
+      expect(all.map((h) => h.id), audience).toEqual(expected.kid); // DOM 裡六段都在
+      const shown = all.filter((h) => h.height > 0);
+      expect(shown.map((h) => h.id), audience).toEqual(expected[audience]);
+      for (const { id, height } of shown) expect(height, `${audience} ${id}`).toBeGreaterThanOrEqual(900 - 72 - 56 - 1);
+    }
   });
 });
 

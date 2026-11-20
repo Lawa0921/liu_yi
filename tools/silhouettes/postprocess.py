@@ -6,7 +6,7 @@ Run: uv run --no-project --python 3.11 --with pillow --with numpy --with scipy p
                 default: $SILHOUETTES_WORK, else <repo>/.cache/silhouettes-raw  (git-ignored)
   --raw DIR     raw PNG source dir (default: <work>/raw)
   --out DIR     published output dir (default: <repo>/src/assets/silhouettes)
-  --batch N     selection table: 1 (default), 2, 3 (children's figures), 4 (fig-salute), 5 (fig-daqiang, Task 27), 6 (fig-kid-miaodao, fig-kid-daqiang), 7 (fig-miaodao, fig-kid-miaodao regenerated, Task 27 round 2) or 8 (fig-guard, fig-jab: sanshou)
+  --batch N     selection table: 1 (default), 2, 3 (children's figures), 4 (fig-salute), 5 (fig-daqiang, Task 27), 6 (fig-kid-miaodao, fig-kid-daqiang), 7 (fig-miaodao, fig-kid-miaodao regenerated, Task 27 round 2) or 8 (fig-guard: sanshou)
   --preview     also write gold-on-dark previews to <work>/qa-preview/
 
 The pass/fail gate is scripts/qi/silhouette-qa.ts (run by tests/unit/silhouette-assets.test.ts on the published
@@ -80,13 +80,14 @@ SEL7 = {
     "fig-miaodao":     ("t27r1", "fig", dict(close=0, fill=900, crop="bbox")),
     "fig-kid-miaodao": ("t27r1", "fig", dict(close=0, fill=900, crop="bbox")),
 }
-# Batch 8 (run with --batch 8): sanshou (散手技擊) fighting guard and lead straight punch for the adult combat beats; they replace
-# fig-chengchui / fig-kao on the home page only (those two stay for the course sub-pages and the "others" compose).
-# flip: mirror left-right so the fighter faces RIGHT (the jab travels toward +x, the same side as the burst direction).
-# widen (fig-guard, fig-jab): see process(); the boxes cover the two fists and the chin, so only those gaps open up.
+# Batch 8 (run with --batch 8): sanshou (散手技擊) fighting guard for the adult combat beat; it replaces fig-chengchui on the
+# home page only (that one stays for the course sub-pages and the "others" compose).
+# fig-jab (the lead straight punch, raw ss5) was removed: the owner asked on 2026-11-20 to drop the adult jab, so it is no longer
+# published (rerunning this batch must not put it back into src/assets/silhouettes).
+# flip: mirror left-right so the fighter faces RIGHT (the same side as the burst direction).
+# widen: see process(); the boxes cover the two fists and the chin, so only those gaps open up.
 SEL8 = {
     "fig-guard": ("ss3", "fig", dict(close=3, fill=400, crop="bbox", flip=True, widen=(((395, 340, 418, 440), (462, 350, 508, 398)), 10, 12))),
-    "fig-jab":   ("ss5", "fig", dict(close=3, fill=400, crop="bbox", flip=True, widen=(((455, 390, 510, 425),), 10, 12))),
 }
 SELECTIONS = {"1": SEL, "2": SEL2, "3": SEL3, "4": SEL4, "5": SEL5, "6": SEL6, "7": SEL7, "8": SEL8}
 
@@ -147,7 +148,7 @@ def process(name, sel, raw, out_dir, work, preview):
         mask = a > 127
     # 2b. widen: inside the boxes (raw, un-flipped coords x0, y0, x1, y1) thin the shape by r px, fading out over `feather` px
     #     outside the boxes so the outline has no step. It opens the narrow necks between fists and face that the model drew
-    #     too tight (fig-guard / fig-jab), so the fists stay separate after the particle rendering; an anti-aliased edge is kept.
+    #     too tight (fig-guard), so the fists stay separate after the particle rendering; an anti-aliased edge is kept.
     if o.get("widen"):
         boxes, wr, feather = o["widen"]
         box = np.zeros_like(mask)

@@ -522,6 +522,16 @@ html.js[data-gate] .opening__lockup > * {
   padding: var(--space-7) var(--home-pad);
 }
 
+/*
+ * 捲動錨定只認段落本身，不認段內的子元素（2026-11-20 驗收：重新整理後還原的捲動位置偏約 150 px）。
+ * 段高固定，但段內的版面會在載入之後才變：引擎載不到、退回靜態圖（html.qi-static）時靜態圖出現、文字換位置。
+ * Chrome 若選中段內的文字當錨點，會跟著它的位移改 scrollY，還原到的位置就錯了。段內子元素不當錨點，錨點落在段落本身
+ * （段落沒動就不調整）；段落上方真的有段落出現或收起時（換對象時小孩才有的格鬥第二段），錨定照樣讓目前這一段留在原處。
+ */
+[data-beat] * {
+  overflow-anchor: none;
+}
+
 .beat__panel {
   position: relative;
   display: grid;
@@ -558,6 +568,16 @@ html:not([data-audience]) .beat__audience {
 html:not([data-audience]) .beat--course {
   align-content: center;
   gap: var(--space-8);
+}
+
+/*
+ * 只屬於某一個對象的 beat（CourseBeat 的 data-beat-only；例如大人沒有的格鬥第二式，業主 2026-11-20 刪掉直拳）：
+ * 另一個對象的頁面上整段不出現——高度 0，捲動模型（qi/engine/scroll-model.ts）直接跳過，不會留下一段空白。
+ * 沒有 JS（沒有 data-audience）時兩組面板都顯示，這一段照常出現。
+ */
+html[data-audience='adult'] [data-beat-only='kid'],
+html[data-audience='kid'] [data-beat-only='adult'] {
+  display: none;
 }
 
 /* 對象切換時，新那一組的文字輕輕升起（只動 transform 與 opacity）。 */

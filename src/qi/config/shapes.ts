@@ -66,7 +66,6 @@ export const SHAPES: Record<string, ShapeRecipe> = {
   chengchui: { kind: 'figure', figure: 'chengchui' },
   kao: { kind: 'figure', figure: 'kao' },
   guard: { kind: 'figure', figure: 'guard' },
-  jab: { kind: 'figure', figure: 'jab' },
   jian: { kind: 'armed', armed: 'jian' },
   miaodao: { kind: 'armed', armed: 'miaodao' },
   spear: { kind: 'armed', armed: 'spear' },

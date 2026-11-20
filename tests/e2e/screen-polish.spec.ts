@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { QiDebug } from '../../src/qi/engine/qi-stage';
-import type { BeatId } from '../../src/qi/config/poses';
+import { beatShownFor, type BeatId } from '../../src/qi/config/poses';
 
 // Task 22b「畫面修飾」：審查累積的「看得見」瑕疵，用幾何與樣式斷言釘住。
 //   1. 寬螢幕的大槍（與劍、妙刀）不壓到右緣的段落導覽（nav.home-rail）
@@ -354,10 +354,11 @@ for (const [label, sizes, beats] of [
       test.use({ viewport: size });
 
       for (const beat of beats) {
-        test(`${beat} 段：切換鈕與 .beat__text 不相交（大人、小孩）`, async ({ page }) => {
+        test(`${beat} 段：切換鈕與 .beat__text 不相交（大人、小孩；只屬於一個對象的段落只量那個對象）`, async ({ page }) => {
           await open(page);
-          for (const audience of ['adult', 'kid'] as const) {
-            await scrollToBeat(page, beat);
+          // 格鬥第二段（combat-b）大人沒有（業主 2026-11-20 刪掉直拳）：只量小孩；切換前先停在兩個對象都有的格鬥第一段
+          for (const audience of (['adult', 'kid'] as const).filter((a) => beatShownFor(beat, a))) {
+            await scrollToBeat(page, beatShownFor(beat, 'adult') ? beat : 'combat-a');
             await page.clock.runFor(300);
             await page.locator(`.audience-switch__option[data-audience-option="${audience}"]`).click();
             await scrollToBeat(page, beat); // 切換後文字長度可能不同，重新置中
