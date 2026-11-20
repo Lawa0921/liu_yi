@@ -31,11 +31,16 @@ class AssetCap(unittest.TestCase):
 
     def test_listed_asset_with_cap_five_and_reason_passes(self):
         self.assertEqual(self.cap("fig-guard", {"request_cap": 5, "request_cap_reason": REASON}), 5)
-        self.assertEqual(self.cap("fig-jab", {"request_cap": 5, "request_cap_reason": REASON}), 5)
 
     def test_asset_outside_the_exception_list_is_refused(self):
         with self.assertRaises(SystemExit):
             self.cap("fig-kao", {"request_cap": 5, "request_cap_reason": REASON})
+
+    def test_removed_jab_can_no_longer_raise_its_cap(self):
+        # the owner asked on 2026-11-20 to drop the adult jab from the home page; fig-jab is no longer an exception
+        self.assertNotIn("fig-jab", gen.CAP_EXCEPTIONS)
+        with self.assertRaises(SystemExit):
+            self.cap("fig-jab", {"request_cap": 5, "request_cap_reason": REASON})
 
     def test_missing_or_blank_reason_is_refused(self):
         with self.assertRaises(SystemExit):
@@ -46,17 +51,15 @@ class AssetCap(unittest.TestCase):
     def test_cap_above_five_is_refused(self):
         with self.assertRaises(SystemExit):
             self.cap("fig-guard", {"request_cap": 99, "request_cap_reason": REASON})
-        with self.assertRaises(SystemExit):
-            self.cap("fig-jab", {"request_cap": 6, "request_cap_reason": REASON})
 
     def test_non_integer_cap_is_refused(self):
         with self.assertRaises(SystemExit):
             self.cap("fig-guard", {"request_cap": "5", "request_cap_reason": REASON})
 
-    def test_real_prompt_table_only_the_two_sanshou_assets_carry_a_cap(self):
+    def test_real_prompt_table_only_the_sanshou_guard_carries_a_cap(self):
         with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "prompts.json"), encoding="utf-8") as f:
             assets = json.load(f)["assets"]
-        self.assertEqual(sorted(n for n, a in assets.items() if "request_cap" in a), ["fig-guard", "fig-jab"])
+        self.assertEqual(sorted(n for n, a in assets.items() if "request_cap" in a), ["fig-guard"])
         for name in assets:
             gen.asset_cap(os.path.join(os.path.dirname(os.path.abspath(__file__)), "prompts.json"), name)
 

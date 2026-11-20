@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BEAT_NO, COPY } from '../../src/qi/config/copy';
-import { poseFor } from '../../src/qi/config/poses';
+import { BEATS_FOR, poseFor } from '../../src/qi/config/poses';
 
 /** 把 COPY 裡所有字串攤平（含巢狀物件與陣列）。 */
 function strings(value: unknown): string[] {
@@ -44,8 +44,8 @@ describe('首頁文案（設計 §4 閘門）', () => {
 });
 
 describe('首頁文案的結構', () => {
-  it('moves 涵蓋 dingzhou、guard、jab，每式有序號、名稱與至少一行', () => {
-    for (const key of ['dingzhou', 'guard', 'jab']) {
+  it('moves 涵蓋 dingzhou、guard，每式有序號、名稱與至少一行', () => {
+    for (const key of ['dingzhou', 'guard']) {
       const move = COPY.moves[key];
       expect(move, key).toBeDefined();
       expect(move!.no, key).not.toBe('');
@@ -54,15 +54,16 @@ describe('首頁文案的結構', () => {
     }
   });
 
-  it('大人的拳、格鬥三式：首頁實際用到的姿勢都有文案', () => {
-    for (const beat of ['fist', 'combat-a', 'combat-b'] as const) {
+  it('大人的拳、格鬥兩式：首頁實際用到的姿勢都有文案', () => {
+    for (const beat of ['fist', 'combat-a'] as const) {
       expect(COPY.moves[poseFor(beat, 'adult')], beat).toBeDefined();
     }
   });
 
-  it('散手技擊（大人格鬥）兩式：護架、直拳（待業主確認的提案文案）', () => {
+  it('散手技擊（大人格鬥）只剩護架：業主 2026-11-20 要求刪掉直拳，文案也一起拿掉', () => {
     expect(COPY.moves.guard).toEqual({ no: '二', name: '護架', lines: ['雙拳護頭，側身站穩。'] });
-    expect(COPY.moves.jab).toEqual({ no: '三', name: '直拳', lines: ['前手直線打出，後手護住下巴。'] });
+    expect(COPY.moves.jab).toBeUndefined();
+    expect(ALL.filter((text) => text.includes('直拳'))).toEqual([]);
     // 舊的八極招式文案隨首頁姿勢一起換掉
     expect(COPY.moves.chengchui).toBeUndefined();
     expect(COPY.moves.kao).toBeUndefined();
@@ -90,16 +91,23 @@ describe('首頁文案的結構', () => {
     expect(COPY.others.all).toBe('所有課程');
   });
 
-  it('招式序號與 beat 序號一致（六個 beat 依序一到六）', () => {
-    expect(Object.values(BEAT_NO)).toEqual(['一', '二', '三', '四', '五', '六']);
-    expect(COPY.moves.dingzhou!.no).toBe(BEAT_NO.fist);
-    expect(COPY.moves.guard!.no).toBe(BEAT_NO['combat-a']);
-    expect(COPY.moves.jab!.no).toBe(BEAT_NO['combat-b']);
-    expect(COPY.moves['kid-wushu']!.no).toBe(BEAT_NO.fist);
-    expect(COPY.moves['kid-defense-a']!.no).toBe(BEAT_NO['combat-a']);
-    expect(COPY.moves['kid-defense-b']!.no).toBe(BEAT_NO['combat-b']);
-    expect(COPY.moves['kid-weapon']!.no).toBe(BEAT_NO['weapon-a']);
-    expect(COPY.moves['kid-miaodao']!.no).toBe(BEAT_NO['weapon-b']);
-    expect(COPY.moves['kid-spear']!.no).toBe(BEAT_NO['weapon-c']);
+  it('序號是各對象自己一路數下來：大人五段（一到五，格鬥只有護架），小孩六段（一到六），中間不跳號', () => {
+    expect(BEAT_NO.adult).toEqual({ fist: '一', 'combat-a': '二', 'weapon-a': '三', 'weapon-b': '四', 'weapon-c': '五' });
+    expect(BEAT_NO.kid).toEqual({ fist: '一', 'combat-a': '二', 'combat-b': '三', 'weapon-a': '四', 'weapon-b': '五', 'weapon-c': '六' });
+    // 序號的鍵恰是該對象首頁實際出現的課程 beat
+    for (const audience of ['adult', 'kid'] as const) {
+      expect(Object.keys(BEAT_NO[audience]), audience).toEqual(BEATS_FOR[audience].filter((beat) => beat in BEAT_NO.kid));
+    }
+  });
+
+  it('招式序號與該對象的 beat 序號一致', () => {
+    expect(COPY.moves.dingzhou!.no).toBe(BEAT_NO.adult.fist);
+    expect(COPY.moves.guard!.no).toBe(BEAT_NO.adult['combat-a']);
+    expect(COPY.moves['kid-wushu']!.no).toBe(BEAT_NO.kid.fist);
+    expect(COPY.moves['kid-defense-a']!.no).toBe(BEAT_NO.kid['combat-a']);
+    expect(COPY.moves['kid-defense-b']!.no).toBe(BEAT_NO.kid['combat-b']);
+    expect(COPY.moves['kid-weapon']!.no).toBe(BEAT_NO.kid['weapon-a']);
+    expect(COPY.moves['kid-miaodao']!.no).toBe(BEAT_NO.kid['weapon-b']);
+    expect(COPY.moves['kid-spear']!.no).toBe(BEAT_NO.kid['weapon-c']);
   });
 });

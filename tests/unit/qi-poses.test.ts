@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { SHAPES } from '../../src/qi/config/shapes';
 import {
   BEATS,
+  BEATS_FOR,
   BURSTS,
   POSE_BY_BEAT,
+  beatShownFor,
   poseFor,
   type Audience,
   type BeatId,
@@ -13,8 +15,9 @@ import {
 const AUDIENCES: Audience[] = ['adult', 'kid'];
 
 /**
- * 二十二個姿勢（依型別宣告順序）：計畫的十六個，加上 Task 25 的 scroll（竹簡）與 crest（光點館徽）、Task 27 的小孩持刀與持槍，
- * 以及散手改版的 guard（護架）與 jab（直拳）。chengchui／kao 仍是合法姿勢（其他課程的四小人形、引擎測試還在用），只是不再屬於首頁的 beat。
+ * 二十一個姿勢（依型別宣告順序）：計畫的十六個，加上 Task 25 的 scroll（竹簡）與 crest（光點館徽）、Task 27 的小孩持刀與持槍，
+ * 以及散手改版的 guard（護架）。chengchui／kao 仍是合法姿勢（其他課程的四小人形、引擎測試還在用），只是不再屬於首頁的 beat。
+ * 散手的 jab（直拳）業主 2026-11-20 要求刪掉，已不是合法姿勢。
  */
 const ALL_POSES: PoseId[] = [
   'lift',
@@ -23,7 +26,6 @@ const ALL_POSES: PoseId[] = [
   'chengchui',
   'kao',
   'guard',
-  'jab',
   'jian',
   'miaodao',
   'spear',
@@ -71,7 +73,8 @@ describe('POSE_BY_BEAT', () => {
       opening: 'land',
       fist: 'dingzhou',
       'combat-a': 'guard',
-      'combat-b': 'jab',
+      // 大人沒有這一段（BEATS_FOR.adult 不含 combat-b，頁面上整段不顯示）；萬一被捲到也停在護架，不換姿勢、不炸開
+      'combat-b': 'guard',
       'weapon-a': 'jian',
       'weapon-b': 'miaodao',
       'weapon-c': 'spear',
@@ -82,11 +85,12 @@ describe('POSE_BY_BEAT', () => {
     });
   });
 
-  it('大人格鬥（散手技擊）兩式是拳擊／散打的實戰架式：combat-a 護架（guard）、combat-b 前手直拳（jab），不再是八極的撐捶、貼山靠', () => {
+  it('大人格鬥（散手技擊）只剩一式：combat-a 護架（guard）；業主 2026-11-20 要求刪掉直拳，不再是八極的撐捶、貼山靠', () => {
     expect(poseFor('combat-a', 'adult')).toBe('guard');
-    expect(poseFor('combat-b', 'adult')).toBe('jab');
+    expect(poseFor('combat-b', 'adult'), '大人沒有 combat-b；保險起見延續護架').toBe('guard');
     expect(Object.values(POSE_BY_BEAT.adult)).not.toContain('chengchui');
     expect(Object.values(POSE_BY_BEAT.adult)).not.toContain('kao');
+    expect(Object.values(POSE_BY_BEAT.adult)).not.toContain('jab');
     // 小孩的格鬥兩式不變
     expect(poseFor('combat-a', 'kid')).toBe('kid-defense-a');
     expect(poseFor('combat-b', 'kid')).toBe('kid-defense-b');
@@ -150,9 +154,25 @@ describe('poseFor', () => {
   });
 });
 
+describe('各對象實際出現的 beat（BEATS_FOR、beatShownFor）', () => {
+  it('業主 2026-11-20：大人「散手技擊」只留護架，沒有 combat-b；小孩的防身格鬥仍是兩段', () => {
+    expect(BEATS_FOR.adult).toEqual(BEATS.filter((beat) => beat !== 'combat-b'));
+    expect(BEATS_FOR.kid).toEqual(BEATS);
+    expect(beatShownFor('combat-b', 'adult')).toBe(false);
+    expect(beatShownFor('combat-b', 'kid')).toBe(true);
+  });
+
+  it('其餘 beat 兩個對象都有', () => {
+    for (const beat of BEATS) {
+      if (beat === 'combat-b') continue;
+      for (const audience of AUDIENCES) expect(beatShownFor(beat, audience), `${audience}/${beat}`).toBe(true);
+    }
+  });
+});
+
 describe('BURSTS', () => {
-  it('涵蓋全部 22 個 PoseId，且沒有多餘的鍵', () => {
-    expect(ALL_POSES).toHaveLength(22);
+  it('涵蓋全部 21 個 PoseId，且沒有多餘的鍵', () => {
+    expect(ALL_POSES).toHaveLength(21);
     expect(Object.keys(BURSTS).sort()).toEqual([...ALL_POSES].sort());
   });
 
@@ -179,12 +199,9 @@ describe('BURSTS', () => {
     expect(BURSTS.lift).toEqual({ dir: [0, 1, 0], power: 1.8, mode: 2, hold: 0.5 });
   });
 
-  it('散手兩式：護架左右分開（同撐捶、小孩格鬥的 mode 1／3.0）；直拳順著出拳方向（+x，前手朝右打出）炸開', () => {
+  it('散手護架左右分開（同撐捶、小孩格鬥的 mode 1／3.0）；直拳已刪除，衝量表沒有 jab', () => {
     expect(BURSTS.guard).toEqual({ dir: [1, 0.1, 0], power: 3.0, mode: 1 });
-    expect(BURSTS.jab.mode).toBe(0);
-    expect(BURSTS.jab.dir[0]).toBeGreaterThan(0);
-    expect(Math.abs(BURSTS.jab.dir[1]), '直拳是水平打出').toBeLessThan(0.2);
-    expect(BURSTS.jab.power).toBeGreaterThanOrEqual(3.0);
+    expect(Object.keys(BURSTS)).not.toContain('jab');
   });
 
   it('新姿勢：others／salute 用 mode 2 且力道 1.4–1.8；flow 輕緩；seal 向內收（mode 3）', () => {

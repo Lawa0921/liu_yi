@@ -560,6 +560,16 @@ html:not([data-audience]) .beat--course {
   gap: var(--space-8);
 }
 
+/*
+ * 只屬於某一個對象的 beat（CourseBeat 的 data-beat-only；例如大人沒有的格鬥第二式，業主 2026-11-20 刪掉直拳）：
+ * 另一個對象的頁面上整段不出現——高度 0，捲動模型（qi/engine/scroll-model.ts）直接跳過，不會留下一段空白。
+ * 沒有 JS（沒有 data-audience）時兩組面板都顯示，這一段照常出現。
+ */
+html[data-audience='adult'] [data-beat-only='kid'],
+html[data-audience='kid'] [data-beat-only='adult'] {
+  display: none;
+}
+
 /* 對象切換時，新那一組的文字輕輕升起（只動 transform 與 opacity）。 */
 @media (prefers-reduced-motion: no-preference) {
   html.js .beat--course .beat__text {

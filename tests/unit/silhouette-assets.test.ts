@@ -21,6 +21,8 @@ interface ProvenanceEntry {
   requestCapException?: { cap: number; reason: string };
   /** 預覽佔位（status = placeholder）為什麼先上線、之後怎麼處理。 */
   placeholderReason?: string;
+  /** 已移除（status = removed）：為什麼拿掉。紀錄留著追溯，檔案不得留在 runtime 路徑。 */
+  removedReason?: string;
 }
 const provenance = JSON.parse(readFileSync(file('provenance.json'), 'utf8')) as Record<string, ProvenanceEntry>;
 
@@ -28,13 +30,17 @@ const provenance = JSON.parse(readFileSync(file('provenance.json'), 'utf8')) as 
 const BASELINE_READY = ['fig-zhenjiao', 'fig-zhenjiao-land', 'fig-dingzhou', 'fig-chengchui', 'fig-kao'];
 
 /**
- * 生圖上限的例外（其餘素材一律 ≤ 3 次）：散手兩式 Codex 視覺評審兩輪未過，使用者 2026-11-20 核准放寬到 5 次。
- * provenance 的 `requestCapException` 要寫明同樣的上限與理由；不在這張表的素材不可以有這個欄位。
+ * 生圖上限的例外（其餘素材一律 ≤ 3 次）：散手護架 Codex 視覺評審兩輪未過，使用者 2026-11-20 核准放寬到 5 次。
+ * provenance 的 `requestCapException` 要寫明同樣的上限與理由；不在這張表的素材不可以有這個欄位
+ * （已移除的素材除外：它當時用過的例外留在紀錄裡追溯，但不再能生圖，見下方 REMOVED）。
  */
-const REQUEST_CAP_EXCEPTIONS: Record<string, number> = { 'fig-guard': 5, 'fig-jab': 5 };
+const REQUEST_CAP_EXCEPTIONS: Record<string, number> = { 'fig-guard': 5 };
 
-/** 預覽佔位：可以先接進首頁讓使用者看，但狀態必須是 placeholder（待重生），不能冒充 approved。 */
-const PLACEHOLDERS = ['fig-jab'];
+/** 預覽佔位：可以先接進首頁讓使用者看，但狀態必須是 placeholder（待重生），不能冒充 approved。目前沒有。 */
+const PLACEHOLDERS: string[] = [];
+
+/** 已移除的素材：provenance 標 removed 並寫明原因；不在剪影清單裡，檔案也不得留在 runtime 路徑。 */
+const REMOVED = ['fig-jab'];
 
 describe('剪影清單（src/qi/config/silhouettes.ts）', () => {
   it('已核可清單不為空，且包含最初的五張', () => {
@@ -103,14 +109,33 @@ describe.each(SILHOUETTES_READY)('已核可剪影 %s', (name) => {
   });
 });
 
-describe('生圖上限的例外', () => {
-  const withException = Object.entries(provenance).filter(([, entry]) => entry.requestCapException !== undefined);
-
-  it('provenance 裡帶 requestCapException 的條目恰為例外名單（不限 SILHOUETTES_READY）', () => {
-    expect(withException.map(([name]) => name).sort()).toEqual(Object.keys(REQUEST_CAP_EXCEPTIONS).sort());
+describe('已移除的素材', () => {
+  it.each(REMOVED)('%s：provenance 標 removed、寫明業主要求的原因；不在剪影清單；.png／.webp 已從 runtime 路徑刪除', (name) => {
+    const entry = provenance[name];
+    expect(entry, `provenance.json 要留 ${name} 的紀錄`).toBeDefined();
+    expect(entry!.status).toBe('removed');
+    expect(entry!.removedReason).toBe('業主 2026-11-20 要求首頁散手大人刪掉直拳');
+    expect(SILHOUETTES_READY).not.toContain(name);
+    expect(SILHOUETTES_PLANNED).not.toContain(name);
+    expect(existsSync(file(`${name}.png`)), `${name}.png`).toBe(false);
+    expect(existsSync(file(`${name}.webp`)), `${name}.webp`).toBe(false);
   });
 
-  it.each(withException)('%s：上限與名單一致、≤ 5，理由寫明日期、「使用者」與「核准」或「決定」', (name, entry) => {
+  it('removed 狀態只用在 REMOVED 名單裡的素材', () => {
+    const removed = Object.entries(provenance).filter(([, entry]) => entry.status === 'removed').map(([name]) => name);
+    expect(removed.sort()).toEqual([...REMOVED].sort());
+  });
+});
+
+describe('生圖上限的例外', () => {
+  const withException = Object.entries(provenance).filter(([, entry]) => entry.requestCapException !== undefined);
+  const active = withException.filter(([name]) => !REMOVED.includes(name));
+
+  it('provenance 裡帶 requestCapException 的條目（已移除的除外）恰為例外名單（不限 SILHOUETTES_READY）', () => {
+    expect(active.map(([name]) => name).sort()).toEqual(Object.keys(REQUEST_CAP_EXCEPTIONS).sort());
+  });
+
+  it.each(active)('%s：上限與名單一致、≤ 5，理由寫明日期、「使用者」與「核准」或「決定」', (name, entry) => {
     expect(entry.requestCapException!.cap).toBe(REQUEST_CAP_EXCEPTIONS[name]);
     expect(entry.requestCapException!.cap).toBeLessThanOrEqual(5);
     expect(entry.requests).toBeLessThanOrEqual(entry.requestCapException!.cap);

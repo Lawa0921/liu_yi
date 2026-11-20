@@ -580,8 +580,9 @@
       "cap": 5,
       "reason": "使用者 2026-11-20 核准：Codex 視覺評審兩輪未過，fig-guard、fig-jab 兩張的生圖上限由 3 次放寬到 5 次（例外，其他素材仍 ≤ 3）"
     },
-    "status": "placeholder",
-    "placeholderReason": "使用者 2026-11-20 決定先上線給業主確認，依業主意見決定是否重生",
+    "status": "removed",
+    "removedReason": "業主 2026-11-20 要求首頁散手大人刪掉直拳",
+    "removedNote": "原為預覽佔位（使用者 2026-11-20 決定先上線給業主確認，依業主意見決定是否重生）；業主看過後要求刪掉，.png／.webp 已從 src/assets/silhouettes 移除，不再生成。紀錄保留供追溯。",
     "qa": {
       "raw": "fig-jab-ss5.png",
       "kind": "fig",

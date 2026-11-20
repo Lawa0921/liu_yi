@@ -335,9 +335,10 @@ for (const size of [
         await expect(page.locator('html')).toHaveClass(/qi-static/);
         await page.waitForTimeout(500);
         expectVisibleDepth(await measureDepth(page), '減少動態：開場（海報）');
-        await scrollToBeat(page, 'combat-b');
+        // 大人的格鬥只有護架一段（combat-a；業主 2026-11-20 刪掉直拳，combat-b 只屬於小孩）
+        await scrollToBeat(page, 'combat-a');
         await page.waitForTimeout(500);
-        await expect(page.locator('[data-beat="combat-b"] .beat__still:visible')).toHaveCount(1);
+        await expect(page.locator('[data-beat="combat-a"] .beat__still:visible')).toHaveCount(1);
         expectVisibleDepth(await measureDepth(page), '減少動態：格鬥（靜態圖）');
       });
     });
@@ -445,12 +446,11 @@ const textBoxes = (page: Page): Promise<Box[]> =>
     return out;
   });
 
-/** 每一段都量（不只是有光點人形的那幾段）：前景是固定在視窗角落的，每一段停下來時都不得壓到文字。 */
+/** 每一段都量（不只是有光點人形的那幾段）：前景是固定在視窗角落的，每一段停下來時都不得壓到文字。大人沒有 combat-b（只屬於小孩）。 */
 const ALL_BEATS: { beat: BeatId; pose: string }[] = [
   { beat: 'opening', pose: 'land' },
   { beat: 'fist', pose: 'dingzhou' },
   { beat: 'combat-a', pose: 'guard' },
-  { beat: 'combat-b', pose: 'jab' },
   { beat: 'weapon-a', pose: 'jian' },
   { beat: 'weapon-b', pose: 'miaodao' },
   { beat: 'weapon-c', pose: 'spear' },

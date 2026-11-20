@@ -5,6 +5,8 @@
 //   - 兵器的三個 beat 各有一個 [data-sub-item]（中國劍／苗刀／大槍＋一行）；最後一件另有「看真兵器」，連到該對象自己的兵器課（大人＝中式兵器，小孩＝防身兵器）。
 // 招式註解：大人取自 copy.ts；小孩的課程首句取自課程內文（例如防身格鬥的「戴上拳套，學會出手，也學會收手。」）。
 // 某對象沒有這個分類的課時，該對象的面板只剩靜態圖（RF4）。
+// 只屬於某一個對象的 beat（poses.ts 的 BEAT_ONLY_FOR，例如大人沒有的格鬥第二式）：只輸出那個對象的面板，段落標 data-beat-only，
+// 另一個對象的頁面上整段 display: none（home.css），高度 0，捲動模型跳過它。
 import MoveBlock from './MoveBlock.astro';
 import Still from './Still.astro';
 import { AUDIENCES, AUDIENCE_LABEL, type Audience } from '../../lib/courses';
@@ -12,7 +14,7 @@ import type { Course } from '../../lib/content';
 import { firstSentence, type StepModel } from '../../lib/home';
 import { url } from '../../lib/url';
 import { BEAT_NO, COPY } from '../../qi/config/copy';
-import { poseFor, type BeatId } from '../../qi/config/poses';
+import { BEAT_ONLY_FOR, beatShownFor, poseFor, type BeatId } from '../../qi/config/poses';
 
 interface Props {
   /** 課程段的 beat（fist、combat-a、combat-b、weapon-a、weapon-b、weapon-c）。 */
@@ -41,7 +43,8 @@ function moveFor(audience: Audience, course: Course): Move | undefined {
     const item = course.data.subItems[weapon.index];
     // 小孩版（Task 27 追加）：兵器三段都有小孩持械的姿勢與一句小孩語氣的說明（COPY.moves 的 kid-weapon／kid-miaodao／kid-spear）；名稱仍是課程子項的名稱
     const line = audience === 'kid' ? COPY.moves[poseFor(beat, 'kid')]?.lines[0] : undefined;
-    return item ? { no: BEAT_NO[beat as keyof typeof BEAT_NO], name: item.name, lines: [line ?? COPY.weapons[weapon.kind]] } : undefined;
+    const no = BEAT_NO[audience][beat as keyof typeof WEAPONS];
+    return item && no ? { no, name: item.name, lines: [line ?? COPY.weapons[weapon.kind]] } : undefined;
   }
   const copy = COPY.moves[poseFor(beat, audience)];
   if (!copy) return undefined;
@@ -50,13 +53,14 @@ function moveFor(audience: Audience, course: Course): Move | undefined {
   return { no: copy.no, name: copy.name, lines: [first || copy.lines[0], ...rest].filter((line): line is string => Boolean(line)) };
 }
 
-const panels = AUDIENCES.map((audience) => {
+const panels = AUDIENCES.filter((audience) => beatShownFor(beat, audience)).map((audience) => {
   const course = step[audience];
   return { audience, course, move: course ? moveFor(audience, course) : undefined, still: poseFor(beat, audience) };
 });
+const only = BEAT_ONLY_FOR[beat];
 ---
 
-<div class="beat beat--course" data-beat={beat}>
+<div class="beat beat--course" data-beat={beat} data-beat-only={only}>
   {
     panels.map(({ audience, course, move, still }) => (
       <div class="beat__panel" data-audience-panel={audience}>
