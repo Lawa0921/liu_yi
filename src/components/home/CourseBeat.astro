@@ -2,7 +2,7 @@
 // 課程段的一個 beat：一個姿勢、兩個對象的面板。
 //   - 每個分類的第一個 beat（lead）放課程本身：標題、兩行介紹（summary ＋一行招式註解）、「看這門課」。
 //   - 其餘 beat 只放招式註解（格鬥的第二式、兵器的第二、三件）。
-//   - 兵器的三個 beat 各有一個 [data-sub-item]（中國劍／苗刀／大槍＋一行）；最後一件另有「看真兵器」。
+//   - 兵器的三個 beat 各有一個 [data-sub-item]（中國劍／苗刀／大槍＋一行）；最後一件另有「看真兵器」，連到該對象自己的兵器課（大人＝中式兵器，小孩＝防身兵器）。
 // 招式註解：大人取自 copy.ts；小孩的課程首句取自課程內文（例如防身格鬥的「戴上拳套，學會出手，也學會收手。」）。
 // 某對象沒有這個分類的課時，該對象的面板只剩靜態圖（RF4）。
 import MoveBlock from './MoveBlock.astro';
@@ -54,7 +54,6 @@ const panels = AUDIENCES.map((audience) => {
   const course = step[audience];
   return { audience, course, move: course ? moveFor(audience, course) : undefined, still: poseFor(beat, audience) };
 });
-const realWeaponCourse = step.adult;
 ---
 
 <div class="beat beat--course" data-beat={beat}>
@@ -76,9 +75,9 @@ const realWeaponCourse = step.adult;
             </article>
           )}
           {!lead && move && <MoveBlock {...move} solo subItem={Boolean(weapon)} />}
-          {beat === 'weapon-c' && realWeaponCourse && course && (
+          {beat === 'weapon-c' && course && (
             <p class="beat__more">
-              <a class="text-link beat__link" href={url(`/courses/${realWeaponCourse.id}/`)}>
+              <a class="text-link beat__link" href={url(`/courses/${course.id}/`)}>
                 看真兵器
               </a>
             </p>
