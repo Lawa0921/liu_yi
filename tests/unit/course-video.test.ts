@@ -97,6 +97,16 @@ describe('八極專修、散手技擊的課程卡改用乾淨裁切的照片', (
     }
   });
 
+  it('schema：video 有可選的 cover 圖（首屏封面；沒給就用分類字牌）', () => {
+    expect(read('src/content.config.ts')).toMatch(/^\s+cover: image\(\)\.optional\(\),/m);
+  });
+
+  it('目前六門課都還沒給 cover（首屏封面全部用字牌）', () => {
+    for (const { id } of EXPECTED) {
+      expect(read(`src/content/courses/${id}.md`), id).not.toMatch(/^\s+cover:/m);
+    }
+  });
+
   it('schema：photo 有可選的 cardOnly 布林，預設 false', () => {
     expect(read('src/content.config.ts')).toMatch(/cardOnly: z\.boolean\(\)\.default\(false\)/);
   });

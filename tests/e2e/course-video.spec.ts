@@ -225,21 +225,32 @@ test.describe('沒有 JavaScript', () => {
     await expect(page.getByRole('link', { name: '播放八極專修課程影片' })).toBeVisible();
   });
 
-  test('課程內頁：首屏不顯示播放鈕（沒有腳本能接），原生控制列的影片照常顯示', async ({ page }) => {
+  test('課程內頁：首屏不顯示封面與播放鈕（沒有腳本能接），原生 video＋poster 照常顯示', async ({ page }) => {
     await page.goto('./courses/chinese-weapons/');
     const hero = page.locator('.course-head [data-hero-video]');
-    await expect(hero.locator('[data-hero-play]')).toHaveCount(1);
+    await expect(hero.locator('[data-hero-cover]')).toHaveCount(1);
+    await expect(hero.locator('[data-hero-cover]')).toBeHidden();
     await expect(hero.locator('[data-hero-play]')).toBeHidden();
     await expect(hero.locator('video')).toBeVisible();
     await expect(hero.locator('video')).toHaveAttribute('controls', '');
+    await expect(hero.locator('video')).toHaveAttribute('poster', /\.webp$/);
   });
 });
 
-// 業主要求（2026-11-20）：有站內影片的課，首屏右側那格直接是影片（封面就是預覽畫面，點了在原地播）；
-// 頁面下方不再有「課程影片」區，避免重複。
+// 業主要求（2026-11-20）：有站內影片的課，首屏右側那格是影片，點了在原地播；頁面下方不再有「課程影片」區，避免重複。
+// 業主再要求（同日）：一開始呈現的不是影片畫格（poster），而是封面——video.cover 的圖，沒有就用分類字牌；點了封面才放影片。
+const GLYPH: Record<string, string> = {
+  'chinese-weapons': '兵',
+  bajiquan: '拳',
+  sanshou: '搏',
+  'kids-weapons': '兵',
+  'kids-martial-arts': '拳',
+  'kids-self-defense': '搏',
+};
+
 test.describe('課程內頁首屏的影片', () => {
   for (const course of [...ADULT_COURSES, ...KID_COURSES]) {
-    test(`${course.slug}：首屏右側是 <video preload="none">，有封面且封面預先載入；下方沒有影片區；載入與捲動時不請求 mp4`, async ({ page, baseURL }) => {
+    test(`${course.slug}：首屏右側一開始是字牌封面（影片隱藏，看不到 poster 畫格）；下方沒有影片區；載入與捲動時不請求 mp4`, async ({ page, baseURL }) => {
       await page.setViewportSize({ width: 1440, height: 900 });
       const mp4 = trackMp4(page);
       await page.goto(`./courses/${course.slug}/`);
@@ -259,13 +270,27 @@ test.describe('課程內頁首屏的影片', () => {
       await expect(video).toHaveAttribute('width', String(width));
       await expect(video).toHaveAttribute('height', String(height));
       await expect(video).toHaveAttribute('aria-label', `${course.title}課程影片`);
-      // 封面是首屏最大的元素：<head> 裡預先載入，且真的載得到。
+      // poster 仍保留（沒有 JS 時、以及點了之後開始播放前的過場），而且載得到；但有 JS 時它不是首屏內容，不預先載入。
       const poster = (await video.getAttribute('poster'))!;
-      await expect(page.locator(`head link[rel="preload"][as="image"][href="${poster}"]`)).toHaveCount(1);
       expect((await page.request.get(new URL(poster, page.url()).href)).status()).toBe(200);
+      await expect(page.locator('head link[rel="preload"][as="image"]')).toHaveCount(0);
+
+      // 一開始：封面（分類字牌）可見、填滿影片格；影片本身隱藏（看不到 poster 畫格），也不能被 Tab 到。
+      const cover = hero.locator('[data-hero-cover]');
+      await expect(cover).toBeVisible();
+      await expect(cover.locator('.course-plate__glyph')).toHaveText(GLYPH[course.slug]!);
+      await expect(video).toBeHidden();
+      expect(await video.evaluate((el) => getComputedStyle(el).visibility)).toBe('hidden');
+      const frame = (await hero.boundingBox())!;
+      const coverBox = (await cover.boundingBox())!;
+      expect(Math.abs(coverBox.width - frame.width)).toBeLessThan(3);
+      expect(Math.abs(coverBox.height - frame.height)).toBeLessThan(3);
+      // 封面上只有一個可聚焦的東西（播放鈕），沒有巢狀互動元素。
+      await expect(cover.locator('a, button, [tabindex], input, video')).toHaveCount(1);
+      await expect(cover.locator('button[data-hero-play]')).toHaveCount(1);
 
       // 不捲動就看得到（首屏）。頁首的剪影場景佔掉上方約 530 px，桌機 1440×900 實測約 77% 在畫面內（與原本的照片格同位置），這裡守住過半。
-      await expect(video).toBeInViewport({ ratio: 0.5 });
+      await expect(cover).toBeInViewport({ ratio: 0.5 });
 
       await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
       await page.waitForLoadState('networkidle');
@@ -273,24 +298,66 @@ test.describe('課程內頁首屏的影片', () => {
     });
   }
 
+  // 播放鈕在封面左上角（距左、上約 1.5rem，手機約 1rem），不壓到字牌的大字；觸控目標至少 44×44（桌機至少 56）。
+  // 放左上而不是右下：桌機首屏時封面下緣在視窗外、又被固定底欄蓋住，右下角的鈕看不到。
   for (const viewport of [
-    { width: 1440, height: 900 },
-    { width: 390, height: 844 },
+    { width: 1440, height: 900, minSize: 56, inset: 24 },
+    { width: 390, height: 844, minSize: 44, inset: 16 },
+    { width: 360, height: 640, minSize: 44, inset: 16 },
   ]) {
-    test(`${viewport.width}×${viewport.height}：首屏影片中央有播放鈕，蓋在封面上、觸控目標夠大`, async ({ page }) => {
+    test(`${viewport.width}×${viewport.height}：播放鈕在封面左上角、不壓到大字，觸控目標夠大（六門課）`, async ({ page }) => {
       await page.setViewportSize(viewport);
-      await page.goto('./courses/kids-weapons/');
-      const hero = page.locator('.course-head [data-hero-video]');
-      const play = hero.getByRole('button', { name: '播放防身兵器課程影片' });
-      await expect(play).toBeVisible();
-      await expect(play).toHaveAttribute('type', 'button');
-      const frame = (await hero.boundingBox())!;
-      const box = (await play.boundingBox())!;
-      expect(box.width).toBeGreaterThanOrEqual(56);
-      expect(box.height).toBeGreaterThanOrEqual(56);
-      // 置中（誤差 2 px）。
-      expect(Math.abs(box.x + box.width / 2 - (frame.x + frame.width / 2))).toBeLessThan(2);
-      expect(Math.abs(box.y + box.height / 2 - (frame.y + frame.height / 2))).toBeLessThan(2);
+      for (const course of [...ADULT_COURSES, ...KID_COURSES]) {
+        await page.goto(`./courses/${course.slug}/`);
+        const hero = page.locator('.course-head [data-hero-video]');
+        const cover = hero.locator('[data-hero-cover]');
+        const play = cover.getByRole('button', { name: `播放${course.title}課程影片` });
+        await expect(play, course.slug).toBeVisible();
+        await expect(play).toHaveAttribute('type', 'button');
+        const frame = (await cover.boundingBox())!;
+        const box = (await play.boundingBox())!;
+        expect(box.width, course.slug).toBeGreaterThanOrEqual(viewport.minSize);
+        expect(box.height, course.slug).toBeGreaterThanOrEqual(viewport.minSize);
+        // 左上象限，貼著左、上緣留固定間距（±3 px）。
+        expect(box.x + box.width / 2, course.slug).toBeLessThan(frame.x + frame.width / 2);
+        expect(box.y + box.height / 2, course.slug).toBeLessThan(frame.y + frame.height / 2);
+        expect(Math.abs(box.x - frame.x - viewport.inset), course.slug).toBeLessThan(3);
+        expect(Math.abs(box.y - frame.y - viewport.inset), course.slug).toBeLessThan(3);
+        // 與大字的矩形不相交。
+        const glyph = (await cover.locator('.course-plate__glyph').boundingBox())!;
+        const intersects =
+          glyph.x < box.x + box.width && box.x < glyph.x + glyph.width && glyph.y < box.y + box.height && box.y < glyph.y + glyph.height;
+        expect(intersects, `${course.slug} 播放鈕壓到大字`).toBe(false);
+      }
+    });
+  }
+
+  // 訪客看得到、點得到播放鈕：載入後若封面已露出到看得見播放鈕就不捲；否則把封面頂端捲到內容區頂端（固定頁首之下）。
+  // 此時播放鈕整顆在視窗內，且中心點命中按鈕本身（沒有被固定頁首、底欄或別的東西蓋住）。桌機兩種視窗要不捲動就成立（首屏）。
+  for (const viewport of [
+    { width: 1440, height: 900, firstScreen: true },
+    { width: 1366, height: 768, firstScreen: true },
+    { width: 390, height: 844, firstScreen: false },
+  ]) {
+    test(`${viewport.width}×${viewport.height}：播放鈕${viewport.firstScreen ? '首屏就' : '捲到封面時'}完整可見、沒被固定頁首或底欄蓋住（六門課）`, async ({ page }) => {
+      await page.setViewportSize(viewport);
+      for (const course of [...ADULT_COURSES, ...KID_COURSES]) {
+        await page.goto(`./courses/${course.slug}/`);
+        const play = page.getByRole('button', { name: `播放${course.title}課程影片` });
+        await expect(play).toBeVisible();
+        const hit = () =>
+          play.evaluate((button) => {
+            const r = button.getBoundingClientRect();
+            const inside = r.left >= 0 && r.top >= 0 && r.right <= window.innerWidth && r.bottom <= window.innerHeight;
+            const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+            return inside && at !== null && button.contains(at);
+          });
+        if (!(await hit())) {
+          expect(viewport.firstScreen, `${course.slug}：桌機首屏就該看得到播放鈕`).toBe(false);
+          await page.locator('.course-head [data-hero-cover]').evaluate((el) => el.scrollIntoView({ block: 'start' }));
+          await expect.poll(hit, course.slug).toBe(true);
+        }
+      }
     });
   }
 
@@ -308,50 +375,103 @@ test.describe('課程內頁首屏的影片', () => {
     });
   const playCalls = (page: Page) => page.evaluate(() => (window as unknown as { __playCalls: number }).__playCalls);
 
-  test('點播放鈕：呼叫 video.play()、影片取得焦點、播放鈕隱藏；不換頁', async ({ page }) => {
+  /** 點下去之後：封面收起、影片可見（有原生控制列）且取得焦點。 */
+  async function expectStarted(page: Page) {
+    const hero = page.locator('.course-head [data-hero-video]');
+    const video = hero.locator('video');
+    // 封面元素要存在（不存在時 toBeHidden 也會過）。
+    await expect(hero.locator('[data-hero-cover]')).toHaveCount(1);
+    await expect(hero.locator('[data-hero-cover]')).toBeHidden();
+    await expect(video).toBeVisible();
+    await expect(video).toHaveAttribute('controls', '');
+    await expect(video).toBeFocused();
+    return video;
+  }
+
+  test('點播放鈕：封面收起、影片顯示並取得焦點、呼叫 video.play()；不換頁', async ({ page }) => {
     await recordPlay(page);
     await page.goto('./courses/chinese-weapons/');
     const url = page.url();
-    const hero = page.locator('.course-head [data-hero-video]');
-    const play = hero.getByRole('button', { name: '播放中式兵器課程影片' });
-    const video = hero.locator('video');
-    await play.click();
+    await page.getByRole('button', { name: '播放中式兵器課程影片' }).click();
     await expect.poll(() => playCalls(page)).toBe(1);
-    await expect(play).toBeHidden();
-    await expect(video).toBeFocused();
+    const video = await expectStarted(page);
     expect(await video.evaluate((el: HTMLVideoElement) => el.paused)).toBe(false);
     expect(page.url()).toBe(url);
   });
 
-  test('鍵盤：Tab 到播放鈕按 Enter 一樣會播', async ({ page }) => {
+  test('點封面任何位置（不是播放鈕）也會播', async ({ page }) => {
+    await recordPlay(page);
+    await page.goto('./courses/bajiquan/');
+    const cover = page.locator('.course-head [data-hero-cover]');
+    // 左上角附近：離中央的播放鈕很遠。
+    await cover.click({ position: { x: 30, y: 30 } });
+    await expect.poll(() => playCalls(page)).toBe(1);
+    await expectStarted(page);
+  });
+
+  test('鍵盤：聚焦播放鈕按 Enter 一樣會播', async ({ page }) => {
     await recordPlay(page);
     await page.goto('./courses/kids-weapons/');
     const play = page.getByRole('button', { name: '播放防身兵器課程影片' });
     await play.focus();
     await page.keyboard.press('Enter');
     await expect.poll(() => playCalls(page)).toBe(1);
-    await expect(play).toBeHidden();
-    await expect(page.locator('.course-head [data-hero-video] video')).toBeFocused();
+    const video = await expectStarted(page);
+    // 直式影片點開後仍是 contain，完整顯示。
+    expect(await video.evaluate((el) => getComputedStyle(el).objectFit)).toBe('contain');
   });
 
-  test('直接用原生控制列開始播放（play 事件）：播放鈕也隱藏', async ({ page }) => {
+  test('play() 被拒（先觸發 play 事件、promise 才被拒）：影片維持顯示＋原生控制列，封面不回來', async ({ page }) => {
+    await page.addInitScript(() => {
+      HTMLMediaElement.prototype.play = function (this: HTMLMediaElement) {
+        this.dispatchEvent(new Event('play'));
+        return new Promise<void>((_, reject) => setTimeout(() => reject(new DOMException('blocked', 'NotAllowedError')), 50));
+      };
+    });
+    await page.goto('./courses/sanshou/');
+    await expect(page.locator('.course-head [data-hero-cover]')).toBeVisible();
+    await page.getByRole('button', { name: '播放散手技擊課程影片' }).click();
+    await expectStarted(page);
+    // 等 promise 被拒之後再看一次。
+    await page.waitForTimeout(300);
+    await expectStarted(page);
+  });
+
+  test('play() 直接被拒（沒有 play 事件）：一樣維持影片＋原生控制列', async ({ page }) => {
+    await page.addInitScript(() => {
+      HTMLMediaElement.prototype.play = () => Promise.reject(new DOMException('blocked', 'NotAllowedError'));
+    });
+    await page.goto('./courses/kids-martial-arts/');
+    await expect(page.locator('.course-head [data-hero-cover]')).toBeVisible();
+    await page.getByRole('button', { name: '播放兒童武術課程影片' }).click();
+    await page.waitForTimeout(300);
+    await expectStarted(page);
+  });
+
+  test('影片因為其他原因開始播放（play 事件）：封面也收起', async ({ page }) => {
     await page.goto('./courses/bajiquan/');
-    const play = page.getByRole('button', { name: '播放八極專修課程影片' });
-    await expect(play).toBeVisible();
-    // 原生控制列的播放鍵在 shadow DOM 裡點不到；它做的事就是 play()，這裡直接呼叫。
+    await expect(page.locator('.course-head [data-hero-cover]')).toBeVisible();
+    await expect(page.locator('.course-head [data-hero-cover]')).toHaveCount(1);
     await page.locator('.course-head [data-hero-video] video').evaluate((el: HTMLVideoElement) => void el.play().catch(() => undefined));
-    await expect(play).toBeHidden();
+    await expect(page.locator('.course-head [data-hero-cover]')).toBeHidden();
   });
 
-  test('從課程總覽點進課程頁（換頁轉場）後，播放鈕照樣有作用', async ({ page }) => {
+  test('腳本還沒跑（外部 JS 全部擋掉）：第一次繪製就是封面、影片隱藏，不會先閃 poster 畫格', async ({ page }) => {
+    await page.route(/\.m?js(\?|$)/, (route) => route.abort());
+    await page.goto('./courses/chinese-weapons/');
+    await expect(page.locator('html')).toHaveClass(/\bjs\b/);
+    await expect(page.locator('.course-head [data-hero-cover]')).toBeVisible();
+    await expect(page.locator('.course-head [data-hero-video] video')).toBeHidden();
+  });
+
+  test('從課程總覽點進課程頁（換頁轉場）後，封面照樣點得開', async ({ page }) => {
     await recordPlay(page);
     await page.goto('./courses/');
     await card(page, 'adult', '散手技擊').locator('h3').click();
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('散手技擊');
-    const play = page.getByRole('button', { name: '播放散手技擊課程影片' });
-    await play.click();
+    await page.getByRole('button', { name: '播放散手技擊課程影片' }).click();
     await expect.poll(() => playCalls(page)).toBe(1);
-    await expect(play).toBeHidden();
+    await expectStarted(page);
   });
 
   test('沒有影片的課程頁沒有播放鈕', async ({ page }) => {

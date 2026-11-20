@@ -1,0 +1,119 @@
+---
+// 課程字牌：窗櫺底紋＋分類紋樣（兵器：大槍、劍、苗刀；拳術：八方；格鬥：擂台）＋分類單字，不放任何替代圖（設計文件 §6「缺照片時」）。
+// 用在課程內頁首屏（src/pages/courses/[slug].astro）兩處，外觀相同：
+//   framed     沒有影片也沒有照片的課：首屏右側獨立的 4:3 字牌（自己的細框與四角角飾）。
+//   不 framed  有站內影片的課：影片格的封面（填滿影片格，外框與角飾由影片格提供），點了才換成影片。
+// 純裝飾（aria-hidden）；分類名稱已寫在首屏文字裡。
+import Weapon from './ornament/Weapon.astro';
+import Bafang from './ornament/Bafang.astro';
+import Leitai from './ornament/Leitai.astro';
+import type { Category } from '../lib/courses';
+
+interface Props {
+  category: Category;
+  glyph: string;
+  framed?: boolean;
+  class?: string;
+}
+
+const { category, glyph, framed = false, class: className } = Astro.props;
+---
+
+<div class:list={['course-plate', { 'course-plate--framed': framed, cornered: framed }, className]} aria-hidden="true">
+  {
+    framed && (
+      <>
+        <i class="cornered__tick" />
+        <i class="cornered__tick" />
+        <i class="cornered__tick" />
+        <i class="cornered__tick" />
+      </>
+    )
+  }
+  <span class="lattice course-plate__lattice"></span>
+  {
+    category === 'weapon' && (
+      <>
+        <Weapon kind="spear" class="course-plate__motif course-plate__motif--spear" />
+        <Weapon kind="jian" class="course-plate__motif course-plate__motif--jian" />
+        <Weapon kind="miaodao" class="course-plate__motif course-plate__motif--miaodao" />
+      </>
+    )
+  }
+  {category === 'fist' && <Bafang class="course-plate__motif course-plate__motif--emblem" />}
+  {category === 'combat' && <Leitai class="course-plate__motif course-plate__motif--emblem" />}
+  <span class="course-plate__glyph">{glyph}</span>
+</div>
+
+<style>
+  .course-plate {
+    position: relative;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    background: radial-gradient(ellipse at 50% 55%, var(--color-surface-raised), var(--color-bg) 72%);
+    color: var(--color-line);
+  }
+
+  .course-plate--framed {
+    aspect-ratio: 4 / 3;
+    border: var(--line) solid var(--color-line-faint);
+  }
+
+  .course-plate__lattice {
+    -webkit-mask-image: var(--pattern-lattice), radial-gradient(ellipse at center, transparent 25%, #000 80%);
+    mask-image: var(--pattern-lattice), radial-gradient(ellipse at center, transparent 25%, #000 80%);
+    -webkit-mask-composite: source-in;
+    mask-composite: intersect;
+    -webkit-mask-size:
+      48px 48px,
+      100% 100%;
+    mask-size:
+      48px 48px,
+      100% 100%;
+    background-color: var(--color-line-faint);
+  }
+
+  :global(.course-plate__motif) {
+    position: absolute;
+    max-width: none;
+    opacity: 0.7;
+  }
+
+  :global(.course-plate__motif--emblem) {
+    width: 74%;
+    opacity: 0.55;
+  }
+
+  :global(.course-plate__motif--spear) {
+    width: 124%;
+    left: -12%;
+    top: 12%;
+    transform: rotate(-9deg);
+  }
+
+  :global(.course-plate__motif--jian) {
+    width: 104%;
+    left: -2%;
+    top: 46%;
+    transform: rotate(7deg);
+  }
+
+  :global(.course-plate__motif--miaodao) {
+    width: 104%;
+    left: -2%;
+    top: 74%;
+    transform: rotate(-5deg);
+  }
+
+  .course-plate__glyph {
+    position: relative;
+    font-family: var(--font-display);
+    font-size: clamp(9rem, 24vw, 17rem);
+    font-weight: 400;
+    line-height: 1;
+    /* 平面古金（設計 §4 反目標：不做金色漸層立體字）。 */
+    color: var(--color-accent);
+    filter: drop-shadow(0 0 18px var(--color-bg)) drop-shadow(0 0 8px var(--color-bg));
+  }
+</style>

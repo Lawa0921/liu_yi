@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { courseVideo, videoEmbed } from '../../src/lib/video';
+import { heroCover, videoEmbed } from '../../src/lib/video';
 
 describe('videoEmbed', () => {
   it('returns null when there is no URL, so the video section is not rendered', () => {
@@ -39,21 +39,19 @@ describe('videoEmbed', () => {
   });
 });
 
-describe('courseVideo（課程影片區要顯示什麼）', () => {
+describe('heroCover（首屏影片格一開始顯示的封面）', () => {
   const file = { src: '/videos/bajiquan.mp4', poster: 'poster', width: 720, height: 720 };
 
-  it('有站內影片時用站內影片，優先於 YouTube 網址', () => {
-    expect(courseVideo(file, 'https://youtu.be/dQw4w9WgXcQ')).toEqual({ kind: 'file', file });
-    expect(courseVideo(file, undefined)).toEqual({ kind: 'file', file });
+  it('video 有 cover 時用那張圖（不是影片畫格的 poster）', () => {
+    expect(heroCover({ ...file, cover: 'cover-image' })).toEqual({ kind: 'image', src: 'cover-image' });
   });
 
-  it('沒有站內影片時照舊看 videoUrl', () => {
-    expect(courseVideo(undefined, 'https://youtu.be/dQw4w9WgXcQ')).toEqual(videoEmbed('https://youtu.be/dQw4w9WgXcQ'));
-    expect(courseVideo(undefined, 'https://vimeo.com/123')).toEqual({ kind: 'link', url: 'https://vimeo.com/123' });
+  it('沒有 cover 時用分類字牌', () => {
+    expect(heroCover(file)).toEqual({ kind: 'plate' });
+    expect(heroCover({ ...file, cover: undefined })).toEqual({ kind: 'plate' });
   });
 
-  it('兩者都沒有時回傳 null（整個影片區不輸出）', () => {
-    expect(courseVideo(undefined, undefined)).toBeNull();
-    expect(courseVideo(undefined, '  ')).toBeNull();
+  it('沒有站內影片就沒有封面', () => {
+    expect(heroCover(undefined)).toBeNull();
   });
 });

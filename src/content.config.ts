@@ -25,14 +25,17 @@ const courses = defineCollection({
         .default([]),
       /** 影片網址（預設假設 YouTube）；沒有就不要寫，課程頁不會出現影片區。 */
       videoUrl: z.url().optional(),
-      /** 站內影片（業主提供的課程簡介片，放在 public/videos/）。有它時課程卡出現播放鈕，課程頁的影片區優先用它。
-       *  src 是站內路徑（如 /videos/bajiquan.mp4，渲染時經過 url() 加 base）；poster 是原比例的一格；width／height 是影片像素尺寸。 */
+      /** 站內影片（業主提供的課程簡介片，放在 public/videos/）。有它時課程卡出現播放鈕，課程內頁首屏右側是這支影片（不輸出 videoUrl 的影片區）。
+       *  src 是站內路徑（如 /videos/bajiquan.mp4，渲染時經過 url() 加 base）；poster 是原比例的一格（沒有 JS 時、與點了之後開始播放前顯示）；
+       *  width／height 是影片像素尺寸。 */
       video: z
         .object({
           src: z.string().regex(/^\/videos\/[\w-]+\.mp4$/),
           poster: image(),
           width: z.number().int().positive(),
           height: z.number().int().positive(),
+          /** 課程內頁首屏影片格一開始顯示的封面（填滿 4:3 格，裁切置中）；點了才換成影片。沒給就用該課分類的字牌。 */
+          cover: image().optional(),
         })
         .optional(),
       /** 授課教練（coaches 集合的 id） */
