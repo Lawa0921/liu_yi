@@ -12,13 +12,18 @@ import {
 
 const AUDIENCES: Audience[] = ['adult', 'kid'];
 
-/** 十八個姿勢（依型別宣告順序）：計畫的十六個，加上 Task 25 的 scroll（竹簡）與 crest（光點館徽）。 */
+/**
+ * 二十二個姿勢（依型別宣告順序）：計畫的十六個，加上 Task 25 的 scroll（竹簡）與 crest（光點館徽）、Task 27 的小孩持刀與持槍，
+ * 以及散手改版的 guard（護架）與 jab（直拳）。chengchui／kao 仍是合法姿勢（其他課程的四小人形、引擎測試還在用），只是不再屬於首頁的 beat。
+ */
 const ALL_POSES: PoseId[] = [
   'lift',
   'land',
   'dingzhou',
   'chengchui',
   'kao',
+  'guard',
+  'jab',
   'jian',
   'miaodao',
   'spear',
@@ -65,8 +70,8 @@ describe('POSE_BY_BEAT', () => {
     expect(POSE_BY_BEAT.adult).toEqual({
       opening: 'land',
       fist: 'dingzhou',
-      'combat-a': 'chengchui',
-      'combat-b': 'kao',
+      'combat-a': 'guard',
+      'combat-b': 'jab',
       'weapon-a': 'jian',
       'weapon-b': 'miaodao',
       'weapon-c': 'spear',
@@ -75,6 +80,16 @@ describe('POSE_BY_BEAT', () => {
       pricing: 'scroll',
       booking: 'crest',
     });
+  });
+
+  it('大人格鬥（散手技擊）兩式是拳擊／散打的實戰架式：combat-a 護架（guard）、combat-b 前手直拳（jab），不再是八極的撐捶、貼山靠', () => {
+    expect(poseFor('combat-a', 'adult')).toBe('guard');
+    expect(poseFor('combat-b', 'adult')).toBe('jab');
+    expect(Object.values(POSE_BY_BEAT.adult)).not.toContain('chengchui');
+    expect(Object.values(POSE_BY_BEAT.adult)).not.toContain('kao');
+    // 小孩的格鬥兩式不變
+    expect(poseFor('combat-a', 'kid')).toBe('kid-defense-a');
+    expect(poseFor('combat-b', 'kid')).toBe('kid-defense-b');
   });
 
   it('小孩：拳、格鬥與兵器三段都換成小孩姿勢（持劍、持刀、持槍），其餘同大人', () => {
@@ -136,7 +151,8 @@ describe('poseFor', () => {
 });
 
 describe('BURSTS', () => {
-  it('涵蓋全部 18 個 PoseId，且沒有多餘的鍵', () => {
+  it('涵蓋全部 22 個 PoseId，且沒有多餘的鍵', () => {
+    expect(ALL_POSES).toHaveLength(22);
     expect(Object.keys(BURSTS).sort()).toEqual([...ALL_POSES].sort());
   });
 
@@ -161,6 +177,14 @@ describe('BURSTS', () => {
     expect(BURSTS.spear).toEqual({ dir: [1, 0, 0], power: 3.6, mode: 0 });
     expect(BURSTS.land).toEqual({ dir: [0, -1, 0], power: 2.2, mode: 2 });
     expect(BURSTS.lift).toEqual({ dir: [0, 1, 0], power: 1.8, mode: 2, hold: 0.5 });
+  });
+
+  it('散手兩式：護架左右分開（同撐捶、小孩格鬥的 mode 1／3.0）；直拳順著出拳方向（+x，前手朝右打出）炸開', () => {
+    expect(BURSTS.guard).toEqual({ dir: [1, 0.1, 0], power: 3.0, mode: 1 });
+    expect(BURSTS.jab.mode).toBe(0);
+    expect(BURSTS.jab.dir[0]).toBeGreaterThan(0);
+    expect(Math.abs(BURSTS.jab.dir[1]), '直拳是水平打出').toBeLessThan(0.2);
+    expect(BURSTS.jab.power).toBeGreaterThanOrEqual(3.0);
   });
 
   it('新姿勢：others／salute 用 mode 2 且力道 1.4–1.8；flow 輕緩；seal 向內收（mode 3）', () => {

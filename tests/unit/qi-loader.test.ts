@@ -198,8 +198,8 @@ describe('prefetchPlan（目前＋前後各 2 個 beat）', () => {
     expect(prefetchPlan(5, 'kid', true)).toEqual(['land', 'lift']);
   });
 
-  it('beat 0（視窗 beat 0–2）：恰為 land、dingzhou、chengchui', () => {
-    expect([...prefetchPlan(0, 'adult', false)].sort()).toEqual(['chengchui', 'dingzhou', 'land']);
+  it('beat 0（視窗 beat 0–2）：恰為 land、dingzhou、guard', () => {
+    expect([...prefetchPlan(0, 'adult', false)].sort()).toEqual(['dingzhou', 'guard', 'land']);
   });
 
   it('beat 9、小孩（視窗 beat 7–10）：含 others、salute、scroll、crest，不含 flow（flow 只給入館閘門，沒有形體檔）', () => {
@@ -213,7 +213,7 @@ describe('prefetchPlan（目前＋前後各 2 個 beat）', () => {
   });
 
   it('中段（beat 5、大人）：視窗 beat 3–7，去重', () => {
-    expect([...prefetchPlan(5, 'adult', false)].sort()).toEqual(['jian', 'kao', 'miaodao', 'others', 'spear']);
+    expect([...prefetchPlan(5, 'adult', false)].sort()).toEqual(['jab', 'jian', 'miaodao', 'others', 'spear']);
   });
 
   it('目前這一格排最前面（先載最近的）', () => {

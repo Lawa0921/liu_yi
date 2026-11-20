@@ -511,5 +511,124 @@
       "pad": 8
     },
     "date": "2026-11-17"
+  },
+  "fig-guard": {
+    "model": "gpt-image-1.5",
+    "promptSha256": "f8b0cd6be6a862f78c9ad33426d44696529ace7d7390a15f0acedccb5315243b",
+    "rawSha256": "ac7e5c35493304bd645336ddb43185baf95f9b318c921c321604c06acd3cfdca",
+    "requests": 3,
+    "requestCapException": {
+      "cap": 5,
+      "reason": "使用者 2026-11-20 核准：Codex 視覺評審兩輪未過，fig-guard、fig-jab 兩張的生圖上限由 3 次放寬到 5 次（例外，其他素材仍 ≤ 3）"
+    },
+    "status": "approved",
+    "qa": {
+      "raw": "fig-guard-ss3.png",
+      "kind": "fig",
+      "raw_size": [
+        1024,
+        1536
+      ],
+      "out_size": [
+        602,
+        1131
+      ],
+      "webp_size": [
+        602,
+        1131
+      ],
+      "png_kb": 19.1,
+      "webp_kb": 9.4,
+      "raw_bbox": {
+        "x0": 166,
+        "y0": 205,
+        "x1": 751,
+        "y1": 1319
+      },
+      "touches_raw_edges": {
+        "left": false,
+        "right": false,
+        "top": false,
+        "bottom": false
+      },
+      "specks_removed": 0,
+      "holes_filled": 0,
+      "components": 1,
+      "holes_remaining": 0,
+      "hole_areas_top": [],
+      "haze_px": 0,
+      "edge_residue_px": 0,
+      "notes": [
+        "closing r=3 added 298px",
+        "widen boxes=[(395, 340, 418, 440), (462, 350, 508, 398)] r=10 feather=12 removed 2327px"
+      ],
+      "foot_y_raw": 1319,
+      "subject_height_px": 1115,
+      "subject_width_px": 586,
+      "foot_y_out": 1122,
+      "pad": 8,
+      "manual": "人工看圖：單一成人、散手／拳擊護架站姿，面朝右（原圖面朝左，後製鏡像），身體側轉約 30–45°；前後腳錯開約 1.2 倍肩寬的緊湊站姿、雙膝微屈、後腳跟略抬；雙拳舉在下巴到臉頰高度：前拳在前、約與下巴同高，後拳在嘴前；兩肘下垂收在肋側。立領對襟短衫＋束腳褲＋布鞋，與其他成人剪影一致；赤手握拳、無拳套、無兵器、無文字與地面。比例：頭頂到下巴約 162 px，主體高 1115 px，約 6.9 頭身（落地那張 6.4、抱拳 8.5）。後製 widen 只在兩拳之間與後拳／下巴之間收窄輪廓，成品實測暗縫：兩拳之間 28.2 px、後拳到臉 21.6 px（需求 ≥ 20 px）。淘汰：ss1（後拳貼在臉上，只讀得出一個拳）、ss2（大弓步、拳頭像拳套、暗縫太細，Codex 評審 6/6/5 與 6/7/5 未過）。ss3 以程式畫的人偶姿勢導引圖（ref/fig-guard-guide.png，ref/mk-sanshou-guides.py）做 images/edits。Codex 視覺評審（第 3 次，動作辨識／風格比例／粒子化輪廓）：6/7/5，VERDICT FAIL；指出前拳偏大、像拳套，站距仍偏長。裁定：使用者 2026-11-20 看過後採用 ss3（已知瑕疵：前拳偏大）。"
+    },
+    "date": "2026-11-20"
+  },
+  "fig-jab": {
+    "model": "gpt-image-1.5",
+    "promptSha256": "cfaf2146d81417a54289008bc095d0d8448f4ca31ae914679fe44c7074730f19",
+    "rawSha256": "8304902214defd6f0c818275bde3f557bf35eddf3fe74699cda61c938e51abb4",
+    "requests": 5,
+    "requestCapException": {
+      "cap": 5,
+      "reason": "使用者 2026-11-20 核准：Codex 視覺評審兩輪未過，fig-guard、fig-jab 兩張的生圖上限由 3 次放寬到 5 次（例外，其他素材仍 ≤ 3）"
+    },
+    "status": "placeholder",
+    "placeholderReason": "使用者 2026-11-20 決定先上線給業主確認，依業主意見決定是否重生",
+    "qa": {
+      "raw": "fig-jab-ss5.png",
+      "kind": "fig",
+      "raw_size": [
+        1024,
+        1536
+      ],
+      "out_size": [
+        753,
+        1067
+      ],
+      "webp_size": [
+        753,
+        1067
+      ],
+      "png_kb": 17.1,
+      "webp_kb": 8.5,
+      "raw_bbox": {
+        "x0": 156,
+        "y0": 266,
+        "x1": 892,
+        "y1": 1316
+      },
+      "touches_raw_edges": {
+        "left": false,
+        "right": false,
+        "top": false,
+        "bottom": false
+      },
+      "specks_removed": 0,
+      "holes_filled": 0,
+      "components": 1,
+      "holes_remaining": 0,
+      "hole_areas_top": [],
+      "haze_px": 0,
+      "edge_residue_px": 0,
+      "notes": [
+        "closing r=3 added 124px",
+        "widen boxes=[(455, 390, 510, 425)] r=10 feather=12 removed 972px"
+      ],
+      "foot_y_raw": 1316,
+      "subject_height_px": 1051,
+      "subject_width_px": 737,
+      "foot_y_out": 1058,
+      "pad": 8,
+      "manual": "預覽佔位：使用者 2026-11-20 先裁定直拳要重生、先接 ss5 做本機預覽，之後決定先上線給業主確認，依業主意見決定是否重生；狀態為 placeholder，不得當成核可。內容：單一成人、前手直拳打到全長、面朝右（鏡像），緊湊站姿與 fig-guard 同一人（導引圖 ref/fig-jab-guide-r5.png 由 fig-guard-ss3 改出）；後拳在下巴前，成品後拳到臉暗縫 24.2 px。已知問題（Codex 第 3 次評審 7/7/5，FAIL）：後拳黏在出拳手臂根部，手機尺寸看不出兩隻手；站距仍偏長。淘汰：ss1、ss2（後拳畫在胸口裡）、ss3（大弓步、後拳只靠白線）、ss4（大弓步、衣服白色盤扣線、頭變光頭）。"
+    },
+    "date": "2026-11-20"
   }
 }

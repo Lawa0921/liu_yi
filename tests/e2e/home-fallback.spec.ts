@@ -844,7 +844,7 @@ test.describe('引擎接線補強', () => {
     expect(await frames(page), '丟錯之後迴圈仍在跑').toBeGreaterThan(afterThrow + 5);
     await scrollToBeat(page, 'combat-a');
     await run(page, 300);
-    await expect(html(page)).toHaveAttribute('data-qi-pose', 'chengchui');
+    await expect(html(page)).toHaveAttribute('data-qi-pose', 'guard');
   });
 
   test('RF1 邊角：第一個姿勢還在載入時視窗大小變了，載入完成後仍會重新取景', async ({ page }) => {
@@ -898,7 +898,7 @@ test.describe('引擎接線補強', () => {
 
     await scrollToBeat(page, 'combat-a');
     await run(page, 300);
-    await expect(html(page)).toHaveAttribute('data-qi-pose', 'chengchui');
+    await expect(html(page)).toHaveAttribute('data-qi-pose', 'guard');
   });
 
   const dispatchPageEvent = (page: Page, type: 'pagehide' | 'pageshow', persisted: boolean) =>

@@ -469,9 +469,10 @@ function metricsOf(m: Measured, device: Device, texts: Box[], label: string): Me
 
 /**
  * 人形亮點外框高占 canvas 高的下限，依架勢與裝置分（依控制者裁定，取代計畫表的單一 45%–90%）：
- *   - 桌機：站姿（land、salute）45%–90%；蹲低架勢（dingzhou、kao、kid-*）與 others（四個小人形）25%–90%。
+ *   - 桌機：站姿（land、salute、guard）45%–90%；蹲低架勢（dingzhou、jab、kid-*）與 others（四個小人形）25%–90%。
+ *     散手的直拳（jab）步型與護架相同，但出拳時重心前壓、主體高只有 land 的 91%，歸在蹲低架勢這一檔。
  *   - 手機直向：站姿 35%–90%、蹲低架勢與 others 20%–90%。直向要讓位給下方的文字，取景（`engine/framing.ts`：可視寬固定 2.75 世界單位）
- *     是使用者看過的，所以不把取景拉近，改放寬門檻（實測：land 37.6%、salute 37.4%、kao 22.3%）。
+ *     是使用者看過的，所以不把取景拉近，改放寬門檻（實測：land 37.6%、salute 37.4%、kao 22.3%；kao 是散手改版前的貼山靠）。
  */
 const HEIGHT_MIN = {
   desktop: { stand: 0.45, crouch: 0.25 },
@@ -578,7 +579,8 @@ interface HumanCase {
 const HUMAN_CASES: HumanCase[] = [
   { pose: 'land', beat: 'opening', label: '開場落地後（land）', stance: 'stand', intro: true },
   { pose: 'dingzhou', beat: 'fist', label: 'dingzhou', stance: 'crouch' },
-  { pose: 'kao', beat: 'combat-b', label: 'kao', stance: 'crouch' },
+  { pose: 'guard', beat: 'combat-a', label: 'guard（散手護架）', stance: 'stand' },
+  { pose: 'jab', beat: 'combat-b', label: 'jab（散手直拳）', stance: 'crouch' },
   { pose: 'kid-wushu', beat: 'fist', label: 'kid-wushu（切小孩）', stance: 'crouch', kid: true },
   { pose: 'salute', beat: 'coaches', label: 'salute', stance: 'stand' },
   { pose: 'others', beat: 'others', label: 'others', stance: 'crouch' },

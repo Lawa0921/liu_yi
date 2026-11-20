@@ -6,7 +6,7 @@ Run: uv run --no-project --python 3.11 --with pillow --with numpy --with scipy p
                 default: $SILHOUETTES_WORK, else <repo>/.cache/silhouettes-raw  (git-ignored)
   --raw DIR     raw PNG source dir (default: <work>/raw)
   --out DIR     published output dir (default: <repo>/src/assets/silhouettes)
-  --batch N     selection table: 1 (default), 2, 3 (children's figures), 4 (fig-salute), 5 (fig-daqiang, Task 27), 6 (fig-kid-miaodao, fig-kid-daqiang) or 7 (fig-miaodao, fig-kid-miaodao regenerated, Task 27 round 2)
+  --batch N     selection table: 1 (default), 2, 3 (children's figures), 4 (fig-salute), 5 (fig-daqiang, Task 27), 6 (fig-kid-miaodao, fig-kid-daqiang), 7 (fig-miaodao, fig-kid-miaodao regenerated, Task 27 round 2) or 8 (fig-guard, fig-jab: sanshou)
   --preview     also write gold-on-dark previews to <work>/qa-preview/
 
 The pass/fail gate is scripts/qi/silhouette-qa.ts (run by tests/unit/silhouette-assets.test.ts on the published
@@ -80,7 +80,15 @@ SEL7 = {
     "fig-miaodao":     ("t27r1", "fig", dict(close=0, fill=900, crop="bbox")),
     "fig-kid-miaodao": ("t27r1", "fig", dict(close=0, fill=900, crop="bbox")),
 }
-SELECTIONS = {"1": SEL, "2": SEL2, "3": SEL3, "4": SEL4, "5": SEL5, "6": SEL6, "7": SEL7}
+# Batch 8 (run with --batch 8): sanshou (散手技擊) fighting guard and lead straight punch for the adult combat beats; they replace
+# fig-chengchui / fig-kao on the home page only (those two stay for the course sub-pages and the "others" compose).
+# flip: mirror left-right so the fighter faces RIGHT (the jab travels toward +x, the same side as the burst direction).
+# widen (fig-guard, fig-jab): see process(); the boxes cover the two fists and the chin, so only those gaps open up.
+SEL8 = {
+    "fig-guard": ("ss3", "fig", dict(close=3, fill=400, crop="bbox", flip=True, widen=(((395, 340, 418, 440), (462, 350, 508, 398)), 10, 12))),
+    "fig-jab":   ("ss5", "fig", dict(close=3, fill=400, crop="bbox", flip=True, widen=(((455, 390, 510, 425),), 10, 12))),
+}
+SELECTIONS = {"1": SEL, "2": SEL2, "3": SEL3, "4": SEL4, "5": SEL5, "6": SEL6, "7": SEL7, "8": SEL8}
 
 
 def disk(r):
@@ -98,6 +106,8 @@ def process(name, sel, raw, out_dir, work, preview):
     ver, kind, o = sel[name]
     src = os.path.join(raw, f"{name}-{ver}.png")
     a = to_alpha(Image.open(src))
+    if o.get("flip"):
+        a = np.ascontiguousarray(a[:, ::-1])
     H, W = a.shape
     notes = []
     mask = a > 127
@@ -135,6 +145,25 @@ def process(name, sel, raw, out_dir, work, preview):
                 a[ndi.binary_dilation(hl == i, disk(2))] = 255
                 filled += 1
         mask = a > 127
+    # 2b. widen: inside the boxes (raw, un-flipped coords x0, y0, x1, y1) thin the shape by r px, fading out over `feather` px
+    #     outside the boxes so the outline has no step. It opens the narrow necks between fists and face that the model drew
+    #     too tight (fig-guard / fig-jab), so the fists stay separate after the particle rendering; an anti-aliased edge is kept.
+    if o.get("widen"):
+        boxes, wr, feather = o["widen"]
+        box = np.zeros_like(mask)
+        for bx0, by0, bx1, by1 in boxes:
+            if o.get("flip"):
+                bx0, bx1 = W - 1 - bx1, W - 1 - bx0
+            box[by0:by1 + 1, bx0:bx1 + 1] = True
+        weight = np.clip(1 - ndi.distance_transform_edt(~box) / feather, 0, 1)
+        erode = wr * weight
+        inside = ndi.distance_transform_edt(mask)  # distance to the nearest background pixel
+        keep = np.clip(inside - erode, 0, 1)
+        touched = erode > 0
+        before = int(mask.sum())
+        a[touched] = np.minimum(a[touched], (keep[touched] * 255).round().astype(np.uint8))
+        mask = a > 127
+        notes.append(f"widen boxes={list(boxes)} r={wr} feather={feather} removed {before - int(mask.sum())}px")
     # 3. kill haze: partial alpha is only allowed within 2px of the binary edge
     band = ndi.binary_dilation(mask, disk(2)) & ~ndi.binary_erosion(mask, disk(2), border_value=1)
     semi = (a > 0) & (a < 255) & ~band

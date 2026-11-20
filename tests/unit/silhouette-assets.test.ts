@@ -17,11 +17,24 @@ interface ProvenanceEntry {
   status: string;
   qa: Record<string, unknown>;
   date: string;
+  /** 只有 REQUEST_CAP_EXCEPTIONS 裡的素材可以有：放寬的生圖上限與核准理由。 */
+  requestCapException?: { cap: number; reason: string };
+  /** 預覽佔位（status = placeholder）為什麼先上線、之後怎麼處理。 */
+  placeholderReason?: string;
 }
 const provenance = JSON.parse(readFileSync(file('provenance.json'), 'utf8')) as Record<string, ProvenanceEntry>;
 
 // 升格流程（Task 6–7）會把名稱從 PLANNED 移到 READY，所以這裡只釘不變量，不釘清單的確切內容。
 const BASELINE_READY = ['fig-zhenjiao', 'fig-zhenjiao-land', 'fig-dingzhou', 'fig-chengchui', 'fig-kao'];
+
+/**
+ * 生圖上限的例外（其餘素材一律 ≤ 3 次）：散手兩式 Codex 視覺評審兩輪未過，使用者 2026-11-20 核准放寬到 5 次。
+ * provenance 的 `requestCapException` 要寫明同樣的上限與理由；不在這張表的素材不可以有這個欄位。
+ */
+const REQUEST_CAP_EXCEPTIONS: Record<string, number> = { 'fig-guard': 5, 'fig-jab': 5 };
+
+/** 預覽佔位：可以先接進首頁讓使用者看，但狀態必須是 placeholder（待重生），不能冒充 approved。 */
+const PLACEHOLDERS = ['fig-jab'];
 
 describe('剪影清單（src/qi/config/silhouettes.ts）', () => {
   it('已核可清單不為空，且包含最初的五張', () => {
@@ -66,18 +79,57 @@ describe.each(SILHOUETTES_READY)('已核可剪影 %s', (name) => {
     expect(soft, `${name} 的柔邊像素數`).toBeGreaterThanOrEqual(1000);
   });
 
-  it('provenance.json 有來源紀錄：請求數 ≤ 3、狀態為 approved 或 legacy', () => {
+  it('provenance.json 有來源紀錄：請求數 ≤ 3（核准過的例外 ≤ 其上限）、狀態為 approved 或 legacy（預覽佔位為 placeholder）', () => {
     const entry = provenance[name];
     expect(entry, `provenance.json 缺 ${name}`).toBeDefined();
     expect(Number.isInteger(entry!.requests)).toBe(true);
     expect(entry!.requests).toBeGreaterThanOrEqual(1);
-    expect(entry!.requests).toBeLessThanOrEqual(3);
-    expect(['approved', 'legacy']).toContain(entry!.status);
+    const cap = REQUEST_CAP_EXCEPTIONS[name];
+    if (cap === undefined) {
+      expect(entry!.requestCapException, `${name} 不在上限例外名單`).toBeUndefined();
+      expect(entry!.requests).toBeLessThanOrEqual(3);
+    } else {
+      expect(entry!.requestCapException?.cap).toBe(cap);
+      expect(entry!.requests).toBeLessThanOrEqual(cap);
+      expect(entry!.requests).toBeLessThanOrEqual(cap);
+    }
+    expect(PLACEHOLDERS.includes(name) ? ['placeholder'] : ['approved', 'legacy']).toContain(entry!.status);
+    if (entry!.status === 'placeholder') expect(entry!.placeholderReason, `${name} 是佔位就要寫明理由`).toMatch(/使用者.*(核准|決定)/);
     expect(entry!.model).toMatch(/^gpt-image-/);
     expect(entry!.promptSha256).toMatch(/^[0-9a-f]{64}$/);
     expect(entry!.rawSha256).toMatch(/^[0-9a-f]{64}$/);
     expect(entry!.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(typeof entry!.qa).toBe('object');
+  });
+});
+
+describe('生圖上限的例外', () => {
+  const withException = Object.entries(provenance).filter(([, entry]) => entry.requestCapException !== undefined);
+
+  it('provenance 裡帶 requestCapException 的條目恰為例外名單（不限 SILHOUETTES_READY）', () => {
+    expect(withException.map(([name]) => name).sort()).toEqual(Object.keys(REQUEST_CAP_EXCEPTIONS).sort());
+  });
+
+  it.each(withException)('%s：上限與名單一致、≤ 5，理由寫明日期、「使用者」與「核准」或「決定」', (name, entry) => {
+    expect(entry.requestCapException!.cap).toBe(REQUEST_CAP_EXCEPTIONS[name]);
+    expect(entry.requestCapException!.cap).toBeLessThanOrEqual(5);
+    expect(entry.requests).toBeLessThanOrEqual(entry.requestCapException!.cap);
+    const reason = entry.requestCapException!.reason;
+    expect(reason).toMatch(/2026-11-20/);
+    expect(reason).toMatch(/使用者/);
+    expect(reason).toMatch(/核准|決定/);
+  });
+
+  it('生圖腳本的 prompts.json：只有例外名單裡的素材可以帶 request_cap（≤ 5，且有 request_cap_reason）', () => {
+    const table = JSON.parse(readFileSync(fileURLToPath(new URL('../../tools/silhouettes/prompts.json', import.meta.url)), 'utf8')) as {
+      assets: Record<string, { request_cap?: unknown; request_cap_reason?: unknown }>;
+    };
+    const capped = Object.entries(table.assets).filter(([, a]) => a.request_cap !== undefined);
+    expect(capped.map(([name]) => name).sort()).toEqual(Object.keys(REQUEST_CAP_EXCEPTIONS).sort());
+    for (const [name, a] of capped) {
+      expect(a.request_cap, name).toBe(REQUEST_CAP_EXCEPTIONS[name]);
+      expect(String(a.request_cap_reason ?? '').trim(), name).not.toBe('');
+    }
   });
 });
 

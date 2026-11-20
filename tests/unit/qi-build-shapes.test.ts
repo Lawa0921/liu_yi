@@ -75,9 +75,9 @@ beforeAll(async () => {
 }, 120_000);
 
 describe('SHAPES 配方', () => {
-  it('鍵恰為十九個形體 id，且等於 FIGURES ∪ 三件兵器 ∪ 小孩持劍、持刀、持槍 ∪ seal ∪ scroll ∪ crest ∪ others', () => {
+  it('鍵恰為二十一個形體 id，且等於 FIGURES ∪ 三件兵器 ∪ 小孩持劍、持刀、持槍 ∪ seal ∪ scroll ∪ crest ∪ others', () => {
     expect([...IDS].sort()).toEqual(
-      ['lift', 'land', 'dingzhou', 'chengchui', 'kao', 'jian', 'miaodao', 'spear', 'salute', 'seal', 'scroll', 'crest', 'others', 'kid-wushu', 'kid-defense-a', 'kid-defense-b', 'kid-weapon', 'kid-miaodao', 'kid-spear'].sort(),
+      ['lift', 'land', 'dingzhou', 'chengchui', 'kao', 'guard', 'jab', 'jian', 'miaodao', 'spear', 'salute', 'seal', 'scroll', 'crest', 'others', 'kid-wushu', 'kid-defense-a', 'kid-defense-b', 'kid-weapon', 'kid-miaodao', 'kid-spear'].sort(),
     );
     expect([...IDS].sort()).toEqual([...Object.keys(FIGURES), ...WEAPON_NAMES, 'kid-weapon', 'kid-miaodao', 'kid-spear', 'seal', 'scroll', 'crest', 'others'].sort());
   });
