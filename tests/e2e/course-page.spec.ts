@@ -51,8 +51,9 @@ test.describe('有影片的課程頁：版面順序', () => {
       expect(order.present).toContain('hero-video');
       expect(order.present).toContain('body');
       expect(order.sorted).toEqual(order.present);
-      // 首屏右側只有影片，沒有照片輪播或字牌。
-      await expect(page.locator('.course-head [data-gallery], .course-head .course-head__plate')).toHaveCount(0);
+      // 首屏右側是影片格（字牌只當影片的封面，在影片格裡），沒有照片輪播、也沒有影片格外的獨立字牌。
+      await expect(page.locator('.course-head [data-gallery], .course-head > .course-head__plate')).toHaveCount(0);
+      await expect(page.locator('.course-head [data-hero-video] [data-hero-cover] .course-plate')).toHaveCount(1);
     });
   }
 });

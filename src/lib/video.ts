@@ -1,4 +1,6 @@
-// 課程影片網址 → 要怎麼顯示。回傳 null 代表「整個影片區不要出現」。
+// 課程影片相關的純邏輯（不依賴 Astro，可單元測試）。
+//   videoEmbed：外連影片網址（videoUrl）→ 要怎麼顯示；回傳 null 代表「整個影片區不要出現」（VideoSection.astro）。
+//   heroCover：站內影片（video）在課程內頁首屏一開始顯示的封面（src/pages/courses/[slug].astro）。
 
 export type VideoEmbed =
   | { kind: 'youtube'; id: string; url: string; embedUrl: string }
@@ -39,18 +41,13 @@ export function videoEmbed(rawUrl: string | null | undefined): VideoEmbed | null
   return { kind: 'link', url };
 }
 
-/** 站內影片檔（public/ 底下）：src 是站內路徑（渲染時經過 url() 加 base），width／height 是影片像素尺寸。 */
-export interface VideoFile<Poster = unknown> {
-  src: string;
-  poster: Poster;
-  width: number;
-  height: number;
-}
+export type HeroCover<Image = unknown> = { kind: 'image'; src: Image } | { kind: 'plate' };
 
-export type CourseVideo<Poster = unknown> = { kind: 'file'; file: VideoFile<Poster> } | VideoEmbed;
-
-/** 課程影片區要顯示什麼：站內影片優先於 videoUrl；兩者都沒有回傳 null（整個影片區不輸出）。 */
-export function courseVideo<Poster>(file: VideoFile<Poster> | undefined, videoUrl: string | null | undefined): CourseVideo<Poster> | null {
-  if (file) return { kind: 'file', file };
-  return videoEmbed(videoUrl);
+/**
+ * 課程內頁首屏影片格一開始顯示的封面（點了才換成影片）：video.cover 有圖就用圖，沒有就用該課分類的字牌。
+ * 沒有站內影片回傳 null（首屏右側是照片或字牌本身，不是影片格）。
+ */
+export function heroCover<Image>(video: { src: string; cover?: Image | undefined } | undefined): HeroCover<Image> | null {
+  if (!video) return null;
+  return video.cover ? { kind: 'image', src: video.cover } : { kind: 'plate' };
 }
