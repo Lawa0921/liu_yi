@@ -52,11 +52,11 @@ describe('FIGURES 設定', () => {
     expect(new Set(used).size).toBe(used.length);
     // 持械的三張（劍、苗刀、大槍）與小孩持劍的剪影由 config/armed.ts 使用，不在 FIGURES 裡（Task 27）
     expect([...used, ...Object.values(ARMED).map((d) => d.src)].sort()).toEqual([...SILHOUETTES_READY].sort());
-    expect(SILHOUETTES_READY.length).toBe(15);
+    expect(SILHOUETTES_READY.length).toBe(17);
   });
 
-  it('鍵 = id；九個形體 id 齊全（小孩持劍改在 ARMED）；audience 合法；headPx 為正整數', () => {
-    expect(Object.keys(FIGURES).sort()).toEqual(['chengchui', 'dingzhou', 'kao', 'kid-defense-a', 'kid-defense-b', 'kid-wushu', 'land', 'lift', 'salute'].sort());
+  it('鍵 = id；十一個形體 id 齊全（小孩持劍改在 ARMED）；audience 合法；headPx 為正整數', () => {
+    expect(Object.keys(FIGURES).sort()).toEqual(['chengchui', 'dingzhou', 'guard', 'jab', 'kao', 'kid-defense-a', 'kid-defense-b', 'kid-wushu', 'land', 'lift', 'salute'].sort());
     for (const [key, d] of entries) {
       expect(d.id).toBe(key);
       expect(['adult', 'kid', 'both']).toContain(d.audience);
@@ -71,6 +71,8 @@ describe('FIGURES 設定', () => {
     expect(FIGURES.chengchui!.src).toBe('fig-chengchui');
     expect(FIGURES.kao!.src).toBe('fig-kao');
     expect(FIGURES.salute!.src).toBe('fig-salute');
+    expect(FIGURES.guard!.src).toBe('fig-guard');
+    expect(FIGURES.jab!.src).toBe('fig-jab');
     expect(FIGURES['kid-wushu']!.src).toBe('fig-kid-wushu');
     expect(FIGURES['kid-defense-a']!.src).toBe('fig-kid-defense-a');
     expect(FIGURES['kid-defense-b']!.src).toBe('fig-kid-defense-b');
@@ -81,9 +83,9 @@ describe('FIGURES 設定', () => {
     for (const id of OLD_FIVE) expect(FIGURES[id]!.scaleOverride, id).toBe(OVERRIDES[id]);
   });
 
-  it('scaleOverride 的集合恰為舊五張加 salute（salute 是控制者裁定的例外：8.5 頭身，頭部對齊會過高）', () => {
+  it('scaleOverride 的集合恰為舊五張加 salute 與散手兩式（salute：8.5 頭身，頭部對齊會過高；guard／jab：護拳貼臉、頸谷量不準，兩式是同一個拳手要同一把尺）', () => {
     const overridden = entries.filter(([, d]) => d.scaleOverride !== undefined).map(([k]) => k);
-    expect(overridden.sort()).toEqual([...OLD_FIVE, 'salute'].sort());
+    expect(overridden.sort()).toEqual([...OLD_FIVE, 'salute', 'guard', 'jab'].sort());
     expect(FIGURES.salute!.scaleOverride).toBeGreaterThan(0);
   });
 
@@ -128,6 +130,23 @@ describe('FIGURES 對真實剪影', () => {
     // 不用 override 的話頭部對齊會讓它超過 2.6：這是需要 override 的理由
     const aligned = sampleFigure(saluteMask, land.headPx / salute.headPx, { count: SHAPE_COUNT, seed: 5 });
     expect(aligned.max[1]).toBeGreaterThan(2.6);
+  });
+
+  it('散手兩式（guard 護架、jab 直拳）：同一個拳手、同一把尺；膝微屈的站姿，取樣身高是 land 的 85%–100%、腳底落地', async () => {
+    const guard = FIGURES.guard!;
+    const jab = FIGURES.jab!;
+    const land = FIGURES.land!;
+    expect(figureScale(guard, land)).toBe(figureScale(jab, land));
+    const [g, j, l] = await Promise.all([loadMask(guard.src), loadMask(jab.src), loadMask(land.src)]);
+    const base = sampleFigure(l, figureScale(land, land), { count: SHAPE_COUNT, seed: 5 });
+    for (const [mask, def] of [[g, guard], [j, jab]] as const) {
+      const shape = sampleFigure(mask, figureScale(def, land), { count: SHAPE_COUNT, seed: 5 });
+      const ratio = shape.max[1] / base.max[1];
+      expect(ratio, def.id).toBeGreaterThanOrEqual(0.85);
+      expect(ratio, def.id).toBeLessThanOrEqual(1.0);
+      expect(shape.min[1]).toBeGreaterThanOrEqual(0);
+      expect(shape.min[1]).toBeLessThanOrEqual(0.03);
+    }
   });
 
   it.each(entries.filter(([, d]) => d.scaleOverride === undefined))(

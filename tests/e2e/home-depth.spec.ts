@@ -150,7 +150,7 @@ test.describe('中景依段落換', () => {
   const CASES: { beat: BeatId; pose: string; mid: string }[] = [
     { beat: 'opening', pose: 'land', mid: 'gate' },
     { beat: 'fist', pose: 'dingzhou', mid: 'gate' },
-    { beat: 'combat-a', pose: 'chengchui', mid: 'dummy' },
+    { beat: 'combat-a', pose: 'guard', mid: 'dummy' },
     { beat: 'weapon-a', pose: 'jian', mid: 'rack' },
     { beat: 'weapon-b', pose: 'miaodao', mid: 'rack' },
     { beat: 'weapon-c', pose: 'spear', mid: 'rack' },
@@ -317,7 +317,7 @@ for (const size of [
     test('引擎在跑（光點畫布隱藏）：遠景、中景、前景與背景的亮度差都夠大，開場（院門）與格鬥（木人樁）兩段都量', async ({ page }) => {
       await open(page);
       expectVisibleDepth(await measureDepth(page), `${size.width}px 開場`);
-      await settlePose(page, 'combat-a', 'chengchui');
+      await settlePose(page, 'combat-a', 'guard');
       await expect.poll(() => page.evaluate(() => getComputedStyle(document.querySelector('.depth__img[data-mid="dummy"]')!).opacity), { timeout: 10_000 }).toBe('0.85');
       expectVisibleDepth(await measureDepth(page), `${size.width}px 格鬥`);
     });
@@ -449,8 +449,8 @@ const textBoxes = (page: Page): Promise<Box[]> =>
 const ALL_BEATS: { beat: BeatId; pose: string }[] = [
   { beat: 'opening', pose: 'land' },
   { beat: 'fist', pose: 'dingzhou' },
-  { beat: 'combat-a', pose: 'chengchui' },
-  { beat: 'combat-b', pose: 'kao' },
+  { beat: 'combat-a', pose: 'guard' },
+  { beat: 'combat-b', pose: 'jab' },
   { beat: 'weapon-a', pose: 'jian' },
   { beat: 'weapon-b', pose: 'miaodao' },
   { beat: 'weapon-c', pose: 'spear' },

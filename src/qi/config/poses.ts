@@ -7,6 +7,8 @@
  *     Task 25 起不再屬於任何 beat（課表段，beat id `pricing`，改成 `scroll`），只在入館閘門期間當背景：閘門後的光點在這裡飄，按下「入館」才吸氣聚成拳師。
  *   - `lift`：只屬於開場時間軸（吸氣聚成抬腳），不對應任何 beat。
  *   - `seal`：朱印（Task 25 起預約段改成光點館徽 `crest`，朱印縮成按鈕旁的小型靜態印章）；形體檔保留但沒有任何 beat 載入它。
+ *   - `chengchui`、`kao`：八極的撐捶、貼山靠。大人格鬥段改成散手的 `guard`（護架）、`jab`（直拳）之後不再屬於任何 beat；
+ *     姿勢與形體檔保留（剪影仍給「其他課程」的四小人形與課程子頁用，引擎測試也拿它們當一般姿勢）。
  *
  * 純資料與查表，不碰 three／DOM。
  */
@@ -32,6 +34,8 @@ export type PoseId =
   | 'dingzhou'
   | 'chengchui'
   | 'kao'
+  | 'guard'
+  | 'jab'
   | 'jian'
   | 'miaodao'
   | 'spear'
@@ -71,8 +75,8 @@ export const POSE_BY_BEAT: Record<Audience, Record<BeatId, PoseId>> = {
   adult: {
     opening: 'land',
     fist: 'dingzhou',
-    'combat-a': 'chengchui',
-    'combat-b': 'kao',
+    'combat-a': 'guard',
+    'combat-b': 'jab',
     'weapon-a': 'jian',
     'weapon-b': 'miaodao',
     'weapon-c': 'spear',
@@ -120,6 +124,9 @@ export const BURSTS: Record<PoseId, Burst> = {
   spear: { dir: [1, 0, 0], power: 3.6, mode: 0 },
   land: { dir: [0, -1, 0], power: 2.2, mode: 2 },
   lift: { dir: [0, 1, 0], power: 1.8, mode: 2, hold: 0.5 },
+  // 散手技擊：護架左右分開（同撐捶、小孩格鬥）；直拳順著出拳方向（拳手面朝右，前手往 +x 打出）水平炸開
+  guard: { dir: [1, 0.1, 0], power: 3.0, mode: 1 },
+  jab: { dir: [1, 0.05, 0], power: 3.4, mode: 0 },
   // 新姿勢：others 四個小人形同時升起、salute 抱拳收勢（力道取 1.4–1.8，不搶戲）
   others: { dir: [0, 1, 0], power: 1.8, mode: 2 },
   salute: { dir: [0, -1, 0], power: 1.4, mode: 2 },

@@ -23,6 +23,9 @@ export const SILHOUETTES_READY: string[] = [
   // Task 27 追加（使用者：苗刀和大槍的區塊沒有小孩版）：小孩持刀、持槍
   'fig-kid-miaodao',
   'fig-kid-daqiang',
+  // 散手技擊：大人格鬥兩式改成拳擊／散打的護架與直拳（fig-jab 目前是預覽佔位，provenance 狀態 placeholder，待重生）
+  'fig-guard',
+  'fig-jab',
 ];
 
 /** 待生成：過閘門、補上 provenance 後才移進 READY。目前沒有待生成的剪影。 */

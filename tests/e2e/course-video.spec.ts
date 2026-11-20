@@ -111,7 +111,8 @@ test.describe('課程總覽：課程卡的播放鈕', () => {
 
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
-    expect(await video.evaluate((el: HTMLVideoElement) => ({ paused: el.paused, src: el.getAttribute('src') }))).toEqual({ paused: true, src: null });
+    // dialog 的 close 事件在隱藏之後才非同步觸發（腳本在那裡釋放來源），所以要等，不能隱藏後立刻讀。
+    await expect.poll(() => video.evaluate((el: HTMLVideoElement) => ({ paused: el.paused, src: el.getAttribute('src') }))).toEqual({ paused: true, src: null });
     await expect(play).toBeFocused();
   });
 
@@ -121,7 +122,7 @@ test.describe('課程總覽：課程卡的播放鈕', () => {
     await expect(video).toHaveAttribute('src', /\/videos\/kids-self-defense\.mp4$/);
     await dialog.getByRole('button', { name: '關閉' }).click();
     await expect(dialog).toBeHidden();
-    expect(await video.evaluate((el: HTMLVideoElement) => el.paused && !el.hasAttribute('src'))).toBe(true);
+    await expect.poll(() => video.evaluate((el: HTMLVideoElement) => el.paused && !el.hasAttribute('src'))).toBe(true);
     await expect(play).toBeFocused();
 
     await play.click();

@@ -12,7 +12,10 @@ Usage:
   --tag TAG         raw file version tag, e.g. "v" -> <name>-v1.png, "b3v" -> <name>-b3v1.png (default: v)
   --dry-run         print model/size/ref/prompt sha256 per name; no key read, no request, no ledger write
 
-Every asset is also capped at 3 requests (failed requests count).
+Every asset is also capped at 3 requests (failed requests count). Only the assets listed in CAP_EXCEPTIONS (fig-guard,
+fig-jab: the user approved 5 on 2026-11-20 after two failed Codex reviews) may raise it with "request_cap" (<= 5) in the
+prompt table, and only together with a non-empty "request_cap_reason"; anything else stops before any request.
+Tests: tools/silhouettes/test_gen.py.
 The OpenAI key is read ONLY at run time from %APPDATA%/agent-sprite-forge/config.json and is never printed:
 every message that could echo server text goes through scrub()
 (it masks the exact key and any key-shaped token). A missing --work/ref file is detected before a request is reserved.
@@ -24,6 +27,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 PER_ASSET_CAP = 3
 DEFAULT_CAP = 20
+# The only assets allowed to raise their own cap (prompts.json "request_cap" + "request_cap_reason"), and to how much at most.
+# Written here, not in the prompt table, so a prompt edit can never unlock more paid requests:
+# fig-guard / fig-jab (sanshou): the user approved 5 on 2026-11-20 after two failed Codex reviews.
+CAP_EXCEPTIONS = {"fig-guard": 5, "fig-jab": 5}
+MAX_EXCEPTION_CAP = 5
 LOCK = threading.Lock()
 
 
@@ -58,14 +66,14 @@ def save_counts(count_file, c):
         json.dump(c, f, indent=1)
 
 
-def reserve(count_file, cap, name):
+def reserve(count_file, cap, name, per_asset_cap=PER_ASSET_CAP):
     with LOCK:
         c = load_counts(count_file)
         n = c["per_asset"].get(name, 0)
         if c["total"] >= cap:
             raise SystemExit("total cap reached")
-        if n >= PER_ASSET_CAP:
-            raise RuntimeError(f"{name}: per-asset cap ({PER_ASSET_CAP}) reached")
+        if n >= per_asset_cap:
+            raise RuntimeError(f"{name}: per-asset cap ({per_asset_cap}) reached")
         c["total"] += 1
         c["per_asset"][name] = n + 1
         save_counts(count_file, c)
@@ -77,6 +85,23 @@ def note(count_file, entry):
         c = load_counts(count_file)
         c["log"].append(entry)
         save_counts(count_file, c)
+
+
+def asset_cap(prompts_file, name):
+    """Per-asset request cap: 3. Only the assets in CAP_EXCEPTIONS may ask for more, up to their listed cap (never above
+    MAX_EXCEPTION_CAP), and only with a written request_cap_reason. Anything else stops the run before the key is read."""
+    with open(prompts_file, encoding="utf-8") as f:
+        a = json.load(f)["assets"][name]
+    if "request_cap" not in a:
+        return PER_ASSET_CAP
+    if name not in CAP_EXCEPTIONS:
+        raise SystemExit(f"{name}: request_cap is only allowed for {sorted(CAP_EXCEPTIONS)}")
+    cap = a["request_cap"]
+    if not isinstance(cap, int) or isinstance(cap, bool) or cap > min(CAP_EXCEPTIONS[name], MAX_EXCEPTION_CAP):
+        raise SystemExit(f"{name}: request_cap must be an integer <= {min(CAP_EXCEPTIONS[name], MAX_EXCEPTION_CAP)}, got {cap!r}")
+    if not str(a.get("request_cap_reason", "")).strip():
+        raise SystemExit(f"{name}: request_cap needs a request_cap_reason (who approved it and why)")
+    return cap
 
 
 def build_prompt(prompts_file, name):
@@ -106,7 +131,7 @@ def gen(args, key, model, name):
         except OSError as e:
             return f"{name}: cannot read ref {ref_path}: {type(e).__name__}"
     try:
-        v = reserve(args.count_file, args.cap, name)
+        v = reserve(args.count_file, args.cap, name, asset_cap(args.prompts, name))
     except RuntimeError as e:
         return str(e)
     fields = {"model": model, "prompt": prompt, "size": size, "n": "1", "quality": "medium", "background": "opaque"}
@@ -173,6 +198,7 @@ def main(argv):
         return
     for name in args.names:  # build every prompt first: a bad prompt table fails here, before the key is read and before any paid request
         build_prompt(args.prompts, name)
+        asset_cap(args.prompts, name)
     key = load_key()
     with ThreadPoolExecutor(max_workers=4) as ex:
         for res in ex.map(lambda n: gen(args, key, args.model, n), args.names):

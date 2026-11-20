@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BEAT_NO, COPY } from '../../src/qi/config/copy';
+import { poseFor } from '../../src/qi/config/poses';
 
 /** 把 COPY 裡所有字串攤平（含巢狀物件與陣列）。 */
 function strings(value: unknown): string[] {
@@ -43,14 +44,28 @@ describe('首頁文案（設計 §4 閘門）', () => {
 });
 
 describe('首頁文案的結構', () => {
-  it('moves 涵蓋 dingzhou、chengchui、kao，每式有序號、名稱與至少一行', () => {
-    for (const key of ['dingzhou', 'chengchui', 'kao']) {
+  it('moves 涵蓋 dingzhou、guard、jab，每式有序號、名稱與至少一行', () => {
+    for (const key of ['dingzhou', 'guard', 'jab']) {
       const move = COPY.moves[key];
       expect(move, key).toBeDefined();
       expect(move!.no, key).not.toBe('');
       expect(move!.name, key).not.toBe('');
       expect(move!.lines[0], key).not.toBe('');
     }
+  });
+
+  it('大人的拳、格鬥三式：首頁實際用到的姿勢都有文案', () => {
+    for (const beat of ['fist', 'combat-a', 'combat-b'] as const) {
+      expect(COPY.moves[poseFor(beat, 'adult')], beat).toBeDefined();
+    }
+  });
+
+  it('散手技擊（大人格鬥）兩式：護架、直拳（待業主確認的提案文案）', () => {
+    expect(COPY.moves.guard).toEqual({ no: '二', name: '護架', lines: ['雙拳護頭，側身站穩。'] });
+    expect(COPY.moves.jab).toEqual({ no: '三', name: '直拳', lines: ['前手直線打出，後手護住下巴。'] });
+    // 舊的八極招式文案隨首頁姿勢一起換掉
+    expect(COPY.moves.chengchui).toBeUndefined();
+    expect(COPY.moves.kao).toBeUndefined();
   });
 
   it('小孩的四式也有文案（備用，課程內文缺首句時用）', () => {
@@ -78,8 +93,8 @@ describe('首頁文案的結構', () => {
   it('招式序號與 beat 序號一致（六個 beat 依序一到六）', () => {
     expect(Object.values(BEAT_NO)).toEqual(['一', '二', '三', '四', '五', '六']);
     expect(COPY.moves.dingzhou!.no).toBe(BEAT_NO.fist);
-    expect(COPY.moves.chengchui!.no).toBe(BEAT_NO['combat-a']);
-    expect(COPY.moves.kao!.no).toBe(BEAT_NO['combat-b']);
+    expect(COPY.moves.guard!.no).toBe(BEAT_NO['combat-a']);
+    expect(COPY.moves.jab!.no).toBe(BEAT_NO['combat-b']);
     expect(COPY.moves['kid-wushu']!.no).toBe(BEAT_NO.fist);
     expect(COPY.moves['kid-defense-a']!.no).toBe(BEAT_NO['combat-a']);
     expect(COPY.moves['kid-defense-b']!.no).toBe(BEAT_NO['combat-b']);

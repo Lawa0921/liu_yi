@@ -13,7 +13,7 @@ const T0 = new Date('2026-01-01T08:00:00');
 const T1 = new Date('2026-01-01T09:00:00');
 const READY = { timeout: 30_000 };
 
-const ADULT_POSES = ['land', 'dingzhou', 'chengchui', 'kao', 'jian', 'miaodao', 'spear', 'others', 'salute', 'scroll', 'crest'];
+const ADULT_POSES = ['land', 'dingzhou', 'guard', 'jab', 'jian', 'miaodao', 'spear', 'others', 'salute', 'scroll', 'crest'];
 const KID_POSES = ['land', 'kid-wushu', 'kid-defense-a', 'kid-defense-b', 'kid-weapon', 'kid-miaodao', 'kid-spear', 'others', 'salute', 'scroll', 'crest'];
 
 type QiGlobal = { ready: boolean; frames: number; tier: string; mode: string; debug?: QiDebug };
@@ -450,9 +450,9 @@ test.describe('開場閘門（RF2、RF3）', () => {
     await scrollToBeat(page, 'combat-a');
     await run(page, 300);
     await expect(html(page)).toHaveAttribute('data-qi-intro', 'done');
-    await expect(html(page)).toHaveAttribute('data-qi-pose', 'chengchui');
+    await expect(html(page)).toHaveAttribute('data-qi-pose', 'guard');
     await run(page, 2000);
-    await expect(html(page)).toHaveAttribute('data-qi-pose', 'chengchui');
+    await expect(html(page)).toHaveAttribute('data-qi-pose', 'guard');
   });
 
   test('開場演到一半只往下捲一點（還在第一段）：開場一樣立刻收尾，引擎的開場計時歸零，姿勢仍是 land', async ({ page }) => {

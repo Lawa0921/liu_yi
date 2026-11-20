@@ -43,6 +43,11 @@ export const FIGURES: Record<string, FigureDef> = {
   // 比 land 的 2.0 高三成（教練段的取景是照 2.0 左右的人形抓的），所以比照舊五張給 scaleOverride：
   // 0.96 讓世界身高 ≈ 1.99，與 land 相差 < 1%（控制者裁定；單元測試要求 ≤ 5%）。
   salute: { id: 'salute', src: 'fig-salute', headPx: 141, scaleOverride: 0.96, audience: 'both' },
+  // 散手技擊（大人格鬥 combat-a／combat-b，取代首頁的撐捶、貼山靠）：護架與直拳是同一個拳手、同一張導引圖出來的，用同一把尺。
+  // headPx 是 measureHeadHeight 的實測值（護拳貼在下巴前，頸谷量不準：兩張量到 114／145），所以比照 salute 給 scaleOverride：
+  // 1 ＝與落地那張同一個像素尺度；護架主體 1115 px（land 1161 px），膝微屈的站姿約為 land 身高的 96%，直拳 1051 px 約 91%。
+  guard: { id: 'guard', src: 'fig-guard', headPx: 114, scaleOverride: 1, audience: 'adult' },
+  jab: { id: 'jab', src: 'fig-jab', headPx: 145, scaleOverride: 1, audience: 'adult' },
   'kid-wushu': { id: 'kid-wushu', src: 'fig-kid-wushu', headPx: 158, audience: 'kid' },
   'kid-defense-a': { id: 'kid-defense-a', src: 'fig-kid-defense-a', headPx: 202, audience: 'kid' },
   'kid-defense-b': { id: 'kid-defense-b', src: 'fig-kid-defense-b', headPx: 177, audience: 'kid' },
