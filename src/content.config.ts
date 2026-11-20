@@ -17,9 +17,10 @@ const courses = defineCollection({
       category: z.enum(['weapon', 'fist', 'combat', 'other']),
       /** 一句話簡介（卡片、meta description 用） */
       summary: z.string().min(1),
-      /** 照片 0–5 張；第一張是封面。沒有照片就留空陣列，會顯示文字卡。 */
+      /** 照片 0–5 張；第一張是封面。沒有照片就留空陣列，會顯示文字卡。
+       *  cardOnly：只給課程卡（與 og 圖）用、課程內頁不顯示的照片（例如從課程影片截的一格，內頁首屏已經是那支影片）。 */
       photos: z
-        .array(z.object({ src: image(), alt: z.string().min(1) }))
+        .array(z.object({ src: image(), alt: z.string().min(1), cardOnly: z.boolean().default(false) }))
         .max(5)
         .default([]),
       /** 影片網址（預設假設 YouTube）；沒有就不要寫，課程頁不會出現影片區。 */

@@ -83,6 +83,11 @@ export function pairByCategory<T extends CourseLike>(courses: readonly T[]): Cat
   }));
 }
 
+/** 課程內頁要顯示的照片：去掉只給課程卡用的（cardOnly，例如影片截圖）。順序不變，不改動傳入的陣列。 */
+export function pagePhotos<P extends { cardOnly?: boolean }>(photos: readonly P[]): P[] {
+  return photos.filter((photo) => !photo.cardOnly);
+}
+
 /** 某位教練教的已發布課程。 */
 export function coursesOfCoach<T extends CourseLike>(courses: readonly T[], coachId: string): T[] {
   return publishedCourses(courses).filter((c) => c.data.coaches.some((coach) => coach.id === coachId));

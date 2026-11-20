@@ -1,0 +1,157 @@
+---
+// 課程照片的切換區：橫向捲動＋scroll-snap 的清單，沒有 JS 也能手動切換；有 JS 時另有上一張／下一張按鈕（src/scripts/gallery.ts）。
+// 用在兩處（src/pages/courses/[slug].astro）：沒有影片的課放在首屏右側；有影片的課放在內文下方的「課程照片」區。
+// data-gallery-root、data-gallery、data-gallery-prev／next／status 是腳本與測試的約定，請保留。
+import { Image } from 'astro:assets';
+
+interface Props {
+  photos: readonly { src: ImageMetadata; alt: string }[];
+  courseTitle: string;
+  /** 首屏用：第一張 eager＋高優先權；首屏以下的照片區全部 lazy。 */
+  eager?: boolean;
+  class?: string;
+}
+
+const { photos, courseTitle, eager = false, class: className } = Astro.props;
+---
+
+<div class:list={['course-gallery', 'cornered', className]} data-gallery-root>
+  <i class="cornered__tick"></i>
+  <i class="cornered__tick"></i>
+  <i class="cornered__tick"></i>
+  <i class="cornered__tick"></i>
+  <ul class="gallery" data-gallery aria-label={`${courseTitle}的照片`} tabindex={photos.length > 1 ? 0 : undefined}>
+    {
+      photos.map((photo, index) => (
+        <li>
+          <Image
+            src={photo.src}
+            alt={photo.alt}
+            width={1200}
+            height={900}
+            fit="cover"
+            sizes="(min-width: 60rem) 42rem, 95vw"
+            loading={eager && index === 0 ? 'eager' : 'lazy'}
+            fetchpriority={eager && index === 0 ? 'high' : undefined}
+          />
+        </li>
+      ))
+    }
+  </ul>
+  {
+    photos.length > 1 && (
+      <div class="gallery-controls" data-requires-js>
+        <button class="gallery-controls__button" type="button" data-gallery-prev aria-label="上一張照片">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <path d="M20 12H5M11 5.5L4.5 12L11 18.5" />
+          </svg>
+        </button>
+        <span class="gallery-controls__status" data-gallery-status aria-live="polite">
+          1 / {photos.length}
+        </span>
+        <button class="gallery-controls__button" type="button" data-gallery-next aria-label="下一張照片">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <path d="M4 12H19M13 5.5L19.5 12L13 18.5" />
+          </svg>
+        </button>
+      </div>
+    )
+  }
+</div>
+
+<style>
+  .course-gallery {
+    min-width: 0;
+    border: var(--line) solid var(--color-line-faint);
+    background: var(--color-surface);
+  }
+
+  .gallery {
+    display: flex;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  .gallery::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* 沒有 JS 時沒有按鈕，要留著捲軸讓人知道還有照片。 */
+  :global(html:not(.js)) .gallery {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-accent) transparent;
+  }
+
+  :global(html:not(.js)) .gallery::-webkit-scrollbar {
+    display: block;
+    height: 6px;
+  }
+
+  .gallery li {
+    flex: 0 0 100%;
+    scroll-snap-align: start;
+  }
+
+  .gallery :global(img) {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+  }
+
+  .gallery-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-top: var(--line) solid var(--color-line-faint);
+  }
+
+  .gallery-controls__button {
+    display: grid;
+    place-items: center;
+    width: 3.25rem;
+    height: 2.75rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--color-accent-strong);
+    cursor: pointer;
+    transition:
+      color 0.3s,
+      opacity 0.3s;
+  }
+
+  .gallery-controls__button svg {
+    transition: transform 0.4s var(--ease-out);
+  }
+
+  .gallery-controls__button:not(:disabled):hover {
+    color: var(--color-text);
+  }
+
+  .gallery-controls__button[data-gallery-prev]:not(:disabled):hover svg {
+    transform: translateX(-4px);
+  }
+
+  .gallery-controls__button[data-gallery-next]:not(:disabled):hover svg {
+    transform: translateX(4px);
+  }
+
+  .gallery-controls__button:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+
+  .gallery-controls__status {
+    color: var(--color-text-muted);
+    font-family: var(--font-display);
+    font-size: var(--text-sm);
+    font-weight: 400;
+    letter-spacing: 0.3em;
+    font-variant-numeric: tabular-nums;
+  }
+</style>

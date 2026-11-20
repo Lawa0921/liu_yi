@@ -1,18 +1,21 @@
 ---
-// 單一課程：名稱與一句話簡介、照片（有才顯示，可用按鈕切換）、內文、子項區塊、影片（有才顯示）、授課教練、相關連結。
-// 內文可能只有兩三句（等業主補文案），版型不能靠內文撐高度：
-// 首屏右側有照片就放照片；沒有照片就放字牌（分類單字＋紋樣），不放任何替代圖。
-import { Image } from 'astro:assets';
+// 單一課程。版面順序（業主 2026-11-20）：首屏（名稱與一句話簡介＋右側一格）→ 內文 → 課程照片 → 外連影片 → 練什麼 → 授課教練 → 相關連結。
+// 內文可能只有兩三句（等業主補文案），版型不能靠內文撐高度。首屏右側那一格：
+//   有站內影片（course.data.video）就放影片（封面就是預覽畫面，點了在原地播），頁面下方不再另外放影片區；
+//   否則有照片就放照片（可用按鈕切換）；都沒有就放字牌（分類單字＋紋樣），不放任何替代圖。
+// 有影片的課，照片移到內文下方的「課程照片」區；cardOnly 的照片（課程卡專用的影片截圖）內頁不顯示。
+import { getImage } from 'astro:assets';
 import { render } from 'astro:content';
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import CoachCard from '../../components/CoachCard.astro';
+import CourseGallery from '../../components/CourseGallery.astro';
 import Plaque from '../../components/Plaque.astro';
 import VideoSection from '../../components/VideoSection.astro';
 import Weapon from '../../components/ornament/Weapon.astro';
 import Bafang from '../../components/ornament/Bafang.astro';
 import Leitai from '../../components/ornament/Leitai.astro';
 import { coachesOfCourse, getPublishedCoaches, getPublishedCourses, type Course } from '../../lib/content';
-import { AUDIENCE_LABEL, CATEGORY_GLYPH, CATEGORY_LABEL } from '../../lib/courses';
+import { AUDIENCE_LABEL, CATEGORY_GLYPH, CATEGORY_LABEL, pagePhotos } from '../../lib/courses';
 import { sceneForCourse } from '../../lib/scene/config';
 import { BOOKING_ANCHOR, BOOKING_LABEL } from '../../lib/site';
 import { url } from '../../lib/url';
@@ -31,6 +34,9 @@ const { title, summary, photos, subItems, video, videoUrl, category, audience } 
 const { Content } = await render(course);
 const coaches = coachesOfCourse(course, await getPublishedCoaches());
 const glyph = category === 'other' ? undefined : CATEGORY_GLYPH[category];
+const shownPhotos = pagePhotos(photos);
+// 首屏影片的封面是首屏最大的元素：<head> 預先載入（高優先權）。
+const poster = video ? await getImage({ src: video.poster, width: Math.min(video.width, 1280), format: 'webp' }) : undefined;
 
 // 子項名稱 → 對應的兵器（只有這三種有；其他名稱就不畫）。
 // 每個子項是一件可轉動的 3D 兵器（設計文件 §15.2-4；src/scripts/weapons3d.ts），線稿是沒有 WebGL／沒有 JS 時的退路。
@@ -38,6 +44,7 @@ const WEAPON_KIND: Record<string, 'jian' | 'miaodao' | 'spear'> = { 中國劍: '
 ---
 
 <BaseLayout title={title} description={`${title}：${summary}`} ogImage={photos[0]?.src} ogType="article" scene={{ kind: 'course', spec: sceneForCourse({ id: course.id, category, audience }) }}>
+  {poster && <link slot="head" rel="preload" as="image" href={poster.src} type="image/webp" fetchpriority="high" />}
   <article class="course">
     <header class="course-head">
       <div class="course-head__text">
@@ -61,47 +68,35 @@ const WEAPON_KIND: Record<string, 'jian' | 'miaodao' | 'spear'> = { 中國劍: '
       </div>
 
       {
-        photos.length > 0 ? (
-          <div class="course-head__media cornered" data-gallery-root>
+        video ? (
+          /* 原生播放器：按下播放前只載封面、不載影片位元組。格子沿用照片格的 4:3，影片用 contain 置中（方形、直式不裁切），留暗色邊。 */
+          <div class="course-head__video cornered" data-hero-video>
             <i class="cornered__tick" />
             <i class="cornered__tick" />
             <i class="cornered__tick" />
             <i class="cornered__tick" />
-            {/* 橫向捲動＋scroll-snap：不需要 JS 就能手動切換照片；有 JS 時另有上一張／下一張按鈕（src/scripts/gallery.ts）。 */}
-            <ul class="gallery" data-gallery aria-label={`${title}的照片`} tabindex={photos.length > 1 ? 0 : undefined}>
-              {photos.map((photo, index) => (
-                <li>
-                  <Image
-                    src={photo.src}
-                    alt={photo.alt}
-                    width={1200}
-                    height={900}
-                    fit="cover"
-                    sizes="(min-width: 60rem) 42rem, 95vw"
-                    loading={index === 0 ? 'eager' : 'lazy'}
-                    fetchpriority={index === 0 ? 'high' : undefined}
-                  />
-                </li>
-              ))}
-            </ul>
-            {photos.length > 1 && (
-              <div class="gallery-controls" data-requires-js>
-                <button class="gallery-controls__button" type="button" data-gallery-prev aria-label="上一張照片">
-                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-                    <path d="M20 12H5M11 5.5L4.5 12L11 18.5" />
-                  </svg>
-                </button>
-                <span class="gallery-controls__status" data-gallery-status aria-live="polite">
-                  1 / {photos.length}
-                </span>
-                <button class="gallery-controls__button" type="button" data-gallery-next aria-label="下一張照片">
-                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-                    <path d="M4 12H19M13 5.5L19.5 12L13 18.5" />
-                  </svg>
-                </button>
-              </div>
-            )}
+            <video
+              class="course-head__player"
+              src={url(video.src)}
+              poster={poster?.src}
+              width={video.width}
+              height={video.height}
+              controls
+              playsinline
+              preload="none"
+              aria-label={`${title}課程影片`}
+            />
+            {/* 封面上的播放鈕（src/scripts/hero-video.ts）：滑鼠沒移上去時原生控制列是收起來的，沒有它看起來就只是一張照片。
+                視覺同課程卡的「影片」鈕、放大；沒有 JS 時不顯示（原生控制列照常可用）。 */}
+            <button class="course-head__play" type="button" aria-label={`播放${title}課程影片`} data-hero-play data-requires-js>
+              <svg class="course-head__play-icon" viewBox="0 0 12 14" width="18" height="21" aria-hidden="true">
+                <path d="M1 1L11 7L1 13Z" fill="currentColor" />
+              </svg>
+              <span aria-hidden="true">影片</span>
+            </button>
           </div>
+        ) : shownPhotos.length > 0 ? (
+          <CourseGallery class="course-head__media" photos={shownPhotos} courseTitle={title} eager />
         ) : (
           glyph && (
             <div class="course-head__plate cornered" aria-hidden="true">
@@ -135,6 +130,20 @@ const WEAPON_KIND: Record<string, 'jian' | 'miaodao' | 'spear'> = { 中國劍: '
     </section>
 
     {
+      video && shownPhotos.length > 0 && (
+        <section class="section section--tight" aria-labelledby="photos-heading" data-course-photos>
+          <div class="container">
+            <Plaque id="photos-heading">課程照片</Plaque>
+            <CourseGallery class="course-photos__gallery" photos={shownPhotos} courseTitle={title} />
+          </div>
+        </section>
+      )
+    }
+
+    {/* 只有外連影片（videoUrl，例如 YouTube）的課才會輸出；站內影片已經在首屏。 */}
+    {!video && <VideoSection videoUrl={videoUrl} courseTitle={title} />}
+
+    {
       subItems.length > 0 && (
         <section class="section section--tight" aria-labelledby="sub-items-heading">
           <div class="container" data-weapon3d-scope>
@@ -161,8 +170,6 @@ const WEAPON_KIND: Record<string, 'jian' | 'miaodao' | 'spear'> = { 中國劍: '
         </section>
       )
     }
-
-    <VideoSection video={video} videoUrl={videoUrl} courseTitle={title} />
 
     {
       coaches.length > 0 && (
@@ -243,100 +250,93 @@ const WEAPON_KIND: Record<string, 'jian' | 'miaodao' | 'spear'> = { 中國劍: '
     margin: var(--space-6) 0 0;
   }
 
-  /* 照片 */
-  .course-head__media {
+  /* 照片（沒有影片的課）：照片切換區本身的樣式在 CourseGallery.astro。 */
+
+  /* 影片（有站內影片的課）：外框與照片格同為 4:3、同樣的角飾與細框；影片 contain 置中，四周是暗色邊。
+     高度另外不超過一屏可見高度（扣掉頁首與底欄），矮視窗下格子變扁、影片照樣完整。 */
+  .course-head__video {
     min-width: 0;
+    aspect-ratio: 4 / 3;
+    max-height: calc(var(--stage-height) - var(--space-6));
     border: var(--line) solid var(--color-line-faint);
-    background: var(--color-surface);
+    background: var(--color-deep);
   }
 
-  .gallery {
-    display: flex;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
-    overscroll-behavior-x: contain;
-    scrollbar-width: none;
+  .course-head__player {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: transparent;
   }
 
-  .gallery::-webkit-scrollbar {
+  /* 封面中央的播放鈕：與課程卡的「影片」鈕同一套樣子（CourseCard.astro 的 .course-card__play），放大到首屏格的比例。
+     開始播放後由腳本加上 hidden，之後用原生控制列。 */
+  .course-head__play {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    z-index: 3;
+    isolation: isolate;
+    overflow: hidden;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-width: 4rem;
+    min-height: 4rem;
+    padding: 0 var(--space-5) 0 var(--space-6);
+    border: var(--line) solid var(--color-line);
+    background: var(--color-veil);
+    color: var(--color-accent-strong);
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    font-weight: 400;
+    letter-spacing: 0.28em;
+    line-height: 1;
+    cursor: pointer;
+    transform: translate(-50%, -50%);
+    transition:
+      color 0.35s var(--ease-out),
+      border-color 0.35s var(--ease-out);
+  }
+
+  .course-head__play[hidden] {
     display: none;
   }
 
-  /* 沒有 JS 時沒有按鈕，要留著捲軸讓人知道還有照片。 */
-  :global(html:not(.js)) .gallery {
-    scrollbar-width: thin;
-    scrollbar-color: var(--color-accent) transparent;
+  /* hover／focus：金色由左鋪滿（與站上 .button、課程卡播放鈕同一個語彙）。 */
+  .course-head__play::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: var(--color-accent);
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform 0.45s var(--ease-out);
   }
 
-  :global(html:not(.js)) .gallery::-webkit-scrollbar {
-    display: block;
-    height: 6px;
+  .course-head__play:hover,
+  .course-head__play:focus-visible {
+    border-color: var(--color-accent);
+    color: var(--color-on-accent);
   }
 
-  .gallery li {
-    flex: 0 0 100%;
-    scroll-snap-align: start;
+  .course-head__play:hover::before,
+  .course-head__play:focus-visible::before {
+    transform: scaleX(1);
   }
 
-  .gallery :global(img) {
-    width: 100%;
-    aspect-ratio: 4 / 3;
-    object-fit: cover;
+  .course-head__play-icon {
+    flex: none;
   }
 
-  .gallery-controls {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    border-top: var(--line) solid var(--color-line-faint);
-  }
-
-  .gallery-controls__button {
-    display: grid;
-    place-items: center;
-    width: 3.25rem;
-    height: 2.75rem;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: var(--color-accent-strong);
-    cursor: pointer;
-    transition:
-      color 0.3s,
-      opacity 0.3s;
-  }
-
-  .gallery-controls__button svg {
-    transition: transform 0.4s var(--ease-out);
-  }
-
-  .gallery-controls__button:not(:disabled):hover {
-    color: var(--color-text);
-  }
-
-  .gallery-controls__button[data-gallery-prev]:not(:disabled):hover svg {
-    transform: translateX(-4px);
-  }
-
-  .gallery-controls__button[data-gallery-next]:not(:disabled):hover svg {
-    transform: translateX(4px);
-  }
-
-  .gallery-controls__button:disabled {
-    opacity: 0.3;
-    cursor: default;
-  }
-
-  .gallery-controls__status {
-    color: var(--color-text-muted);
-    font-family: var(--font-display);
-    font-size: var(--text-sm);
-    font-weight: 400;
-    letter-spacing: 0.3em;
-    font-variant-numeric: tabular-nums;
+  /* 有影片的課，照片移到內文下方的照片區：限制寬度，標題＋照片＋切換鈕在桌機一屏內看得完。 */
+  :global(.course-photos__gallery) {
+    max-width: 40rem;
+    margin-inline: auto;
   }
 
   /* 字牌（沒有照片的課程） */
@@ -438,7 +438,8 @@ const WEAPON_KIND: Record<string, 'jian' | 'miaodao' | 'spear'> = { 中國劍: '
       animation-delay: 0.4s;
     }
 
-    :global(html.js) .course-head__media,
+    :global(html.js .course-head__media),
+    :global(html.js) .course-head__video,
     :global(html.js) .course-head__plate {
       animation: course-media-in 1.1s var(--ease-out) 0.15s both;
     }

@@ -122,9 +122,11 @@ test.describe('課程頁照片切換', () => {
   });
 
   test('沒有照片的課程頁沒有照片區與按鈕', async ({ page }) => {
-    // 八極專修已有照片（課程卡用的乾淨裁切）；中式兵器刻意不放 photos（課程卡維持 3D 兵器）。
-    await page.goto('./courses/chinese-weapons/');
-    await expect(page.locator('[data-gallery]')).toHaveCount(0);
-    await expect(page.locator('[data-gallery-next]')).toHaveCount(0);
+    // 中式兵器刻意不放 photos（課程卡維持 3D 兵器）；八極專修唯一的照片是課程卡專用（cardOnly）的影片截圖，內頁不顯示。
+    for (const slug of ['chinese-weapons', 'bajiquan']) {
+      await page.goto(`./courses/${slug}/`);
+      await expect(page.locator('[data-gallery]'), slug).toHaveCount(0);
+      await expect(page.locator('[data-gallery-next]'), slug).toHaveCount(0);
+    }
   });
 });

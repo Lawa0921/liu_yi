@@ -6,6 +6,7 @@ summary: 八極拳的套路與應用。
 photos:
   - src: ../../assets/images/video/bajiquan-card.jpg
     alt: 兩位學員在教室裡面對面練習對練
+    cardOnly: true
 video:
   src: /videos/bajiquan.mp4
   poster: ../../assets/images/video/bajiquan-poster.jpg

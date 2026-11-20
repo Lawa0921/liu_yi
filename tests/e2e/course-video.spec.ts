@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { ADULT_COURSES, KID_COURSES, OTHER_COURSES, basePath } from './helpers';
 
-// 六門主課的課程簡介影片：課程卡右下角的播放鈕 → 站內影片視窗；課程內頁的「課程影片」區塊。
+// 六門主課的課程簡介影片：課程卡右下角的播放鈕 → 站內影片視窗；課程內頁首屏右側的影片（data-hero-video）。
 // 重點：完整、原比例、有聲、由訪客主動播放；按下播放前不下載任何影片位元組。
 
 const VIDEO_SIZE: Record<string, { width: number; height: number }> = {
@@ -224,37 +224,175 @@ test.describe('沒有 JavaScript', () => {
     }
     await expect(page.getByRole('link', { name: '播放八極專修課程影片' })).toBeVisible();
   });
+
+  test('課程內頁：首屏不顯示播放鈕（沒有腳本能接），原生控制列的影片照常顯示', async ({ page }) => {
+    await page.goto('./courses/chinese-weapons/');
+    const hero = page.locator('.course-head [data-hero-video]');
+    await expect(hero.locator('[data-hero-play]')).toHaveCount(1);
+    await expect(hero.locator('[data-hero-play]')).toBeHidden();
+    await expect(hero.locator('video')).toBeVisible();
+    await expect(hero.locator('video')).toHaveAttribute('controls', '');
+  });
 });
 
-test.describe('課程內頁的影片區', () => {
+// 業主要求（2026-11-20）：有站內影片的課，首屏右側那格直接是影片（封面就是預覽畫面，點了在原地播）；
+// 頁面下方不再有「課程影片」區，避免重複。
+test.describe('課程內頁首屏的影片', () => {
   for (const course of [...ADULT_COURSES, ...KID_COURSES]) {
-    test(`${course.slug}：<video preload="none"> 有封面，原比例，載入與捲動時不請求 mp4`, async ({ page, baseURL }) => {
+    test(`${course.slug}：首屏右側是 <video preload="none">，有封面且封面預先載入；下方沒有影片區；載入與捲動時不請求 mp4`, async ({ page, baseURL }) => {
       await page.setViewportSize({ width: 1440, height: 900 });
       const mp4 = trackMp4(page);
       await page.goto(`./courses/${course.slug}/`);
-      const section = page.locator('[data-video-section]');
-      await expect(section).toHaveCount(1);
-      const video = section.locator('video');
-      await expect(video).toHaveCount(1);
+      await expect(page.locator('[data-video-section]')).toHaveCount(0);
+      await expect(page.getByRole('heading', { name: '課程影片' })).toHaveCount(0);
+      await expect(page.locator('video')).toHaveCount(1);
+
+      const hero = page.locator('.course-head [data-hero-video]');
+      await expect(hero).toHaveCount(1);
+      const video = hero.locator('video');
       const { width, height } = VIDEO_SIZE[course.slug]!;
       await expect(video).toHaveAttribute('preload', 'none');
       await expect(video).toHaveAttribute('controls', '');
       await expect(video).toHaveAttribute('playsinline', '');
       await expect(video).toHaveAttribute('src', `${basePath(baseURL)}videos/${course.slug}.mp4`);
-      await expect(video).toHaveAttribute('poster', /\.(webp|jpe?g|avif)$/);
+      await expect(video).toHaveAttribute('poster', /\.webp$/);
       await expect(video).toHaveAttribute('width', String(width));
       await expect(video).toHaveAttribute('height', String(height));
+      await expect(video).toHaveAttribute('aria-label', `${course.title}課程影片`);
+      // 封面是首屏最大的元素：<head> 裡預先載入，且真的載得到。
+      const poster = (await video.getAttribute('poster'))!;
+      await expect(page.locator(`head link[rel="preload"][as="image"][href="${poster}"]`)).toHaveCount(1);
+      expect((await page.request.get(new URL(poster, page.url()).href)).status()).toBe(200);
 
-      await video.scrollIntoViewIfNeeded();
-      const box = (await video.boundingBox())!;
-      expect(Math.abs(box.width / box.height - width / height) / (width / height)).toBeLessThan(0.02);
-      // 直式／方形不撐出一整屏。
-      expect(box.height).toBeLessThan(900);
+      // 不捲動就看得到（首屏）。頁首的剪影場景佔掉上方約 530 px，桌機 1440×900 實測約 77% 在畫面內（與原本的照片格同位置），這裡守住過半。
+      await expect(video).toBeInViewport({ ratio: 0.5 });
 
       await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
       await page.waitForLoadState('networkidle');
       expect(mp4).toEqual([]);
     });
+  }
+
+  for (const viewport of [
+    { width: 1440, height: 900 },
+    { width: 390, height: 844 },
+  ]) {
+    test(`${viewport.width}×${viewport.height}：首屏影片中央有播放鈕，蓋在封面上、觸控目標夠大`, async ({ page }) => {
+      await page.setViewportSize(viewport);
+      await page.goto('./courses/kids-weapons/');
+      const hero = page.locator('.course-head [data-hero-video]');
+      const play = hero.getByRole('button', { name: '播放防身兵器課程影片' });
+      await expect(play).toBeVisible();
+      await expect(play).toHaveAttribute('type', 'button');
+      const frame = (await hero.boundingBox())!;
+      const box = (await play.boundingBox())!;
+      expect(box.width).toBeGreaterThanOrEqual(56);
+      expect(box.height).toBeGreaterThanOrEqual(56);
+      // 置中（誤差 2 px）。
+      expect(Math.abs(box.x + box.width / 2 - (frame.x + frame.width / 2))).toBeLessThan(2);
+      expect(Math.abs(box.y + box.height / 2 - (frame.y + frame.height / 2))).toBeLessThan(2);
+    });
+  }
+
+  // 靜態測試伺服器不送 video MIME、也不支援 Range，影片不一定真的播得起來：
+  // 改成包住 HTMLMediaElement.prototype.play，記下呼叫次數（仍呼叫原本的 play，paused 會變 false、觸發 play 事件）。
+  const recordPlay = (page: Page) =>
+    page.addInitScript(() => {
+      const w = window as unknown as { __playCalls: number };
+      w.__playCalls = 0;
+      const original = HTMLMediaElement.prototype.play;
+      HTMLMediaElement.prototype.play = function (this: HTMLMediaElement) {
+        w.__playCalls += 1;
+        return original.call(this);
+      };
+    });
+  const playCalls = (page: Page) => page.evaluate(() => (window as unknown as { __playCalls: number }).__playCalls);
+
+  test('點播放鈕：呼叫 video.play()、影片取得焦點、播放鈕隱藏；不換頁', async ({ page }) => {
+    await recordPlay(page);
+    await page.goto('./courses/chinese-weapons/');
+    const url = page.url();
+    const hero = page.locator('.course-head [data-hero-video]');
+    const play = hero.getByRole('button', { name: '播放中式兵器課程影片' });
+    const video = hero.locator('video');
+    await play.click();
+    await expect.poll(() => playCalls(page)).toBe(1);
+    await expect(play).toBeHidden();
+    await expect(video).toBeFocused();
+    expect(await video.evaluate((el: HTMLVideoElement) => el.paused)).toBe(false);
+    expect(page.url()).toBe(url);
+  });
+
+  test('鍵盤：Tab 到播放鈕按 Enter 一樣會播', async ({ page }) => {
+    await recordPlay(page);
+    await page.goto('./courses/kids-weapons/');
+    const play = page.getByRole('button', { name: '播放防身兵器課程影片' });
+    await play.focus();
+    await page.keyboard.press('Enter');
+    await expect.poll(() => playCalls(page)).toBe(1);
+    await expect(play).toBeHidden();
+    await expect(page.locator('.course-head [data-hero-video] video')).toBeFocused();
+  });
+
+  test('直接用原生控制列開始播放（play 事件）：播放鈕也隱藏', async ({ page }) => {
+    await page.goto('./courses/bajiquan/');
+    const play = page.getByRole('button', { name: '播放八極專修課程影片' });
+    await expect(play).toBeVisible();
+    // 原生控制列的播放鍵在 shadow DOM 裡點不到；它做的事就是 play()，這裡直接呼叫。
+    await page.locator('.course-head [data-hero-video] video').evaluate((el: HTMLVideoElement) => void el.play().catch(() => undefined));
+    await expect(play).toBeHidden();
+  });
+
+  test('從課程總覽點進課程頁（換頁轉場）後，播放鈕照樣有作用', async ({ page }) => {
+    await recordPlay(page);
+    await page.goto('./courses/');
+    await card(page, 'adult', '散手技擊').locator('h3').click();
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('散手技擊');
+    const play = page.getByRole('button', { name: '播放散手技擊課程影片' });
+    await play.click();
+    await expect.poll(() => playCalls(page)).toBe(1);
+    await expect(play).toBeHidden();
+  });
+
+  test('沒有影片的課程頁沒有播放鈕', async ({ page }) => {
+    await page.goto('./courses/bjj/');
+    await expect(page.locator('[data-hero-play]')).toHaveCount(0);
+  });
+
+  for (const viewport of [
+    { width: 1440, height: 900 },
+    { width: 390, height: 844 },
+    { width: 1366, height: 650 },
+  ]) {
+    for (const ratio of RATIO_CASES) {
+      test(`${viewport.width}×${viewport.height}：${ratio.shape}影片（${ratio.slug}）在首屏格子裡完整顯示不裁切，格子不比視窗高、沒有水平溢出`, async ({ page }) => {
+        await page.setViewportSize(viewport);
+        await page.goto(`./courses/${ratio.slug}/`);
+        const hero = page.locator('.course-head [data-hero-video]');
+        const video = hero.locator('video');
+        const frame = (await hero.boundingBox())!;
+        const box = (await video.boundingBox())!;
+        // 影片元素在格子裡，用 contain 等比縮放（直式、方形不被裁掉）。
+        expect(await video.evaluate((el) => getComputedStyle(el).objectFit)).toBe('contain');
+        expect(box.x).toBeGreaterThanOrEqual(frame.x - 0.5);
+        expect(box.y).toBeGreaterThanOrEqual(frame.y - 0.5);
+        expect(box.x + box.width).toBeLessThanOrEqual(frame.x + frame.width + 0.5);
+        expect(box.y + box.height).toBeLessThanOrEqual(frame.y + frame.height + 0.5);
+        // 實際畫面（contain 後的內容區）不超出元素，且不會縮成一小塊：
+        // 4:3 格子裡，橫式約佔滿寬、高 75%；方形佔滿高、寬 75%；直式佔滿高、寬約 42%。
+        const { width, height } = VIDEO_SIZE[ratio.slug]!;
+        const scale = Math.min(box.width / width, box.height / height);
+        expect(width * scale).toBeLessThanOrEqual(box.width + 0.5);
+        expect(height * scale).toBeLessThanOrEqual(box.height + 0.5);
+        expect(width * scale).toBeGreaterThanOrEqual(box.width * 0.4);
+        expect(height * scale).toBeGreaterThanOrEqual(box.height * 0.5);
+        // 格子不比視窗高，也不比現在照片格（4:3）高。
+        expect(frame.height).toBeLessThanOrEqual(viewport.height);
+        expect(frame.height).toBeLessThanOrEqual(frame.width * 0.75 + 2);
+        expect(frame.x + frame.width).toBeLessThanOrEqual(viewport.width + 0.5);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+      });
+    }
   }
 
   for (const course of OTHER_COURSES) {
