@@ -140,6 +140,8 @@ test.describe('沒有 JavaScript', () => {
     await page.locator('[data-audience-panel="kid"] .course-card a').first().click();
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('防身兵器');
     await expect(page.locator('[data-course-body]')).toBeVisible();
-    await expect(page.locator('[data-gallery] img').first()).toBeVisible();
+    // 有影片的課：首屏右側是影片（原生 controls，沒有 JS 也能播），照片在下方的照片區。
+    await expect(page.locator('.course-head [data-hero-video] video')).toBeVisible();
+    await expect(page.locator('[data-course-photos] [data-gallery] img').first()).toBeVisible();
   });
 });

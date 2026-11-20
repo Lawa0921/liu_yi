@@ -86,6 +86,21 @@ describe('八極專修、散手技擊的課程卡改用乾淨裁切的照片', (
     expect(md).toMatch(new RegExp(`^photos:\\r?\\n\\s+- src: \\.\\./\\.\\./assets/images/video/${id}-card\\.jpg\\r?\\n\\s+alt: ${alt}\\s*$`, 'm'));
   });
 
+  it.each(['bajiquan', 'sanshou'])('%s：*-card.jpg 是影片截圖，標 cardOnly: true（課程內頁的照片區不顯示）', (id) => {
+    const md = read(`src/content/courses/${id}.md`);
+    expect(md).toMatch(new RegExp(`^\\s+- src: \\.\\./\\.\\./assets/images/video/${id}-card\\.jpg\\r?\\n\\s+alt: .+\\r?\\n\\s+cardOnly: true\\s*$`, 'm'));
+  });
+
+  it('其他課程的照片都不是 cardOnly（內頁照片區照常顯示）', () => {
+    for (const id of ['chinese-weapons', 'kids-weapons', 'kids-martial-arts', 'kids-self-defense', 'bjj', 'core-yoga']) {
+      expect(read(`src/content/courses/${id}.md`), id).not.toMatch(/cardOnly: true/);
+    }
+  });
+
+  it('schema：photo 有可選的 cardOnly 布林，預設 false', () => {
+    expect(read('src/content.config.ts')).toMatch(/cardOnly: z\.boolean\(\)\.default\(false\)/);
+  });
+
   it('八極專修不再標註「待業主補：實拍照、影片」', () => {
     expect(read('src/content/courses/bajiquan.md')).not.toContain('待業主補：實拍照、影片');
   });

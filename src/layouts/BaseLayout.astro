@@ -75,6 +75,8 @@ const twkaiCore = fontData['--font-twkai']?.[0]?.src[0];
     {/* 字型分核心與延伸兩份（astro.config.mjs）：只 preload 核心（fontData 第一筆），延伸檔由 unicode-range 決定要不要下載。 */}
     <Font cssVariable="--font-twkai" />
     {twkaiCore && <link rel="preload" href={twkaiCore.url} as="font" type="font/woff2" crossorigin />}
+    {/* 頁面自己要預先載入的資源（例如課程內頁首屏影片的封面）。 */}
+    <slot name="head" />
 
     {/* 首次繪製前執行：標記有 JS，並還原上次選的「大人｜小孩」，避免卡片閃一下。
         首頁另外在這裡判定要不要退回靜態圖（html.qi-static）：偏好減少動態，或取不到 WebGL2。靜態圖要不要顯示只由 CSS 決定，
@@ -166,6 +168,7 @@ const twkaiCore = fontData['--font-twkai']?.[0]?.src[0];
       import { initLiteVideos } from '../scripts/lite-video';
       import { initReveal } from '../scripts/reveal';
       import { initGalleries } from '../scripts/gallery';
+      import { initHeroVideos } from '../scripts/hero-video';
       import { initPosterLightbox } from '../scripts/poster-lightbox';
       import { initWeapons3d } from '../scripts/weapons3d';
 
@@ -176,6 +179,7 @@ const twkaiCore = fontData['--font-twkai']?.[0]?.src[0];
       initLiteVideos();
       initReveal();
       initGalleries();
+      initHeroVideos();
       initPosterLightbox();
       // 頁面上有 3D 兵器的區塊才會有動作；three 本身等接近那個區塊才下載。
       initWeapons3d();

@@ -3,6 +3,7 @@ import {
   cardsFor,
   coursesOfCoach,
   otherCourses,
+  pagePhotos,
   pairByCategory,
   publishedCourses,
   type CourseLike,
@@ -103,6 +104,24 @@ describe('pairByCategory', () => {
     const pairs = pairByCategory([course('w', 'adult', 'weapon')]);
     expect(pairs[0]).toMatchObject({ category: 'weapon', kid: undefined });
     expect(pairs[0]?.adult?.id).toBe('w');
+  });
+});
+
+describe('pagePhotos', () => {
+  it('drops card-only photos (video stills used only by the course card) and keeps order', () => {
+    const photos = [
+      { src: 'a', cardOnly: false },
+      { src: 'still', cardOnly: true },
+      { src: 'b' },
+    ];
+    expect(pagePhotos(photos).map((p) => p.src)).toEqual(['a', 'b']);
+  });
+
+  it('returns an empty list when every photo is card-only, and does not mutate the input', () => {
+    const photos = [{ src: 'still', cardOnly: true }];
+    expect(pagePhotos(photos)).toEqual([]);
+    expect(photos).toHaveLength(1);
+    expect(pagePhotos([])).toEqual([]);
   });
 });
 

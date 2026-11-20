@@ -6,6 +6,7 @@ summary: 八極拳風格的散手。
 photos:
   - src: ../../assets/images/video/sanshou-card.jpg
     alt: 兩位學員戴著拳套與手靶對練
+    cardOnly: true
 video:
   src: /videos/sanshou.mp4
   poster: ../../assets/images/video/sanshou-poster.jpg
