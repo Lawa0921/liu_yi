@@ -68,6 +68,8 @@ test.describe('課程總覽：課程卡的播放鈕', () => {
         expect(structure, course.title).toEqual({ insideLink: false, nestedAnchor: false, siblingOfLink: true });
       }
     }
+    // 幼兒武術（小孩最後一張）還沒有影片，沒有播放鈕。
+    await expect(card(page, 'kid', '幼兒武術').locator('[data-course-video]')).toHaveCount(0);
     // 其他課程沒有影片，就沒有播放鈕。
     const others = page.locator('section', { has: page.getByRole('heading', { name: '其他課程' }) });
     await expect(others.locator('[data-course-video]')).toHaveCount(0);
@@ -298,52 +300,48 @@ test.describe('課程內頁首屏的影片', () => {
     });
   }
 
-  // 播放鈕在封面左上角（距左、上約 1.5rem，手機約 1rem），不壓到字牌的大字；觸控目標至少 44×44（桌機至少 56）。
-  // 放左上而不是右下：桌機首屏時封面下緣在視窗外、又被固定底欄蓋住，右下角的鈕看不到。
+  // 業主 2026-11-21：播放鈕在格子裡置中，文字從「影片」改成「課程簡介」（無障礙名稱也含「課程簡介」，與看到的字一致）。
+  // 觸控目標至少 44×44（桌機至少 56）。
   for (const viewport of [
-    { width: 1440, height: 900, minSize: 56, inset: 24 },
-    { width: 390, height: 844, minSize: 44, inset: 16 },
-    { width: 360, height: 640, minSize: 44, inset: 16 },
+    { width: 1440, height: 900, minSize: 56 },
+    { width: 390, height: 844, minSize: 44 },
+    { width: 360, height: 640, minSize: 44 },
   ]) {
-    test(`${viewport.width}×${viewport.height}：播放鈕在封面左上角、不壓到大字，觸控目標夠大（六門課）`, async ({ page }) => {
+    test(`${viewport.width}×${viewport.height}：播放鈕在封面正中央、寫「課程簡介」，觸控目標夠大（六門課）`, async ({ page }) => {
       await page.setViewportSize(viewport);
       for (const course of [...ADULT_COURSES, ...KID_COURSES]) {
         await page.goto(`./courses/${course.slug}/`);
         const hero = page.locator('.course-head [data-hero-video]');
         const cover = hero.locator('[data-hero-cover]');
-        const play = cover.getByRole('button', { name: `播放${course.title}課程影片` });
+        const play = cover.getByRole('button', { name: `播放${course.title}課程簡介` });
         await expect(play, course.slug).toBeVisible();
         await expect(play).toHaveAttribute('type', 'button');
+        await expect(play).toHaveText('課程簡介');
         const frame = (await cover.boundingBox())!;
         const box = (await play.boundingBox())!;
         expect(box.width, course.slug).toBeGreaterThanOrEqual(viewport.minSize);
         expect(box.height, course.slug).toBeGreaterThanOrEqual(viewport.minSize);
-        // 左上象限，貼著左、上緣留固定間距（±3 px）。
-        expect(box.x + box.width / 2, course.slug).toBeLessThan(frame.x + frame.width / 2);
-        expect(box.y + box.height / 2, course.slug).toBeLessThan(frame.y + frame.height / 2);
-        expect(Math.abs(box.x - frame.x - viewport.inset), course.slug).toBeLessThan(3);
-        expect(Math.abs(box.y - frame.y - viewport.inset), course.slug).toBeLessThan(3);
-        // 與大字的矩形不相交。
-        const glyph = (await cover.locator('.course-plate__glyph').boundingBox())!;
-        const intersects =
-          glyph.x < box.x + box.width && box.x < glyph.x + glyph.width && glyph.y < box.y + box.height && box.y < glyph.y + glyph.height;
-        expect(intersects, `${course.slug} 播放鈕壓到大字`).toBe(false);
+        // 中心點與封面中心點重合（±2 px）。
+        expect(Math.abs(box.x + box.width / 2 - (frame.x + frame.width / 2)), course.slug).toBeLessThan(2);
+        expect(Math.abs(box.y + box.height / 2 - (frame.y + frame.height / 2)), course.slug).toBeLessThan(2);
       }
     });
   }
 
   // 訪客看得到、點得到播放鈕：載入後若封面已露出到看得見播放鈕就不捲；否則把封面頂端捲到內容區頂端（固定頁首之下）。
-  // 此時播放鈕整顆在視窗內，且中心點命中按鈕本身（沒有被固定頁首、底欄或別的東西蓋住）。桌機兩種視窗要不捲動就成立（首屏）。
+  // 此時播放鈕整顆在視窗內，且中心點命中按鈕本身（沒有被固定頁首、底欄或別的東西蓋住）。
+  // 業主 2026-11-21 要求置中後，筆電高度（例如 1366×768）首屏時封面中央在底欄下方，要捲一點才看得到鈕；封面本身任何位置都能點播。
+  // 只有 1440×900 以上的桌機要求不捲動就看得到。
   for (const viewport of [
     { width: 1440, height: 900, firstScreen: true },
-    { width: 1366, height: 768, firstScreen: true },
+    { width: 1366, height: 768, firstScreen: false },
     { width: 390, height: 844, firstScreen: false },
   ]) {
     test(`${viewport.width}×${viewport.height}：播放鈕${viewport.firstScreen ? '首屏就' : '捲到封面時'}完整可見、沒被固定頁首或底欄蓋住（六門課）`, async ({ page }) => {
       await page.setViewportSize(viewport);
       for (const course of [...ADULT_COURSES, ...KID_COURSES]) {
         await page.goto(`./courses/${course.slug}/`);
-        const play = page.getByRole('button', { name: `播放${course.title}課程影片` });
+        const play = page.getByRole('button', { name: `播放${course.title}課程簡介` });
         await expect(play).toBeVisible();
         const hit = () =>
           play.evaluate((button) => {
@@ -392,7 +390,7 @@ test.describe('課程內頁首屏的影片', () => {
     await recordPlay(page);
     await page.goto('./courses/chinese-weapons/');
     const url = page.url();
-    await page.getByRole('button', { name: '播放中式兵器課程影片' }).click();
+    await page.getByRole('button', { name: '播放中式兵器課程簡介' }).click();
     await expect.poll(() => playCalls(page)).toBe(1);
     const video = await expectStarted(page);
     expect(await video.evaluate((el: HTMLVideoElement) => el.paused)).toBe(false);
@@ -403,7 +401,7 @@ test.describe('課程內頁首屏的影片', () => {
     await recordPlay(page);
     await page.goto('./courses/bajiquan/');
     const cover = page.locator('.course-head [data-hero-cover]');
-    // 左上角附近：離中央的播放鈕很遠。
+    // 左上角附近：離正中央的播放鈕很遠。
     await cover.click({ position: { x: 30, y: 30 } });
     await expect.poll(() => playCalls(page)).toBe(1);
     await expectStarted(page);
@@ -412,7 +410,7 @@ test.describe('課程內頁首屏的影片', () => {
   test('鍵盤：聚焦播放鈕按 Enter 一樣會播', async ({ page }) => {
     await recordPlay(page);
     await page.goto('./courses/kids-weapons/');
-    const play = page.getByRole('button', { name: '播放防身兵器課程影片' });
+    const play = page.getByRole('button', { name: '播放防身兵器課程簡介' });
     await play.focus();
     await page.keyboard.press('Enter');
     await expect.poll(() => playCalls(page)).toBe(1);
@@ -430,7 +428,7 @@ test.describe('課程內頁首屏的影片', () => {
     });
     await page.goto('./courses/sanshou/');
     await expect(page.locator('.course-head [data-hero-cover]')).toBeVisible();
-    await page.getByRole('button', { name: '播放散手技擊課程影片' }).click();
+    await page.getByRole('button', { name: '播放散手技擊課程簡介' }).click();
     await expectStarted(page);
     // 等 promise 被拒之後再看一次。
     await page.waitForTimeout(300);
@@ -443,7 +441,7 @@ test.describe('課程內頁首屏的影片', () => {
     });
     await page.goto('./courses/kids-martial-arts/');
     await expect(page.locator('.course-head [data-hero-cover]')).toBeVisible();
-    await page.getByRole('button', { name: '播放兒童武術課程影片' }).click();
+    await page.getByRole('button', { name: '播放兒童武術課程簡介' }).click();
     await page.waitForTimeout(300);
     await expectStarted(page);
   });
@@ -469,7 +467,7 @@ test.describe('課程內頁首屏的影片', () => {
     await page.goto('./courses/');
     await card(page, 'adult', '散手技擊').locator('h3').click();
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('散手技擊');
-    await page.getByRole('button', { name: '播放散手技擊課程影片' }).click();
+    await page.getByRole('button', { name: '播放散手技擊課程簡介' }).click();
     await expect.poll(() => playCalls(page)).toBe(1);
     await expectStarted(page);
   });

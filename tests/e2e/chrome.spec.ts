@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures';
-import { ADULT_COURSES, KID_COURSES, basePath, cardTitles } from './helpers';
+import { ADULT_COURSES, KID_CARDS, basePath, cardTitles } from './helpers';
 
 const NAV_LABELS = ['課程', '師資', '場地', '課表'];
 
@@ -115,7 +115,7 @@ test.describe('沒有 JavaScript', () => {
 
     // 兩個對象的卡片都顯示；切換按鈕沒有作用所以不顯示。
     await expect(cardTitles(page, 'adult')).toHaveText(ADULT_COURSES.map((c) => c.title));
-    await expect(cardTitles(page, 'kid')).toHaveText(KID_COURSES.map((c) => c.title));
+    await expect(cardTitles(page, 'kid')).toHaveText(KID_CARDS.map((c) => c.title));
     for (const card of await page.locator('[data-audience-panel] .course-card h3').all()) {
       await expect(card).toBeVisible();
     }

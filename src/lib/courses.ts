@@ -50,20 +50,22 @@ export function publishedCourses<T extends CourseLike>(courses: readonly T[]): T
 }
 
 /**
- * 選定對象後要顯示的卡片：兵器、拳術、格鬥各一張，固定這個順序。
+ * 選定對象後要顯示的卡片：兵器、拳術、格鬥各一張，固定這個順序；
+ * 之後接著只給這個對象的「其他」分類課（例如小孩的幼兒武術，業主 2026-11-21），依 order。
  * 某分類沒有課就跳過，不補別的。
  */
 export function cardsFor<T extends CourseLike>(courses: readonly T[], audience: Audience): T[] {
   const published = publishedCourses(courses);
-  return MAIN_CATEGORIES.flatMap((category) => {
+  const main = MAIN_CATEGORIES.flatMap((category) => {
     const found = published.find((c) => c.data.audience === audience && c.data.category === category);
     return found ? [found] : [];
   });
+  return [...main, ...published.filter((c) => c.data.audience === audience && c.data.category === 'other')];
 }
 
-/** 「其他課程」區：已發布、分類為其他。 */
+/** 「其他課程」區：已發布、分類為其他、大人小孩都適合（只給單一對象的放在該對象的卡片裡）。 */
 export function otherCourses<T extends CourseLike>(courses: readonly T[]): T[] {
-  return publishedCourses(courses).filter((c) => c.data.category === 'other');
+  return publishedCourses(courses).filter((c) => c.data.category === 'other' && c.data.audience === 'all');
 }
 
 export interface CategoryPair<T> {

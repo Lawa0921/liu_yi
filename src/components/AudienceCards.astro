@@ -1,5 +1,5 @@
 ---
-// 「大人｜小孩」切換＋三張課程卡（兵器、拳術、格鬥各一）。首頁與課程總覽共用。
+// 「大人｜小孩」切換＋課程卡：兵器、拳術、格鬥各一，小孩再接幼兒武術（業主 2026-11-21；順序見 src/lib/courses.ts 的 cardsFor）。課程總覽用。
 //
 // 兩組卡片都輸出在 HTML 裡，顯示哪一組由 <html data-audience> 決定（BaseLayout 的行內腳本與
 // src/scripts/audience-toggle.ts 設定）。沒有 JavaScript 時 <html> 沒有 data-audience，兩組都顯示。
@@ -16,6 +16,7 @@ interface Props {
 }
 
 const { courses } = Astro.props;
+const panels = AUDIENCES.map((audience) => ({ audience, cards: cardsFor(courses, audience) }));
 ---
 
 <div class="audience-cards">
@@ -36,7 +37,7 @@ const { courses } = Astro.props;
   </div>
 
   {
-    AUDIENCES.map((audience) => (
+    panels.map(({ audience, cards }) => (
       <div class="audience-cards__panel" data-audience-panel={audience}>
         <p class="audience-cards__panel-label">
           <span class:list={['seal', 'seal--pair', { 'seal--cool': audience === 'kid' }]}>
@@ -44,8 +45,8 @@ const { courses } = Astro.props;
           </span>
           <span class="rule rule--faint" aria-hidden="true" />
         </p>
-        <ul class="audience-cards__list">
-          {cardsFor(courses, audience).map((course, index) => (
+        <ul class="audience-cards__list" data-cards={cards.length}>
+          {cards.map((course, index) => (
             <li style={`--i:${index}`}>
               <CourseCard course={course} />
             </li>
@@ -190,11 +191,21 @@ const { courses } = Astro.props;
     list-style: none;
   }
 
-  /* 一次三張並排。 */
+  /* 平板以上三張並排；四張（小孩多了幼兒武術）在平板排成兩列兩張，寬桌機才四張並排。 */
   @media (min-width: 48rem) {
     .audience-cards__list {
       grid-template-columns: repeat(3, 1fr);
       gap: var(--space-6);
+    }
+
+    .audience-cards__list[data-cards='4'] {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  @media (min-width: 75rem) {
+    .audience-cards__list[data-cards='4'] {
+      grid-template-columns: repeat(4, 1fr);
     }
   }
 

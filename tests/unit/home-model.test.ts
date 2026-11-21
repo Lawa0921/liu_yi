@@ -133,6 +133,12 @@ describe('buildHomeModel：others', () => {
     expect(others).toEqual([]);
   });
 
+  it('只給單一對象的「其他」課（例如小孩的幼兒武術）不進 others，與課程總覽一致（放在該對象的卡片裡）', () => {
+    const { others, steps } = buildHomeModel([...ALL, course('toddler', 'kid', 'other', { order: 23 })], COACHES);
+    expect(ids(others)).toEqual(['bjj', 'core-yoga']);
+    expect(steps.map((s) => s.kid?.id)).not.toContain('toddler');
+  });
+
   it('主分類的課不會混進 others', () => {
     const { others } = buildHomeModel(ALL, COACHES);
     expect(others.every((c) => c.data.category === 'other')).toBe(true);

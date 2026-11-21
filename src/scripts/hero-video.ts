@@ -2,7 +2,7 @@
 //
 //   [data-hero-video]          影片格；裡面一個 <video controls playsinline preload="none">
 //   [data-hero-cover]          蓋在影片上的封面（圖或分類字牌）；data-requires-js：沒有 JS 時不顯示，就是原生 video＋poster
-//   [data-hero-play]           封面左上角的播放鈕（封面裡唯一可聚焦的元素）
+//   [data-hero-play]           封面正中央的播放鈕（封面裡唯一可聚焦的元素）
 //   data-hero-started（加在影片格上）  封面收起、影片顯示（樣式在 [slug].astro）
 //
 // 有 JS 時從第一次繪製就是封面、影片隱藏（CSS 以 html.js 判斷，不等這支腳本）。

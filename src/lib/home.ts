@@ -61,7 +61,8 @@ export function buildHomeModel<C extends CourseLike, K extends CoachLike>(
     return [{ category, beats: [...BEATS_BY_CATEGORY[category]], adult, kid }];
   });
 
-  const others = published.filter((course) => course.data.category === 'other');
+  // 只列大人小孩都適合的；只給單一對象的「其他」課（小孩的幼兒武術）放在課程總覽該對象的卡片裡（src/lib/courses.ts 的 cardsFor）。
+  const others = published.filter((course) => course.data.category === 'other' && course.data.audience === 'all');
 
   const teachers = coaches
     .filter((coach) => coach.data.published)
