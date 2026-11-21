@@ -160,6 +160,13 @@ describe('buildHomeModel：coaches', () => {
     expect(byId.owen).toEqual(['課-bjj']);
   });
 
+  it('teaches 只列首頁上有出現的課：只放在課程總覽小孩卡片的幼兒武術不列（首頁版面不變；教練頁仍列全部）', () => {
+    const toddler = course('toddler', 'kid', 'other', { order: 23, coaches: [{ id: 'monkey' }] });
+    const { coaches } = buildHomeModel([...ALL, toddler], COACHES);
+    const byId = Object.fromEntries(coaches.map((c) => [c.id, c.teaches]));
+    expect(byId.monkey).toEqual(['課-kids-weapons', '課-kids-martial-arts', '課-kids-self-defense']);
+  });
+
   it('未發布的課不算進 teaches；教練只教未發布的課時 teaches 為空', () => {
     const { coaches } = buildHomeModel(ALL, [coach('xiaoxiao', 1)]);
     expect(coaches[0]?.teaches).toEqual([]);

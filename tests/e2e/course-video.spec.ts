@@ -250,6 +250,18 @@ const GLYPH: Record<string, string> = {
   'kids-self-defense': '搏',
 };
 
+/** 等頁面的進場動畫（首屏擦出、換頁轉場）跑完再量位置：全套高負載時，量到的可能是還在移動中的畫面。只等有限次的動畫。 */
+async function settleHead(page: Page) {
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter((a) => a.effect?.getComputedTiming().iterations !== Infinity)
+        .map((a) => a.finished.catch(() => undefined)),
+    ),
+  );
+}
+
 test.describe('課程內頁首屏的影片', () => {
   for (const course of [...ADULT_COURSES, ...KID_COURSES]) {
     test(`${course.slug}：首屏右側一開始是字牌封面（影片隱藏，看不到 poster 畫格）；下方沒有影片區；載入與捲動時不請求 mp4`, async ({ page, baseURL }) => {
@@ -317,6 +329,7 @@ test.describe('課程內頁首屏的影片', () => {
         await expect(play, course.slug).toBeVisible();
         await expect(play).toHaveAttribute('type', 'button');
         await expect(play).toHaveText('課程簡介');
+        await settleHead(page);
         const frame = (await cover.boundingBox())!;
         const box = (await play.boundingBox())!;
         expect(box.width, course.slug).toBeGreaterThanOrEqual(viewport.minSize);
@@ -488,6 +501,7 @@ test.describe('課程內頁首屏的影片', () => {
         await page.goto(`./courses/${ratio.slug}/`);
         const hero = page.locator('.course-head [data-hero-video]');
         const video = hero.locator('video');
+        await settleHead(page);
         const frame = (await hero.boundingBox())!;
         const box = (await video.boundingBox())!;
         // 影片元素在格子裡，用 contain 等比縮放（直式、方形不被裁掉）。
