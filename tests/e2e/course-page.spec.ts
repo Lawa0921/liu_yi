@@ -112,7 +112,7 @@ for (const slug of UNPUBLISHED_COURSE_SLUGS) {
 test('不發布的課程不出現在課程總覽與首頁', async ({ page }) => {
   for (const path of ['./', './courses/']) {
     await page.goto(path);
-    for (const title of ['內家養身功', '街舞一對一', '青少年格鬥基礎班', '幼兒武術']) {
+    for (const title of ['內家養身功', '街舞一對一', '青少年格鬥基礎班']) {
       await expect(page.getByText(title)).toHaveCount(0);
     }
   }
@@ -122,6 +122,55 @@ test('課程總覽下方有「其他課程」：巴西柔術、核心瑜珈', as
   await page.goto('./courses/');
   const other = page.locator('section', { has: page.getByRole('heading', { name: '其他課程' }) });
   await expect(other.locator('.course-card h3')).toHaveText(['巴西柔術', '核心瑜珈']);
+});
+
+// 業主 2026-11-21：「小孩課程裡面再幫我放一個『幼兒武術』」。放在課程總覽小孩那組卡片的最後一張；影片業主之後補。
+test.describe('幼兒武術', () => {
+  test('課程頁：有標題、內文與照片，沒有影片', async ({ page }) => {
+    const response = await page.goto('./courses/toddler-martial-arts/');
+    expect(response?.status()).toBe(200);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('幼兒武術');
+    await expect(page.locator('[data-course-body]')).not.toBeEmpty();
+    await expect(page.locator('.course-head img').first()).toBeVisible();
+    await expect(page.locator('video, [data-hero-video], [data-video-section]')).toHaveCount(0);
+    await expect(page.getByRole('link', { name: '返回課程總覽' })).toBeVisible();
+  });
+
+  test('課程總覽：只在小孩那組（最後一張），不在大人那組、也不在「其他課程」', async ({ page }) => {
+    await page.goto('./courses/');
+    await expect(page.locator('[data-audience-panel="kid"] .course-card h3').last()).toHaveText('幼兒武術');
+    await expect(page.locator('[data-audience-panel="adult"] .course-card h3', { hasText: '幼兒武術' })).toHaveCount(0);
+    const other = page.locator('section', { has: page.getByRole('heading', { name: '其他課程' }) });
+    await expect(other.getByText('幼兒武術')).toHaveCount(0);
+  });
+
+  for (const viewport of [
+    { width: 1440, height: 900, perRow: 4 },
+    { width: 1024, height: 768, perRow: 2 },
+    { width: 390, height: 844, perRow: 1 },
+  ]) {
+    test(`${viewport.width}×${viewport.height}：小孩四張卡每列 ${viewport.perRow} 張、等寬，沒有水平溢出；大人三張仍在同一列（桌機）`, async ({ page }) => {
+      await page.setViewportSize(viewport);
+      await page.goto('./courses/');
+      await page.getByRole('button', { name: '小孩' }).click();
+      const cards = page.locator('[data-audience-panel="kid"] .audience-cards__list > li');
+      await expect(cards).toHaveCount(4);
+      const boxes = await cards.evaluateAll((items) => items.map((li) => li.getBoundingClientRect().toJSON() as DOMRect));
+      const firstRow = boxes.filter((b) => Math.abs(b.top - boxes[0]!.top) < 2);
+      expect(firstRow.length).toBe(viewport.perRow);
+      for (const b of boxes) expect(Math.abs(b.width - boxes[0]!.width)).toBeLessThan(2);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+      if (viewport.width >= 1024) {
+        await page.getByRole('button', { name: '大人' }).click();
+        const adult = await page
+          .locator('[data-audience-panel="adult"] .audience-cards__list > li')
+          .evaluateAll((items) => items.map((li) => li.getBoundingClientRect().top));
+        expect(adult).toHaveLength(3);
+        expect(Math.max(...adult) - Math.min(...adult)).toBeLessThan(2);
+      }
+    });
+  }
 });
 
 test('兵器課程頁以區塊列出三種兵器', async ({ page }) => {

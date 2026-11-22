@@ -1,8 +1,8 @@
 import { expect, test } from './fixtures';
-import { ADULT_COURSES, AUDIENCE_STORAGE_KEY, KID_COURSES, basePath, cardTitles } from './helpers';
+import { ADULT_COURSES, AUDIENCE_STORAGE_KEY, KID_CARDS, basePath, cardTitles } from './helpers';
 
 const adultTitles = ADULT_COURSES.map((c) => c.title);
-const kidTitles = KID_COURSES.map((c) => c.title);
+const kidTitles = KID_CARDS.map((c) => c.title);
 
 // 首頁的切換（課名順序、連結、重新整理保留、非法值）在 home.spec.ts；這裡守課程總覽。
 for (const path of ['./courses/']) {
@@ -18,7 +18,7 @@ for (const path of ['./courses/']) {
       await expect(page.getByRole('button', { name: '小孩' })).toHaveAttribute('aria-pressed', 'false');
     });
 
-    test('切到小孩後三張卡片的名稱與連結一起換，重新整理後保留', async ({ page, baseURL }) => {
+    test('切到小孩後卡片（三門主課＋幼兒武術）的名稱與連結一起換，重新整理後保留', async ({ page, baseURL }) => {
       await page.goto(path);
       await page.getByRole('button', { name: '小孩' }).click();
 
@@ -29,7 +29,7 @@ for (const path of ['./courses/']) {
       const hrefs = await page
         .locator('[data-audience-panel="kid"] .course-card__link')
         .evaluateAll((links) => links.map((a) => a.getAttribute('href')));
-      expect(hrefs).toEqual(KID_COURSES.map((c) => `${basePath(baseURL)}courses/${c.slug}/`));
+      expect(hrefs).toEqual(KID_CARDS.map((c) => `${basePath(baseURL)}courses/${c.slug}/`));
 
       await page.reload();
       await expect(page.getByRole('button', { name: '小孩' })).toHaveAttribute('aria-pressed', 'true');

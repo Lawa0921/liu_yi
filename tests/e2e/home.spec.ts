@@ -4,6 +4,7 @@ import {
   COACHES,
   HOME_ADULT_ORDER,
   HOME_KID_ORDER,
+  KID_EXTRA_COURSES,
   PUBLISHED_COURSES,
   basePath,
   hiddenByStyle,
@@ -49,14 +50,19 @@ for (const device of DEVICES) {
 
     test('每門已發布課程都有 DOM 標題與連結（不要求可見）；未發布的課程名 0 筆', async ({ page }) => {
       await page.goto('./');
-      for (const course of PUBLISHED_COURSES) {
+      // 幼兒武術只在課程總覽的小孩卡片裡（業主 2026-11-21「小孩課程裡面」），首頁沒有它的課程區塊。
+      const extra = new Set(KID_EXTRA_COURSES.map((c) => c.slug));
+      for (const course of PUBLISHED_COURSES.filter((c) => !extra.has(c.slug))) {
         const article = page.locator(`article[data-course="${course.slug}"]`);
         await expect(article, course.slug).toHaveCount(1);
         await expect(article.locator('h3'), course.slug).toHaveText(course.title);
         await expect(article.locator(`a[href$="courses/${course.slug}/"]`), course.slug).toHaveCount(1);
       }
-      for (const title of ['內家養身功', '街舞一對一', '青少年格鬥基礎班', '幼兒武術']) {
+      for (const title of ['內家養身功', '街舞一對一', '青少年格鬥基礎班']) {
         await expect(page.getByText(title)).toHaveCount(0);
+      }
+      for (const course of KID_EXTRA_COURSES) {
+        await expect(page.locator(`article[data-course="${course.slug}"]`), course.slug).toHaveCount(0);
       }
     });
 

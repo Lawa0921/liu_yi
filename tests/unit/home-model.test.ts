@@ -133,6 +133,12 @@ describe('buildHomeModel：others', () => {
     expect(others).toEqual([]);
   });
 
+  it('只給單一對象的「其他」課（例如小孩的幼兒武術）不進 others，與課程總覽一致（放在該對象的卡片裡）', () => {
+    const { others, steps } = buildHomeModel([...ALL, course('toddler', 'kid', 'other', { order: 23 })], COACHES);
+    expect(ids(others)).toEqual(['bjj', 'core-yoga']);
+    expect(steps.map((s) => s.kid?.id)).not.toContain('toddler');
+  });
+
   it('主分類的課不會混進 others', () => {
     const { others } = buildHomeModel(ALL, COACHES);
     expect(others.every((c) => c.data.category === 'other')).toBe(true);
@@ -152,6 +158,13 @@ describe('buildHomeModel：coaches', () => {
     expect(byId.monkey).toEqual(['課-kids-weapons', '課-kids-martial-arts', '課-kids-self-defense']);
     expect(byId.lisa).toEqual(['課-core-yoga']);
     expect(byId.owen).toEqual(['課-bjj']);
+  });
+
+  it('teaches 只列首頁上有出現的課：只放在課程總覽小孩卡片的幼兒武術不列（首頁版面不變；教練頁仍列全部）', () => {
+    const toddler = course('toddler', 'kid', 'other', { order: 23, coaches: [{ id: 'monkey' }] });
+    const { coaches } = buildHomeModel([...ALL, toddler], COACHES);
+    const byId = Object.fromEntries(coaches.map((c) => [c.id, c.teaches]));
+    expect(byId.monkey).toEqual(['課-kids-weapons', '課-kids-martial-arts', '課-kids-self-defense']);
   });
 
   it('未發布的課不算進 teaches；教練只教未發布的課時 teaches 為空', () => {

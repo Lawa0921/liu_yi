@@ -81,11 +81,33 @@ describe('cardsFor', () => {
   it('never includes "other" or all-audience courses', () => {
     expect(ids(cardsFor(all, 'adult'))).not.toContain('bjj');
   });
+
+  // 業主 2026-11-21：小孩課程裡再放一個「幼兒武術」（分類是其他、只給小孩）。
+  it('appends published "other" courses of that audience only, after the three main ones, by order', () => {
+    const withToddler = [
+      ...all,
+      course('toddler', 'kid', 'other', { order: 23 }),
+      course('teen', 'kid', 'other', { order: 22, published: false }),
+    ];
+    expect(ids(cardsFor(withToddler, 'kid'))).toEqual(['kids-weapons', 'kids-martial-arts', 'kids-self-defense', 'toddler']);
+    expect(ids(cardsFor(withToddler, 'adult'))).toEqual(['chinese-weapons', 'bajiquan', 'sanshou']);
+  });
 });
 
 describe('otherCourses', () => {
   it('lists published courses in the "other" category by order', () => {
     expect(ids(otherCourses(all))).toEqual(['core-yoga', 'bjj']);
+  });
+
+  it('leaves out single-audience "other" courses (they sit with that audience\'s cards)', () => {
+    expect(ids(otherCourses([...all, course('toddler', 'kid', 'other', { order: 1 })]))).toEqual(['core-yoga', 'bjj']);
+  });
+});
+
+describe('pairByCategory with an extra kid course', () => {
+  it('ignores "other" courses (the homepage beats stay weapon, fist, combat)', () => {
+    const pairs = pairByCategory([...all, course('toddler', 'kid', 'other', { order: 1 })]);
+    expect(pairs.map((p) => p.kid?.id)).toEqual(['kids-weapons', 'kids-martial-arts', 'kids-self-defense']);
   });
 });
 

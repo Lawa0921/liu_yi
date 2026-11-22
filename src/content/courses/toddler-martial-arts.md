@@ -7,11 +7,11 @@ photos:
   - src: ../../assets/images/toddler_training_1.jpg
     alt: 幾位年紀較小的學員練習弓步推掌
 coaches: [monkey]
-published: false
+published: true
 order: 23
-# 不發布：開課狀態不明（設計文件 §5、§13-2）。
-# 以下內文是舊站 courses/toddler-martial-arts.md 的原文存檔，未依新規則審過（含年齡等待確認的說法），
-# 發布前必須請業主提供正式文案。
+# 業主 2026-11-21 要求發布：放在課程總覽「小孩」那組卡片的最後一張（src/lib/courses.ts 的 cardsFor）。
+# 影片業主之後補（尚未放進 Google Drive），補上前課程頁首屏右側是照片。
+# 內文仍是舊站 courses/toddler-martial-arts.md 的原文，未經業主重新確認（含「3–6 歲已上幼兒園或小一」的年齡說法）。
 needsOwnerCopy: true
 ---
 

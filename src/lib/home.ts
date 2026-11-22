@@ -61,7 +61,11 @@ export function buildHomeModel<C extends CourseLike, K extends CoachLike>(
     return [{ category, beats: [...BEATS_BY_CATEGORY[category]], adult, kid }];
   });
 
-  const others = published.filter((course) => course.data.category === 'other');
+  // 只列大人小孩都適合的；只給單一對象的「其他」課（小孩的幼兒武術）放在課程總覽該對象的卡片裡（src/lib/courses.ts 的 cardsFor）。
+  const others = published.filter((course) => course.data.category === 'other' && course.data.audience === 'all');
+
+  // 首頁上出現的課：三幕的大人／小孩課＋其他課程。教練的「專長」只列這些（教練頁另外列出全部任教課程）。
+  const onHome = new Set<C>([...steps.flatMap((step) => [step.adult, step.kid]).filter((c): c is C => Boolean(c)), ...others]);
 
   const teachers = coaches
     .filter((coach) => coach.data.published)
@@ -69,6 +73,7 @@ export function buildHomeModel<C extends CourseLike, K extends CoachLike>(
     .map((coach) => ({
       ...coach,
       teaches: published
+        .filter((course) => onHome.has(course))
         .filter((course) => course.data.coaches.some((ref) => ref.id === coach.id))
         .map((course) => course.data.title),
     }));
