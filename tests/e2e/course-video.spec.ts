@@ -68,8 +68,10 @@ test.describe('課程總覽：課程卡的播放鈕', () => {
         expect(structure, course.title).toEqual({ insideLink: false, nestedAnchor: false, siblingOfLink: true });
       }
     }
-    // 幼兒武術（小孩最後一張）還沒有影片，沒有播放鈕。
-    await expect(card(page, 'kid', '幼兒武術').locator('[data-course-video]')).toHaveCount(0);
+    // 幼兒武術（小孩最後一張）：業主 2026-11-22 補上影片，也有播放鈕。
+    const toddler = card(page, 'kid', '幼兒武術').locator('[data-course-video]');
+    await expect(toddler).toHaveCount(1);
+    await expect(toddler).toHaveAttribute('href', `${basePath(baseURL)}videos/toddler-martial-arts.mp4`);
     // 其他課程沒有影片，就沒有播放鈕。
     const others = page.locator('section', { has: page.getByRole('heading', { name: '其他課程' }) });
     await expect(others.locator('[data-course-video]')).toHaveCount(0);

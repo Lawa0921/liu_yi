@@ -124,15 +124,24 @@ test('課程總覽下方有「其他課程」：巴西柔術、核心瑜珈', as
   await expect(other.locator('.course-card h3')).toHaveText(['巴西柔術', '核心瑜珈']);
 });
 
-// 業主 2026-11-21：「小孩課程裡面再幫我放一個『幼兒武術』」。放在課程總覽小孩那組卡片的最後一張；影片業主之後補。
+// 業主 2026-11-21：「小孩課程裡面再幫我放一個『幼兒武術』」。放在課程總覽小孩那組卡片的最後一張；影片 2026-11-22 補上。
 test.describe('幼兒武術', () => {
-  test('課程頁：有標題、內文與照片，沒有影片', async ({ page }) => {
+  test('課程頁：有標題、內文與照片；首屏右側是課程簡介影片（封面是照片，按下前不下載影片）', async ({ page }) => {
+    const mp4: string[] = [];
+    page.on('request', (request) => {
+      if (/\.mp4(\?|$)/.test(request.url())) mp4.push(request.url());
+    });
     const response = await page.goto('./courses/toddler-martial-arts/');
     expect(response?.status()).toBe(200);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('幼兒武術');
     await expect(page.locator('[data-course-body]')).not.toBeEmpty();
-    await expect(page.locator('.course-head img').first()).toBeVisible();
-    await expect(page.locator('video, [data-hero-video], [data-video-section]')).toHaveCount(0);
+    const hero = page.locator('.course-head [data-hero-video]');
+    await expect(hero.locator('[data-hero-cover] img')).toBeVisible();
+    await expect(hero.getByRole('button', { name: '播放幼兒武術課程簡介' })).toBeVisible();
+    await expect(hero.locator('video')).toHaveAttribute('src', /videos\/toddler-martial-arts\.mp4$/);
+    await expect(page.locator('[data-course-photos] img').first()).toBeAttached();
+    await page.waitForLoadState('networkidle');
+    expect(mp4).toEqual([]);
     await expect(page.getByRole('link', { name: '返回課程總覽' })).toBeVisible();
   });
 

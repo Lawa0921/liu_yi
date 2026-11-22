@@ -15,6 +15,8 @@ const EXPECTED = [
   { id: 'kids-weapons', width: 720, height: 1280 },
   { id: 'kids-martial-arts', width: 1280, height: 720 },
   { id: 'kids-self-defense', width: 1280, height: 720 },
+  // 幼兒武術（小孩卡片的第四張）：業主 2026-11-22 補上影片。
+  { id: 'toddler-martial-arts', width: 1280, height: 720 },
 ];
 
 const MAX_BYTES = 6 * 1024 * 1024;
@@ -27,7 +29,7 @@ interface VideoField {
 }
 
 function videoField(md: string): VideoField | undefined {
-  const match = /^video:\r?\n\s+src: (\S+)\r?\n\s+poster: (\S+)\r?\n\s+width: (\d+)\r?\n\s+height: (\d+)\s*$/m.exec(md);
+  const match = /^video:\r?\n\s+src: (\S+)\r?\n\s+poster: (\S+)\r?\n\s+width: (\d+)\r?\n\s+height: (\d+)\s*(?:\r?\n\s+cover: \S+\s*)?$/m.exec(md);
   if (!match) return undefined;
   return { src: match[1]!, poster: match[2]!, width: Number(match[3]), height: Number(match[4]) };
 }
@@ -47,7 +49,7 @@ function mp4Size(path: string): { width: number; height: number } | undefined {
   return undefined;
 }
 
-describe('六門主課的課程影片（內容層）', () => {
+describe('六門主課與幼兒武術的課程影片（內容層）', () => {
   for (const { id, width, height } of EXPECTED) {
     describe(id, () => {
       const mdPath = `src/content/courses/${id}.md`;
@@ -101,8 +103,9 @@ describe('八極專修、散手技擊的課程卡改用乾淨裁切的照片', (
     expect(read('src/content.config.ts')).toMatch(/^\s+cover: image\(\)\.optional\(\),/m);
   });
 
-  it('目前六門課都還沒給 cover（首屏封面全部用字牌）', () => {
-    for (const { id } of EXPECTED) {
+  it('六門主課都還沒給 cover（首屏封面用分類字牌）；幼兒武術分類是「其他」沒有字牌，cover 用原本首屏的照片', () => {
+    expect(read('src/content/courses/toddler-martial-arts.md')).toMatch(/^\s+cover: \.\.\/\.\.\/assets\/images\/toddler_training_1\.jpg\s*$/m);
+    for (const { id } of EXPECTED.filter((course) => course.id !== 'toddler-martial-arts')) {
       expect(read(`src/content/courses/${id}.md`), id).not.toMatch(/^\s+cover:/m);
     }
   });
