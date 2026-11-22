@@ -16,7 +16,7 @@ export const KID_COURSES = [
   { title: '防身格鬥', slug: 'kids-self-defense' },
 ];
 
-/** 小孩卡片在三門主課之後再接的課（分類是其他、只給小孩；業主 2026-11-21）。沒有站內影片（業主之後補）。 */
+/** 小孩卡片在三門主課之後再接的課（分類是其他、只給小孩；業主 2026-11-21）。站內影片 2026-11-22 補上。 */
 export const KID_EXTRA_COURSES = [{ title: '幼兒武術', slug: 'toddler-martial-arts' }];
 
 /** 課程總覽「小孩」那組卡片的順序。 */

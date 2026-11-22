@@ -6,11 +6,17 @@ summary: 給幼兒的武術啟蒙課。
 photos:
   - src: ../../assets/images/toddler_training_1.jpg
     alt: 幾位年紀較小的學員練習弓步推掌
+video:
+  src: /videos/toddler-martial-arts.mp4
+  poster: ../../assets/images/video/toddler-martial-arts-poster.jpg
+  width: 1280
+  height: 720
+  cover: ../../assets/images/toddler_training_1.jpg
 coaches: [monkey]
 published: true
 order: 23
 # 業主 2026-11-21 要求發布：放在課程總覽「小孩」那組卡片的最後一張（src/lib/courses.ts 的 cardsFor）。
-# 影片業主之後補（尚未放進 Google Drive），補上前課程頁首屏右側是照片。
+# 課程簡介影片業主 2026-11-22 提供（原檔 1080p，壓成 720p H.264）。分類是「其他」沒有字牌，首屏封面（cover）沿用原本首屏的照片。
 # 內文仍是舊站 courses/toddler-martial-arts.md 的原文，未經業主重新確認（含「3–6 歲已上幼兒園或小一」的年齡說法）。
 needsOwnerCopy: true
 ---
